@@ -1,0 +1,64 @@
+AbodeNestly Source-Available License
+Version 1.0, 8 November 2026
+
+Copyright (c) 2026 Viktor Ferenczi. All rights reserved.
+
+1. Definitions
+   "Software" means the AbodeNestly source code, documentation, assets and
+   any other material in this repository (https://github.com/viktorferenczi/AbodeNestly).
+   "Release" means a compiled, packaged or hosted build of the Software that
+   the copyright holder publishes under the "Releases" section of the
+   repository, in an app store, or on an official AbodeNestly website or domain.
+   "You" means any person or organisation exercising rights under this license.
+
+2. What you may do
+   a. View and read the Software for personal reference, learning and
+      evaluation.
+   b. Download, install and use any Release, free of charge, for personal or
+      internal household use, on any number of devices.
+   c. Report issues and propose changes to the copyright holder (for example
+      through issues or pull requests). By submitting a proposed change you
+      grant the copyright holder a perpetual, worldwide, royalty-free right to
+      use, modify and distribute that contribution as part of the Software.
+
+3. What you may not do
+   a. Modify, adapt, translate or create derivative works of the Software.
+   b. Copy, redistribute, publish, sublicense, rent, lease or lend the
+      Software or any part of it, in source or compiled form, other than the
+      unmodified Releases as provided in section 2(b).
+   c. Sell the Software, charge for access to it, or use it, in whole or in
+      part, to build or offer a competing or commercial product or service.
+   d. Remove or alter any copyright, license or attribution notice.
+   e. Use the AbodeNestly name or logo to endorse or promote products derived
+      from the Software.
+
+   Forking the repository on GitHub solely to submit a proposed change under
+   section 2(c) is permitted; any other use of a fork is subject to section 3.
+
+4. Releases
+   Releases are provided for use only. Reverse engineering, decompiling or
+   disassembling a Release is not permitted except where applicable law
+   expressly allows it.
+
+5. Termination
+   This license ends automatically if you breach any of its terms. On
+   termination you must stop using the Software and delete all copies,
+   except that Releases lawfully installed before termination may continue
+   to be used for personal household purposes.
+
+6. No warranty
+   THE SOFTWARE AND RELEASES ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+   KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+   IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES
+   OR OTHER LIABILITY ARISING FROM OR IN CONNECTION WITH THE SOFTWARE,
+   RELEASES OR THEIR USE.
+
+7. Reservation of rights
+   All rights not expressly granted in this license are reserved by the
+   copyright holder. Nothing in this license grants any rights under patents
+   or trademarks except as needed to use a Release under section 2(b).
+
+8. Governing law
+   This license is governed by the laws of the copyright holder's country of
+   residence, without regard to conflict-of-law rules.
