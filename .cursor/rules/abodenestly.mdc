@@ -1,0 +1,17 @@
+---
+description: AbodeNestly project rules — always apply
+globs:
+alwaysApply: true
+---
+
+Read `AGENTS.md` at the repo root and follow it. `docs/SPEC.md` is the source of truth for product, stack, types, endpoints, schema and sync.
+
+Before editing, open the skill for the area:
+- api/, packages/contract/ → .claude/skills/node-backend/SKILL.md
+- supabase/, docs/schema.sql → .claude/skills/sql-supabase/SKILL.md
+- web/ → .claude/skills/react-web/SKILL.md
+- apps/ios/ → .claude/skills/swift-ios/SKILL.md
+- apps/android/ → .claude/skills/kotlin-android/SKILL.md
+- reviewing a PR → .claude/skills/pr-review/SKILL.md
+
+Hard rules: feature ID in every branch/commit/PR; no new dependencies without justification; types from packages/contract or generated models; sync columns on every household table; pantry quantity only via movements; modules never import each other; everything must work with a module switched off; shopping and pantry writes go through the local DB + outbox.
