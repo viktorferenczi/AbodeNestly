@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# TESTING §9 gates for the TypeScript workspace. Native builds and the `supabase start`
+# integration gate are added by the stories that first need them.
+jobs:
+  ts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: lint
+        run: pnpm -r lint
+      - name: typecheck
+        run: pnpm -r typecheck
+      - name: unit
+        run: pnpm -r test
+      - name: contract
+        run: |
+          pnpm --filter @abodenestly/contract openapi
+          git diff --exit-code docs/openapi.yaml

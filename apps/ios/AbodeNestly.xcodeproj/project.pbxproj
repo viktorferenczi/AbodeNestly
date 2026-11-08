@@ -1,0 +1,365 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000101 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000401 /* GRDB */; };
+		A10000000000000000000102 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000402 /* Auth */; };
+		A10000000000000000000103 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000403 /* Realtime */; };
+		A10000000000000000000104 /* Shopping in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000404 /* Shopping */; };
+		A10000000000000000000105 /* Pantry in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000405 /* Pantry */; };
+		A10000000000000000000106 /* Maintenance in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000406 /* Maintenance */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000201 /* AbodeNestly.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AbodeNestly.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000202 /* Dev.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Dev.xcconfig; sourceTree = "<group>"; };
+		A10000000000000000000203 /* Prod.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Prod.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A10000000000000000000301 /* Exceptions for "AbodeNestly" folder in "AbodeNestly" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A10000000000000000000601 /* AbodeNestly */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A10000000000000000000302 /* AbodeNestly */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A10000000000000000000301 /* Exceptions for "AbodeNestly" folder in "AbodeNestly" target */,
+			);
+			path = AbodeNestly;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000501 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000101 /* GRDB in Frameworks */,
+				A10000000000000000000102 /* Auth in Frameworks */,
+				A10000000000000000000103 /* Realtime in Frameworks */,
+				A10000000000000000000104 /* Shopping in Frameworks */,
+				A10000000000000000000105 /* Pantry in Frameworks */,
+				A10000000000000000000106 /* Maintenance in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000000000000000000701 = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000302 /* AbodeNestly */,
+				A10000000000000000000702 /* Config */,
+				A10000000000000000000703 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000000000000000000702 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000202 /* Dev.xcconfig */,
+				A10000000000000000000203 /* Prod.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000703 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000201 /* AbodeNestly.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000601 /* AbodeNestly */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000903 /* Build configuration list for PBXNativeTarget "AbodeNestly" */;
+			buildPhases = (
+				A10000000000000000000602 /* Sources */,
+				A10000000000000000000501 /* Frameworks */,
+				A10000000000000000000603 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000302 /* AbodeNestly */,
+			);
+			name = AbodeNestly;
+			packageProductDependencies = (
+				A10000000000000000000401 /* GRDB */,
+				A10000000000000000000402 /* Auth */,
+				A10000000000000000000403 /* Realtime */,
+				A10000000000000000000404 /* Shopping */,
+				A10000000000000000000405 /* Pantry */,
+				A10000000000000000000406 /* Maintenance */,
+			);
+			productName = AbodeNestly;
+			productReference = A10000000000000000000201 /* AbodeNestly.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000801 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A10000000000000000000601 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = A10000000000000000000901 /* Build configuration list for PBXProject "AbodeNestly" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10000000000000000000701;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A10000000000000000000A01 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				A10000000000000000000A02 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				A10000000000000000000A03 /* XCLocalSwiftPackageReference "Packages/Shopping" */,
+				A10000000000000000000A04 /* XCLocalSwiftPackageReference "Packages/Pantry" */,
+				A10000000000000000000A05 /* XCLocalSwiftPackageReference "Packages/Maintenance" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = A10000000000000000000703 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000000000000000000601 /* AbodeNestly */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000603 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000602 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A10000000000000000000B01 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A10000000000000000000B02 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A10000000000000000000B03 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000000000000000000202 /* Dev.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AbodeNestly/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = AbodeNestly;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A10000000000000000000B04 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000000000000000000203 /* Prod.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AbodeNestly/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = AbodeNestly;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000000000000000000901 /* Build configuration list for PBXProject "AbodeNestly" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000B01 /* Debug */,
+				A10000000000000000000B02 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000903 /* Build configuration list for PBXNativeTarget "AbodeNestly" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000B03 /* Debug */,
+				A10000000000000000000B04 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A10000000000000000000A03 /* XCLocalSwiftPackageReference "Packages/Shopping" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Shopping;
+		};
+		A10000000000000000000A04 /* XCLocalSwiftPackageReference "Packages/Pantry" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Pantry;
+		};
+		A10000000000000000000A05 /* XCLocalSwiftPackageReference "Packages/Maintenance" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Maintenance;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A10000000000000000000A01 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
+		A10000000000000000000A02 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A10000000000000000000401 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000A01 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+		A10000000000000000000402 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000A02 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		A10000000000000000000403 /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000A02 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		A10000000000000000000404 /* Shopping */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Shopping;
+		};
+		A10000000000000000000405 /* Pantry */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Pantry;
+		};
+		A10000000000000000000406 /* Maintenance */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Maintenance;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A10000000000000000000801 /* Project object */;
+}

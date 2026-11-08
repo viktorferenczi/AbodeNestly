@@ -1,0 +1,21 @@
+{
+  "name": "@abodenestly/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx scripts/dev-server.ts",
+    "lint": "eslint --max-warnings 0 .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:int": "vitest run --config vitest.int.config.ts"
+  },
+  "dependencies": {
+    "@abodenestly/contract": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.8"
+  }
+}

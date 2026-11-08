@@ -1,0 +1,32 @@
+# Node
+node_modules/
+dist/
+.vercel/
+*.tsbuildinfo
+
+# Env — SPEC §3: production files come from CI secrets / Vercel dashboard
+.env.production
+.env*.local
+apps/ios/Config/Prod.xcconfig
+apps/ios/Config/*.local.xcconfig
+apps/android/env/prod.properties
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# Android / Gradle
+.gradle/
+build/
+local.properties
+.idea/
+.kotlin/
+*.iml
+
+# Supabase
+supabase/.temp/
+supabase/.branches/
+
+# OS
+.DS_Store

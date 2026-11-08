@@ -1,0 +1,2 @@
+-- Global seed data only (TESTING §5). Categories and checklist templates arrive with
+-- their feature stories; no household rows ever.
