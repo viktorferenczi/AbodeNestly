@@ -899,7 +899,8 @@ create policy profile_self on profile for all using (id = auth.uid());
 -- members of the same household can see each other's name/avatar
 create policy profile_household on profile for select using (
   exists (select 1 from member a join member b on a.household_id = b.household_id
-          where a.user_id = auth.uid() and b.user_id = profile.id)
+          where a.user_id = auth.uid() and b.user_id = profile.id
+            and a.left_at is null and b.left_at is null)
 );
 
 -- Create a profile row the first time a user signs in (any provider).
@@ -949,12 +950,34 @@ alter table household enable row level security;
 create policy household_select on household for select using (is_member(id));
 create policy household_insert on household for insert with check (created_by = auth.uid());
 create policy household_update on household for update using (is_owner(id));
-create trigger household_sync before update on household for each row execute function set_sync_fields();
+create trigger household_sync before insert or update on household for each row execute function set_sync_fields();
 
 alter table member enable row level security;
 create policy member_select on member for select using (is_member(household_id));
 create policy member_update on member for update using (is_owner(household_id) or user_id = auth.uid());
 -- inserts happen via security-definer functions (create_household, accept_invite)
+-- A client may only touch its own membership and may only *leave* (set left_at). RLS WITH CHECK cannot
+-- see OLD, so this guard enforces what an UPDATE may change. Security-definer paths (accept_invite,
+-- create_household) run as the function owner and are not restricted.
+create or replace function guard_member_update() returns trigger
+language plpgsql as $$
+begin
+  if current_user <> 'authenticated' then return new; end if;
+  if new.household_id is distinct from old.household_id
+     or new.user_id is distinct from old.user_id
+     or new.joined_at is distinct from old.joined_at then
+    raise exception 'member_identity_immutable' using errcode = '42501';
+  end if;
+  if is_owner(old.household_id) then return new; end if;
+  if new.role is distinct from old.role then
+    raise exception 'member_role_owner_only' using errcode = '42501';
+  end if;
+  if old.left_at is not null and new.left_at is distinct from old.left_at then
+    raise exception 'member_rejoin_requires_invite' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+create trigger member_guard before update on member for each row execute function guard_member_update();
 create trigger member_sync before insert or update on member for each row execute function set_sync_fields();
 
 create or replace function create_household(p_name text) returns uuid

@@ -13,7 +13,8 @@ create policy profile_self on profile for all using (id = auth.uid());
 -- members of the same household can see each other's name/avatar
 create policy profile_household on profile for select using (
   exists (select 1 from member a join member b on a.household_id = b.household_id
-          where a.user_id = auth.uid() and b.user_id = profile.id)
+          where a.user_id = auth.uid() and b.user_id = profile.id
+            and a.left_at is null and b.left_at is null)
 );
 
 -- Create a profile row the first time a user signs in (any provider).
