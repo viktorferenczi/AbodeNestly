@@ -25,6 +25,113 @@ components:
       scheme: bearer
       bearerFormat: JWT
   schemas:
+    Profile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        avatar_path:
+          type:
+            - string
+            - "null"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - display_name
+        - avatar_path
+        - created_at
+        - updated_at
+    Household:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        household_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        sync_seq:
+          type: integer
+        name:
+          type: string
+        created_by:
+          type: string
+          format: uuid
+        module_shopping:
+          type: boolean
+        module_pantry:
+          type: boolean
+        module_maintenance:
+          type: boolean
+        currency:
+          type: string
+      required:
+        - id
+        - household_id
+        - created_at
+        - updated_at
+        - deleted_at
+        - sync_seq
+        - name
+        - created_by
+        - module_shopping
+        - module_pantry
+        - module_maintenance
+        - currency
+    Member:
+      type: object
+      properties:
+        household_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum:
+            - owner
+            - member
+        joined_at:
+          type: string
+          format: date-time
+        left_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        sync_seq:
+          type: integer
+      required:
+        - household_id
+        - user_id
+        - role
+        - joined_at
+        - left_at
+        - updated_at
+        - sync_seq
     HealthResponse:
       type: object
       properties:
