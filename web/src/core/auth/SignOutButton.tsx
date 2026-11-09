@@ -5,8 +5,9 @@ export function SignOutButton() {
   const { client } = useAuth();
   const navigate = useNavigate();
   async function onClick() {
-    await client.signOut();
+    // Navigate first: once the session clears, RequireAuth would redirect with ?next=/profile.
     void navigate('/signin', { replace: true });
+    await client.signOut();
   }
   return (
     <button type="button" onClick={() => void onClick()}>
