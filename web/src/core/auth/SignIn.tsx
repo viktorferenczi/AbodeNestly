@@ -148,7 +148,7 @@ export function SignIn() {
               aria-describedby={fieldError ? 'email-error' : undefined}
             />
             {fieldError ? (
-              <p id="email-error" className={styles.error}>
+              <p id="email-error" role="alert" className={styles.error}>
                 {fieldError}
               </p>
             ) : null}
@@ -159,15 +159,19 @@ export function SignIn() {
           </form>
         )}
 
-        <div className={styles.divider} role="separator">
-          <span>or</span>
-        </div>
-        <button type="button" className={styles.secondary} disabled={disabled} onClick={() => void onProvider('apple')}>
-          Sign in with Apple
-        </button>
-        <button type="button" className={styles.secondary} disabled={disabled} onClick={() => void onProvider('google')}>
-          Sign in with Google
-        </button>
+        {state.kind === 'link-sent' ? null : (
+          <>
+          <div className={styles.divider} role="separator">
+            <span>or</span>
+          </div>
+          <button type="button" className={styles.secondary} disabled={disabled} onClick={() => void onProvider('apple')}>
+            Sign in with Apple
+          </button>
+          <button type="button" className={styles.secondary} disabled={disabled} onClick={() => void onProvider('google')}>
+            Sign in with Google
+          </button>
+          </>
+        )}
         <p className={styles.legal}>By continuing you agree to the Terms of Service and Privacy Policy.</p>
       </div>
     </main>

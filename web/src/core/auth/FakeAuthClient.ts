@@ -11,6 +11,8 @@ export class FakeAuthClient implements AuthClient {
   oauthError: AuthError | null = null;
   profile: Profile | null = null;
   memberships: Membership[] = [];
+  membershipsFail = false;
+  signOutFail = false;
   private listeners = new Set<(session: AuthSession | null) => void>();
 
   constructor(public session: AuthSession | null = null) {}
@@ -36,6 +38,7 @@ export class FakeAuthClient implements AuthClient {
 
   signOut() {
     this.signOutCalls += 1;
+    if (this.signOutFail) return Promise.reject(new Error('network'));
     this.session = null;
     this.listeners.forEach((l) => l(null));
     return Promise.resolve();
@@ -46,6 +49,7 @@ export class FakeAuthClient implements AuthClient {
   }
 
   fetchMemberships(): Promise<Result<Membership[]>> {
+    if (this.membershipsFail) return Promise.resolve({ ok: false, error: { code: 'network' } });
     return Promise.resolve({ ok: true, value: this.memberships });
   }
 }

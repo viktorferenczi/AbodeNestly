@@ -89,6 +89,14 @@ describe('CORE-01: SignIn', () => {
     expect(resend().textContent).toBe('Resend');
   });
 
+  it('CORE-01: link-sent hides the provider buttons so the state cannot be wiped', async () => {
+    await renderAt('/signin');
+    await submitEmail('me@example.com');
+    expect(screen.queryByRole('button', { name: 'Sign in with Apple' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in with Google' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Check your email' })).toBeTruthy();
+  });
+
   it('CORE-01: sending disables the button while the request is pending', async () => {
     const client = new FakeAuthClient();
     let release: (error: null) => void = () => {};
@@ -113,6 +121,7 @@ describe('CORE-01: SignIn', () => {
     expect(input.getAttribute('aria-invalid')).toBe('true');
     const errorId = input.getAttribute('aria-describedby');
     expect(document.getElementById(errorId!)?.textContent).toBe('Enter a valid email address.');
+    expect(document.getElementById(errorId!)?.getAttribute('role')).toBe('alert');
     expect(client.otpCalls).toHaveLength(0);
   });
 

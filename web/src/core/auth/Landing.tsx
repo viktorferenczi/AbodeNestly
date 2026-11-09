@@ -18,7 +18,12 @@ export function Landing() {
     let active = true;
     void client.fetchMemberships(userId).then((result) => {
       if (!active) return;
-      if (!result.ok) return setFailed(true);
+      if (!result.ok) {
+        // Offline, an existing session stays usable (SPEC §6.5): enter the shell at Home.
+        // Online, a failure is a real problem and stays a blocking alert.
+        if (!navigator.onLine) return setTarget('/home');
+        return setFailed(true);
+      }
       const lastId = readLastHousehold();
       const chosen = pickHousehold(result.value, lastId);
       if (chosen) writeLastHousehold(chosen.household_id);
