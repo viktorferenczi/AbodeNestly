@@ -1,22 +1,66 @@
-/* Placeholder tokens; DESIGN.md Part A replaces these in the first screen story. */
+/* DESIGN.md A3 colour tokens, A4 type scale, A5 spacing and shape. */
 :root {
   color-scheme: light dark;
-  --color-bg: #ffffff;
-  --color-text: #1a1a1a;
-  --color-border: #e5e5e5;
+
+  --color-bg: #faf8f5;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1ede7;
+  --color-text: #1c1a18;
+  --color-text-2: #6b655e;
+  --color-line: #e4dfd7;
+  --color-accent: #2f6b5a;
+  --color-accent-bg: #e3f0eb;
+  --color-warn: #b8741a;
+  --color-danger: #b3402f;
+  --color-shopping: #2f6b5a;
+  --color-pantry: #b8741a;
+  --color-maintenance: #3f5e8c;
+
+  --font-title: 1.75rem;
+  --lh-title: 2.125rem;
+  --font-heading: 1.25rem;
+  --lh-heading: 1.625rem;
+  --font-body: 1.0625rem;
+  --lh-body: 1.375rem;
+  --font-secondary: 0.9375rem;
+  --lh-secondary: 1.25rem;
+  --font-caption: 0.8125rem;
+  --lh-caption: 1.125rem;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --radius-card: 12px;
+  --radius-chip: 999px;
+  --radius-sheet: 20px;
+  --touch-min: 48px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #121212;
-    --color-text: #f2f2f2;
-    --color-border: #2a2a2a;
+    --color-bg: #121110;
+    --color-surface: #1c1a18;
+    --color-surface-2: #262320;
+    --color-text: #f2efea;
+    --color-text-2: #a8a197;
+    --color-line: #2e2b27;
+    --color-accent: #6fb79f;
+    --color-accent-bg: #1e3a32;
+    --color-warn: #e0a449;
+    --color-danger: #e06a58;
+    --color-shopping: #6fb79f;
+    --color-pantry: #e0a449;
+    --color-maintenance: #86a7d6;
   }
 }
 
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
+  font-size: var(--font-body);
+  line-height: var(--lh-body);
   background: var(--color-bg);
   color: var(--color-text);
 }
