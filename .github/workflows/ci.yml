@@ -10,7 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 # TESTING §9 gates: the TypeScript workspace (`ts`) and the Supabase pgTAP suite (`db`).
-# Native builds are added by the stories that first need them.
+# `ios` runs unit + component tests; XCUITest e2e needs `supabase start` and runs locally/nightly like web e2e.
+# Android is added by the story that first needs it.
 jobs:
   ts:
     runs-on: ubuntu-latest
@@ -32,7 +33,8 @@ jobs:
       - name: contract
         run: |
           pnpm --filter @abodenestly/contract openapi
-          git diff --exit-code docs/openapi.yaml
+          pnpm --filter @abodenestly/contract swift
+          git diff --exit-code docs/openapi.yaml apps/ios/Packages/Contract
   db:
     runs-on: ubuntu-latest
     steps:
@@ -44,3 +46,21 @@ jobs:
         run: supabase db start
       - name: pgTAP
         run: supabase test db
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: pick an iPhone simulator
+        id: sim
+        run: |
+          name=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(sorted(x['name'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone'))[-1])")
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - name: Core package tests
+        working-directory: apps/ios/Packages/Core
+        run: xcodebuild test -scheme Core -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}"
+      - name: app component tests
+        working-directory: apps/ios
+        run: >
+          xcodebuild test -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev"
+          -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}"
+          -skip-testing:AbodeNestlyUITests
