@@ -27,6 +27,8 @@ jobs:
         run: pnpm -r typecheck
       - name: unit
         run: pnpm -r test
+      - name: api integration (local dev server, no Supabase)
+        run: pnpm --filter @abodenestly/api test:int
       - name: contract
         run: |
           pnpm --filter @abodenestly/contract openapi

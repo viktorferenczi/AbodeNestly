@@ -1,5 +1,7 @@
 api/test
 api/scripts
+api/vitest.config.ts
+api/vitest.int.config.ts
 apps
 web
 supabase

@@ -1,5 +1,5 @@
 import type { HealthResponse } from '@abodenestly/contract';
-import { json } from './lib/http.ts';
+import { json } from './_lib/http.ts';
 
 export const config = { runtime: 'nodejs' };
 

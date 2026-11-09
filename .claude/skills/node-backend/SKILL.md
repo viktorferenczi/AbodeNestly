@@ -34,7 +34,7 @@ api/
   devices/[token].ts
   internal/cron/deliver-notifications.ts
   health.ts
-  lib/
+  _lib/        "_" prefix keeps helpers from deploying as Vercel functions
     db.ts        pool + withUser(jwt, fn)
     auth.ts      verifyJwt(req) -> { sub }
     http.ts      json(), error(), parseJson()
@@ -43,7 +43,7 @@ api/
     push/        apns.ts, fcm.ts, webpush.ts
   test/
 ```
-One file per route. Route files are thin: parse → auth → call a function in `lib/` → respond.
+One file per route. Route files are thin: parse → auth → call a function in `_lib/` → respond.
 
 ## Handler shape
 ```ts
@@ -62,7 +62,7 @@ export default async function handler(req: Request): Promise<Response> {
 ```
 
 ## Database access
-- `lib/db.ts` creates one `pg.Pool` per function instance pointing at the **Supabase pooler, transaction mode** (`DATABASE_URL` ends in `:6543/postgres?pgbouncer=true`). `max: 3`.
+- `_lib/db.ts` creates one `pg.Pool` per function instance pointing at the **Supabase pooler, transaction mode** (`DATABASE_URL` ends in `:6543/postgres?pgbouncer=true`). `max: 3`.
 - `withUser(req, fn)` takes a client from the pool, runs:
   ```sql
   begin;
@@ -70,7 +70,7 @@ export default async function handler(req: Request): Promise<Response> {
   select set_config('request.jwt.claims', $1, true);
   ```
   with the verified claims JSON, runs `fn`, commits. This makes RLS apply inside the API exactly as it does for the Supabase SDK. **Never** use the service role for user requests. Service role is only for `internal/cron/*` and `products/[barcode]` cache writes.
-- Plain SQL with parameters. No string interpolation of values. Column lists come from `lib/sync/tables.ts`, never from request input.
+- Plain SQL with parameters. No string interpolation of values. Column lists come from `_lib/sync/tables.ts`, never from request input.
 
 ## Sync implementation rules
 - `tables.ts` is an allow-list: `{ list_item: { columns: [...], module: 'shopping' }, ... }`. A mutation for a table not in it is rejected `unknown_table`.
@@ -86,7 +86,7 @@ export default async function handler(req: Request): Promise<Response> {
 - Pull: one query per allowed table: `select * from <t> where household_id = $1 and sync_seq > $2 order by sync_seq limit $3`. Cursor = max `sync_seq` seen. `has_more` when any table hit the limit. Membership tables (`member`) are included even though they have no `household_id` index named the same; use the explicit query.
 
 ## Auth
-`lib/auth.ts` verifies the Supabase JWT with `jose.createRemoteJWKSet(SUPABASE_JWKS_URL)`. Cache the JWKS in module scope. Reject `exp` in the past, wrong `iss`. Return `{ sub, claims }`.
+`_lib/auth.ts` verifies the Supabase JWT with `jose.createRemoteJWKSet(SUPABASE_JWKS_URL)`. Cache the JWKS in module scope. Reject `exp` in the past, wrong `iss`. Return `{ sub, claims }`.
 
 ## Errors
 ```ts
@@ -106,7 +106,7 @@ Codes are `snake_case` and stable: `unauthorized`, `forbidden`, `not_found`, `va
 ## Testing
 Follow `docs/TESTING.md` §3 (`-api` row): integration test per endpoint for happy path, auth failure and validation failure; e2e HTTP tests against the dev deployment in `api/test/e2e/`.
 
-- `vitest`. Unit test `lib/sync/*` with a fake client; integration test against `supabase start` using a real JWT minted with the local JWT secret.
+- `vitest`. Unit test `_lib/sync/*` with a fake client; integration test against `supabase start` using a real JWT minted with the local JWT secret.
 - Required integration cases: X1 trigger fires through push; `delta` concurrent from two "devices" sums; RLS denies cross-household mutation; idempotent retry of the same push.
 
 ## Environment variables
@@ -114,7 +114,7 @@ Two environments: `.env.development` (committed) and `.env.production` (Vercel d
 `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_JWKS_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, `APNS_*`, `FCM_SERVICE_ACCOUNT_JSON`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `OPENFOODFACTS_USER_AGENT`. Document new ones in `api/README.md`.
 
 ## Checklist before PR
-- [ ] Route is thin; logic in `lib/`
+- [ ] Route is thin; logic in `_lib/`
 - [ ] Uses `withUser`, not service role
 - [ ] No new dependency, or justified
 - [ ] Contract updated + openapi regenerated if shape changed

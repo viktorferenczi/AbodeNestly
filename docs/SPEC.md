@@ -67,7 +67,7 @@ Clients: iOS (Swift/SwiftUI), Android (Kotlin/Jetpack Compose), Web (React). Bac
 - **Allowed backend dependencies**: `pg`, `jose`, `rrule`, `web-push`. Everything else needs a PR justification.
 
 ### Database
-- Supabase Postgres 16. Schema in `docs/schema.sql` (reproduced in §14). Migrations in `supabase/migrations/` managed with the Supabase CLI.
+- Supabase Postgres 17. Schema in `docs/schema.sql` (reproduced in §14). Migrations in `supabase/migrations/` managed with the Supabase CLI.
 - Row Level Security on every table. Realtime publication on every household-scoped table.
 - `pg_cron` for scheduled jobs.
 
@@ -782,7 +782,7 @@ abodenestly/
 ├── api/                     ← Vercel functions (Node/TS)
 │   ├── sync.ts
 │   ├── households/…
-│   ├── lib/db.ts, auth.ts, errors.ts
+│   ├── _lib/db.ts, auth.ts, errors.ts   ← "_" prefix: Vercel does not deploy it as a function
 │   └── test/
 ├── packages/contract/       ← types.ts, guards, OpenAPI generation
 ├── web/                     ← React app

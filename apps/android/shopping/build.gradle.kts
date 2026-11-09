@@ -1,5 +1,5 @@
 // Module library. Allowed project deps: :core, :sync, :ui, :shared, :contract — never another module
-// (SPEC §2.2, enforced by checkModuleGraph).
+// (SPEC §2 principle 2, enforced by checkModuleGraph).
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)

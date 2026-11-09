@@ -1,6 +1,6 @@
 # api
 
-Vercel Node functions (SPEC §3, §7). One file per route; logic in `lib/`.
+Vercel Node functions (SPEC §3, §7). One file per route; logic in `_lib/` (the `_` prefix keeps helpers from deploying as Vercel functions).
 
 ## Run
 

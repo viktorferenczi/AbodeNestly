@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose) apply false
 }
 
-// SPEC §2.2: a module never depends on another module. Fails the build if :shopping, :pantry or
+// SPEC §2 principle 2: a module never depends on another module. Fails the build if :shopping, :pantry or
 // :maintenance declares a project dependency on one of the others.
 val featureModules = setOf(":shopping", ":pantry", ":maintenance")
 
@@ -23,7 +23,7 @@ val checkModuleGraph by tasks.registering {
     doLast {
         val found = violations.get()
         if (found.isNotEmpty()) {
-            throw GradleException("Module graph violation (SPEC §2.2):\n" + found.joinToString("\n"))
+            throw GradleException("Module graph violation (SPEC §2 principle 2):\n" + found.joinToString("\n"))
         }
     }
 }
