@@ -9,8 +9,8 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# TESTING §9 gates for the TypeScript workspace. Native builds and the `supabase start`
-# integration gate are added by the stories that first need them.
+# TESTING §9 gates: the TypeScript workspace (`ts`) and the Supabase pgTAP suite (`db`).
+# Native builds are added by the stories that first need them.
 jobs:
   ts:
     runs-on: ubuntu-latest
@@ -33,3 +33,14 @@ jobs:
         run: |
           pnpm --filter @abodenestly/contract openapi
           git diff --exit-code docs/openapi.yaml
+  db:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: start database (applies migrations)
+        run: supabase db start
+      - name: pgTAP
+        run: supabase test db
