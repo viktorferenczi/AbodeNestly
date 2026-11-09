@@ -129,9 +129,16 @@ public struct SignInView: View {
             Button {
                 Task { await model.signInWithGoogle() }
             } label: {
-                Text("Sign in with Google")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: Tokens.minTouchTarget)
+                HStack(spacing: 8) {
+                    Image("GoogleG", bundle: .module)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 18, height: 18)
+                        .accessibilityHidden(true)
+                    Text("Sign in with Google")
+                        .font(.body.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity, minHeight: Tokens.minTouchTarget)
             }
             .buttonStyle(.bordered)
             .tint(Tokens.text)

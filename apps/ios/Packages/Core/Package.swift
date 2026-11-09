@@ -17,7 +17,8 @@ let package = Package(
             dependencies: [
                 "Contract", "Shared", "UI",
                 .product(name: "Auth", package: "supabase-swift"),
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .testTarget(name: "CoreTests", dependencies: ["Core", "Contract"]),
     ]
