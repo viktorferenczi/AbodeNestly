@@ -49,7 +49,7 @@ public final class SupabaseAuthService: AuthService {
     }
 
     public func handle(url: URL) async {
-        guard url.scheme == callbackScheme, url.host == "auth" else { return }
+        guard AuthCallback.matches(url, scheme: callbackScheme) else { return }
         // A bad or expired link leaves the person signed out on the sign-in screen, where they can ask for a new one.
         _ = try? await client.session(from: url)
     }
@@ -229,5 +229,12 @@ enum PostgrestJSON {
         let plain = ISO8601DateFormatter()
         plain.formatOptions = [.withInternetDateTime]
         return plain.date(from: text)
+    }
+}
+
+enum AuthCallback {
+    /// Only `<scheme>://auth/callback`; any other URL the app is opened with is ignored.
+    static func matches(_ url: URL, scheme: String?) -> Bool {
+        url.scheme == scheme && url.host == "auth" && url.path == "/callback"
     }
 }

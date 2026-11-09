@@ -50,13 +50,18 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      # Xcode 26.6 aborts while syncing the package graph (DependencyPackagesGroup.sortedInsert); use the newest installed.
+      - name: select newest Xcode
+        run: |
+          x=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$x"
+          xcodebuild -version
       - name: pick an iPhone simulator
         id: sim
         run: |
           name=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(sorted(x['name'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone'))[-1])")
           echo "name=$name" >> "$GITHUB_OUTPUT"
-      # Unit (Core, Shared) and component tests run in the hosted AbodeNestlyTests target; opening a package
-      # directory directly with `xcodebuild -scheme Core` crashes Xcode 26.6 while loading the workspace.
+      # Unit (Core, Shared) and component tests run in the hosted AbodeNestlyTests target.
       - name: unit and component tests
         working-directory: apps/ios
         run: >

@@ -43,7 +43,11 @@ const uuid: JsonSchema = { type: 'string', format: 'uuid' };
 const dateTime: JsonSchema = { type: 'string', format: 'date-time' };
 const nullableDateTime: JsonSchema = { type: ['string', 'null'], format: 'date-time' };
 
-/** Component schemas for the shared entities in types.ts (SPEC §8); Swift/Kotlin models are generated from these. */
+/**
+ * Component schemas for shared entities in types.ts (SPEC §8); Swift/Kotlin models are generated from these.
+ * `Household` is deliberately absent: `types.ts` extends `Synced` (adds `household_id`), which SPEC §14's
+ * `household` table does not have. Add it once the type and SPEC agree.
+ */
 export const componentSchemas: Record<string, JsonSchema> = {
   Profile: {
     type: 'object',
@@ -55,37 +59,6 @@ export const componentSchemas: Record<string, JsonSchema> = {
       updated_at: dateTime,
     },
     required: ['id', 'display_name', 'avatar_path', 'created_at', 'updated_at'],
-  },
-  Household: {
-    type: 'object',
-    properties: {
-      id: uuid,
-      household_id: uuid,
-      created_at: dateTime,
-      updated_at: dateTime,
-      deleted_at: nullableDateTime,
-      sync_seq: { type: 'integer' },
-      name: { type: 'string' },
-      created_by: uuid,
-      module_shopping: { type: 'boolean' },
-      module_pantry: { type: 'boolean' },
-      module_maintenance: { type: 'boolean' },
-      currency: { type: 'string' },
-    },
-    required: [
-      'id',
-      'household_id',
-      'created_at',
-      'updated_at',
-      'deleted_at',
-      'sync_seq',
-      'name',
-      'created_by',
-      'module_shopping',
-      'module_pantry',
-      'module_maintenance',
-      'currency',
-    ],
   },
   Member: {
     type: 'object',

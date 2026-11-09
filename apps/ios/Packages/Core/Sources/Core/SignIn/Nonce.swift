@@ -14,7 +14,7 @@ public struct Nonce: Sendable, Equatable {
     }
 
     public static func randomString(length: Int = 32) -> String {
-        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._")
         var generator = SystemRandomNumberGenerator()
         return String((0..<length).map { _ in charset.randomElement(using: &generator)! })
     }

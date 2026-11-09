@@ -38,3 +38,4 @@ web/playwright-report/
 # SwiftPM
 .build/
 .swiftpm/
+apps/ios/Packages/*/Package.resolved

@@ -153,6 +153,21 @@ struct PlumbingTests {
         #expect(SupabaseAuthService.map(URLError(.badServerResponse)) == .unknown)
     }
 
+    @Test(
+        "CORE-01: deep link — only <scheme>://auth/callback is handled",
+        arguments: [
+            ("abodenestly-dev://auth/callback?code=abc", true),
+            ("abodenestly-dev://auth/callback", true),
+            ("abodenestly-dev://auth/other", false),
+            ("abodenestly-dev://asset/callback", false),
+            ("abodenestly://auth/callback?code=abc", false),
+            ("https://example.com/auth/callback", false),
+        ]
+    )
+    func authCallbackMatching(url: String, handled: Bool) {
+        #expect(AuthCallback.matches(URL(string: url)!, scheme: "abodenestly-dev") == handled)
+    }
+
     @Test("CORE-01: nonce hash is SHA-256 hex")
     func nonceHash() {
         #expect(Nonce(raw: "abc").hashed == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")

@@ -83,13 +83,14 @@ struct SignInViewTests {
     func sending() async throws {
         let h = Harness()
         h.model.email = "ada@test.local"
-        h.auth.holdSendMagicLink()
+        h.auth.holdSignIn()
         let task = Task { await h.model.submit() }
         await waitFor { h.model.state == .sending }
         _ = try h.view().find(viewWithAccessibilityIdentifier: "signin.spinner")
+        #expect(h.model.action == .magicLink)
         #expect(try h.isDisabled("signin.send"))
         #expect(try h.isDisabled("signin.google"))
-        h.auth.releaseSendMagicLink()
+        h.auth.releaseSignIn()
         await task.value
     }
 
@@ -176,6 +177,30 @@ struct SignInViewTests {
         try h.view().find(viewWithAccessibilityIdentifier: "signin.google").button().tap()
         await waitFor { !h.auth.calls.isEmpty }
         #expect(h.auth.calls == [.signInWithGoogle(redirectTo: callback)])
+    }
+
+    @Test("CORE-01: AC5 provider spinners sit on the control that was used")
+    func providerSpinners() async throws {
+        let google = Harness()
+        google.auth.holdSignIn()
+        let g = Task { await google.model.signInWithGoogle() }
+        await waitFor { google.model.action == .google }
+        var view = try google.view()
+        _ = try view.find(viewWithAccessibilityIdentifier: "signin.google.spinner")
+        #expect(throws: (any Error).self) { try view.find(viewWithAccessibilityIdentifier: "signin.spinner") }
+        google.auth.releaseSignIn()
+        await g.value
+        #expect(google.model.action == nil)
+
+        let apple = Harness()
+        apple.auth.holdSignIn()
+        let a = Task { await apple.model.signInWithApple(idToken: "t", nonce: "n") }
+        await waitFor { apple.model.action == .apple }
+        view = try apple.view()
+        _ = try view.find(viewWithAccessibilityIdentifier: "signin.apple.spinner")
+        #expect(throws: (any Error).self) { try view.find(viewWithAccessibilityIdentifier: "signin.spinner") }
+        apple.auth.releaseSignIn()
+        await a.value
     }
 
     @Test("CORE-01: AC5 Apple passes the ID token and raw nonce to signInWithApple")

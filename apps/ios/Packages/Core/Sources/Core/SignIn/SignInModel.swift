@@ -9,6 +9,9 @@ public enum SignInState: Equatable, Sendable {
     case error(AuthError)
 }
 
+/// Which control started the request in flight; the spinner belongs on that control (DESIGN B1 `sending`).
+public enum SignInAction: Sendable, Equatable { case magicLink, apple, google }
+
 @Observable
 @MainActor
 public final class SignInModel {
@@ -16,6 +19,7 @@ public final class SignInModel {
 
     public var email = ""
     public private(set) var state: SignInState = .idle
+    public private(set) var action: SignInAction?
 
     @ObservationIgnored private let auth: any AuthService
     @ObservationIgnored private let redirectTo: URL
@@ -46,6 +50,8 @@ public final class SignInModel {
         guard !isBusy else { return }
         guard Self.isValid(email: trimmedEmail) else { return state = .error(.invalidEmail) }
         state = .sending
+        action = .magicLink
+        defer { action = nil }
         do {
             try await auth.sendMagicLink(email: trimmedEmail, redirectTo: redirectTo)
             enterLinkSent()
@@ -68,6 +74,8 @@ public final class SignInModel {
     public func signInWithApple(idToken: String, nonce: String) async {
         guard !isBusy else { return }
         state = .sending
+        action = .apple
+        defer { action = nil }
         do {
             try await auth.signInWithApple(idToken: idToken, nonce: nonce)
             state = .idle
@@ -84,6 +92,8 @@ public final class SignInModel {
     public func signInWithGoogle() async {
         guard !isBusy else { return }
         state = .sending
+        action = .google
+        defer { action = nil }
         do {
             try await auth.signInWithGoogle(redirectTo: redirectTo)
             state = .idle

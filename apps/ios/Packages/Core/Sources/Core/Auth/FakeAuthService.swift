@@ -49,16 +49,27 @@ public final class FakeAuthService: AuthService {
         for listener in listeners { listener.yield(session) }
     }
 
-    /// Makes `sendMagicLink` suspend until `releaseSendMagicLink()`, so tests can observe the `sending` state.
-    public func holdSendMagicLink() { state.withLock { $0.holdSend = true } }
+    /// Makes the sign-in calls suspend until `releaseSignIn()`, so tests can observe the `sending` state.
+    public func holdSignIn() { state.withLock { $0.holdSend = true } }
 
-    public func releaseSendMagicLink() {
+    public func releaseSignIn() {
         let waiting = state.withLock { state -> [CheckedContinuation<Void, Never>] in
             state.holdSend = false
             defer { state.held.removeAll() }
             return state.held
         }
         waiting.forEach { $0.resume() }
+    }
+
+    private func suspendIfHeld() async {
+        // Decide under the same lock `releaseSignIn` drains, so a release that wins the race resumes us.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let hold = state.withLock { state -> Bool in
+                if state.holdSend { state.held.append(continuation) }
+                return state.holdSend
+            }
+            if !hold { continuation.resume() }
+        }
     }
 
     private func record(_ call: Call) { state.withLock { $0.calls.append(call) } }
@@ -73,21 +84,19 @@ public final class FakeAuthService: AuthService {
 
     public func sendMagicLink(email: String, redirectTo: URL) async throws(AuthError) {
         record(.sendMagicLink(email: email, redirectTo: redirectTo))
-        if state.withLock({ $0.holdSend }) {
-            await withCheckedContinuation { continuation in
-                state.withLock { $0.held.append(continuation) }
-            }
-        }
+        await suspendIfHeld()
         if let error = state.withLock({ $0.sendMagicLinkError }) { throw error }
     }
 
     public func signInWithApple(idToken: String, nonce: String) async throws(AuthError) {
         record(.signInWithApple(idToken: idToken, nonce: nonce))
+        await suspendIfHeld()
         if let error = state.withLock({ $0.appleError }) { throw error }
     }
 
     public func signInWithGoogle(redirectTo: URL) async throws(AuthError) {
         record(.signInWithGoogle(redirectTo: redirectTo))
+        await suspendIfHeld()
         if let error = state.withLock({ $0.googleError }) { throw error }
     }
 

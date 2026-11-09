@@ -88,7 +88,7 @@ public struct SignInView: View {
             }
             Button(action: send) {
                 HStack(spacing: 8) {
-                    if model.isBusy { ProgressView().accessibilityIdentifier("signin.spinner") }
+                    if model.action == .magicLink { ProgressView().tint(.white).accessibilityIdentifier("signin.spinner") }
                     Text("Send magic link")
                 }
                 .font(.body.weight(.semibold))
@@ -122,17 +122,26 @@ public struct SignInView: View {
             )
             .signInWithAppleButtonStyle(.black)
             .frame(height: FullWidthButtonStyle.height)
+            .overlay {
+                if model.action == .apple {
+                    ProgressView().tint(.white).accessibilityIdentifier("signin.apple.spinner")
+                }
+            }
             .disabled(disabled)
             .accessibilityIdentifier("signin.apple")
             Button {
                 Task { await model.signInWithGoogle() }
             } label: {
                 HStack(spacing: 8) {
-                    Image("GoogleG", bundle: .module)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 18, height: 18)
-                        .accessibilityHidden(true)
+                    if model.action == .google {
+                        ProgressView().frame(width: 18, height: 18).accessibilityIdentifier("signin.google.spinner")
+                    } else {
+                        Image("GoogleG", bundle: .module)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 18, height: 18)
+                            .accessibilityHidden(true)
+                    }
                     Text("Sign in with Google")
                         .font(.body.weight(.semibold))
                 }
