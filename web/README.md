@@ -18,5 +18,5 @@ Apple and Google are disabled in the local stack (credentials are set per projec
 - `pnpm --filter @abodenestly/web test` — vitest unit and component tests.
 - `pnpm --filter @abodenestly/web e2e` — Playwright (Chromium and WebKit iPhone viewport). Needs the
   local stack and `SUPABASE_SERVICE_ROLE_KEY` (from `supabase status`) in the **process environment**.
-  It is deliberately not `VITE_`-prefixed so it can never be bundled. Optional: `E2E_SUPABASE_URL`,
-  `E2E_BASE_URL`. First run: `pnpm exec playwright install chromium webkit`.
+  It is deliberately not `VITE_`-prefixed so it can never be bundled. It signs in through a real PKCE magic link
+  read from Mailpit. Optional: `E2E_SUPABASE_URL`, `E2E_MAILPIT_URL`. First run: `pnpm exec playwright install chromium webkit`.
