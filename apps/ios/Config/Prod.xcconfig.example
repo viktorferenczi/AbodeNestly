@@ -2,4 +2,5 @@
 PRODUCT_BUNDLE_IDENTIFIER = com.abodenestly.app
 API_BASE_URL = https:/$()/<api-domain>
 SUPABASE_URL = https:/$()/<project-ref>.supabase.co
+AUTH_URL_SCHEME = abodenestly
 SUPABASE_ANON_KEY =
