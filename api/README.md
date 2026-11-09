@@ -10,6 +10,14 @@ pnpm --filter @abodenestly/api test    # unit
 pnpm --filter @abodenestly/api test:int
 ```
 
+Integration tests need a local Supabase stack. Run `supabase start` (`brew install supabase/tap/supabase`, or `npx supabase@3.1.0 start`), then put the service-role key from `supabase status -o env` (`SERVICE_ROLE_KEY`) in the git-ignored `api/.env.development.local`:
+
+```
+SUPABASE_SERVICE_ROLE_KEY=<key>
+```
+
+Local GoTrue already publishes an ES256 key at `SUPABASE_JWKS_URL`, so no signing-key setup is needed. If the `profile` table is missing, run `supabase db reset`.
+
 `scripts/dev-server.ts` maps paths to handlers locally; add each new route to its table.
 
 ## Environment variables

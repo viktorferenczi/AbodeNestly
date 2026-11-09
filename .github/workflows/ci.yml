@@ -9,7 +9,8 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# TESTING §9 gates: the TypeScript workspace (`ts`) and the Supabase pgTAP suite (`db`).
+# TESTING §9 gates: the TypeScript workspace (`ts`), the Supabase pgTAP suite (`db`) and the
+# API integration tests against a local Supabase stack (`api-int`).
 # Native builds are added by the stories that first need them.
 jobs:
   ts:
@@ -27,8 +28,6 @@ jobs:
         run: pnpm -r typecheck
       - name: unit
         run: pnpm -r test
-      - name: api integration (local dev server, no Supabase)
-        run: pnpm --filter @abodenestly/api test:int
       - name: contract
         run: |
           pnpm --filter @abodenestly/contract openapi
@@ -44,3 +43,21 @@ jobs:
         run: supabase db start
       - name: pgTAP
         run: supabase test db
+  api-int:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+      - name: start Supabase (applies migrations)
+        run: supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,logflare,vector,supavisor
+      - name: export service-role key
+        run: echo "SUPABASE_SERVICE_ROLE_KEY=$(supabase status -o env | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')" >> "$GITHUB_ENV"
+      - name: api integration
+        run: pnpm --filter @abodenestly/api test:int
