@@ -21,6 +21,7 @@
 		A10000000000000000000E12 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E11 /* Core */; };
 		A10000000000000000000E14 /* UI in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E13 /* UI */; };
 		A10000000000000000000E16 /* Contract in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E15 /* Contract */; };
+		A10000000000000000000E22 /* Shared in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E21 /* Shared */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -105,6 +106,7 @@
 				A10000000000000000000E12 /* Core in Frameworks */,
 				A10000000000000000000E14 /* UI in Frameworks */,
 				A10000000000000000000E16 /* Contract in Frameworks */,
+				A10000000000000000000E22 /* Shared in Frameworks */,
 				A10000000000000000000E03 /* ViewInspector in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -205,6 +207,7 @@
 				A10000000000000000000E11 /* Core */,
 				A10000000000000000000E13 /* UI */,
 				A10000000000000000000E15 /* Contract */,
+				A10000000000000000000E21 /* Shared */,
 				A10000000000000000000E02 /* ViewInspector */,
 			);
 			productName = AbodeNestlyTests;
@@ -671,6 +674,10 @@
 		A10000000000000000000E15 /* Contract */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Contract;
+		};
+		A10000000000000000000E21 /* Shared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Shared;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

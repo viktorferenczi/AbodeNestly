@@ -55,10 +55,9 @@ jobs:
         run: |
           name=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(sorted(x['name'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone'))[-1])")
           echo "name=$name" >> "$GITHUB_OUTPUT"
-      - name: Core package tests
-        working-directory: apps/ios/Packages/Core
-        run: xcodebuild test -scheme Core -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}"
-      - name: app component tests
+      # Unit (Core, Shared) and component tests run in the hosted AbodeNestlyTests target; opening a package
+      # directory directly with `xcodebuild -scheme Core` crashes Xcode 26.6 while loading the workspace.
+      - name: unit and component tests
         working-directory: apps/ios
         run: >
           xcodebuild test -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev"

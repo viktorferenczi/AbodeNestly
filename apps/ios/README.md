@@ -32,8 +32,7 @@ simulator. They are checked by hand only, never in e2e (TESTING §5).
 
 | What | Command |
 |---|---|
-| Package unit tests | `cd apps/ios/Packages/Core && xcodebuild test -scheme Core -destination 'platform=iOS Simulator,name=iPhone 16 Pro'` (same for `Shared`) |
-| Component tests | `cd apps/ios && xcodebuild test -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev" -destination 'platform=iOS Simulator,name=iPhone 16 Pro' -skip-testing:AbodeNestlyUITests` |
+| Unit and component tests | `cd apps/ios && xcodebuild test -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev" -destination 'platform=iOS Simulator,name=iPhone 16 Pro' -skip-testing:AbodeNestlyUITests` |
 | E2E (XCUITest) | `TEST_RUNNER_SUPABASE_SERVICE_ROLE_KEY=<from supabase status> xcodebuild test … -only-testing:AbodeNestlyUITests` |
 
 The e2e journey creates its own user through the admin API, reads the magic link from Mailpit
