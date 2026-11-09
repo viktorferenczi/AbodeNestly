@@ -1,0 +1,9 @@
+// Dev environment (SPEC §3). Committed; points at `supabase start` and the local API.
+// `/$()/` stops xcconfig treating `//` as a comment.
+PRODUCT_BUNDLE_IDENTIFIER = com.abodenestly.app.dev
+API_BASE_URL = http:/$()/localhost:3000
+SUPABASE_URL = http:/$()/127.0.0.1:54321
+// Paste the local anon key from `supabase status` into Dev.local.xcconfig (git-ignored).
+SUPABASE_ANON_KEY =
+
+#include? "Dev.local.xcconfig"
