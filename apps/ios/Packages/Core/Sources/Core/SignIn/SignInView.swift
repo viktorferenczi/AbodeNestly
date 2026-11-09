@@ -92,10 +92,8 @@ public struct SignInView: View {
                     Text("Send magic link")
                 }
                 .font(.body.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: Tokens.minTouchTarget)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Tokens.accent)
+            .buttonStyle(FullWidthButtonStyle(fill: Tokens.accent, foreground: .white))
             .disabled(disabled)
             .accessibilityIdentifier("signin.send")
         }
@@ -123,7 +121,7 @@ public struct SignInView: View {
                 onCompletion: handleApple
             )
             .signInWithAppleButtonStyle(.black)
-            .frame(height: Tokens.minTouchTarget)
+            .frame(height: FullWidthButtonStyle.height)
             .disabled(disabled)
             .accessibilityIdentifier("signin.apple")
             Button {
@@ -138,10 +136,8 @@ public struct SignInView: View {
                     Text("Sign in with Google")
                         .font(.body.weight(.semibold))
                 }
-                .frame(maxWidth: .infinity, minHeight: Tokens.minTouchTarget)
             }
-            .buttonStyle(.bordered)
-            .tint(Tokens.text)
+            .buttonStyle(FullWidthButtonStyle(fill: Tokens.surface2, foreground: Tokens.text))
             .disabled(disabled)
             .accessibilityIdentifier("signin.google")
         }
@@ -192,5 +188,22 @@ public struct SignInView: View {
             let cancelled = (error as? ASAuthorizationError)?.code == .canceled
             model.appleFailed(cancelled ? .cancelled : .unknown)
         }
+    }
+}
+
+/// Same height and corner radius as `SignInWithAppleButton`, so the three actions line up.
+private struct FullWidthButtonStyle: ButtonStyle {
+    static let height = Tokens.minTouchTarget
+    let fill: Color
+    let foreground: Color
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(foreground)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.height)
+            .background(fill, in: RoundedRectangle(cornerRadius: 8))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
     }
 }
