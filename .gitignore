@@ -30,3 +30,7 @@ supabase/.branches/
 
 # OS
 .DS_Store
+
+# Playwright
+web/test-results/
+web/playwright-report/
