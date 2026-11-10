@@ -8,14 +8,15 @@ let package = Package(
     dependencies: [
         .package(path: "../Contract"),
         .package(path: "../Shared"),
-        .package(path: "../UI"),
+        .package(path: "../NestlyUI"),
         .package(url: "https://github.com/supabase/supabase-swift", from: "2.0.0"),
     ],
     targets: [
         .target(
             name: "Core",
             dependencies: [
-                "Contract", "Shared", "UI",
+                "Contract", "Shared",
+                .product(name: "NestlyUI", package: "NestlyUI"),
                 .product(name: "Auth", package: "supabase-swift"),
             ],
             resources: [.process("Resources")]

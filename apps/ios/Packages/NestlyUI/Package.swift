@@ -2,8 +2,8 @@
 import PackageDescription
 
 let package = Package(
-    name: "UI",
+    name: "NestlyUI",
     platforms: [.iOS(.v17)],
-    products: [.library(name: "UI", targets: ["UI"])],
+    products: [.library(name: "NestlyUI", targets: ["UI"])],
     targets: [.target(name: "UI")]
 )

@@ -276,7 +276,7 @@
 				A10000000000000000000A04 /* XCLocalSwiftPackageReference "Packages/Pantry" */,
 				A10000000000000000000A05 /* XCLocalSwiftPackageReference "Packages/Maintenance" */,
 				A10000000000000000000C01 /* XCLocalSwiftPackageReference "Packages/Core" */,
-				A10000000000000000000C02 /* XCLocalSwiftPackageReference "Packages/UI" */,
+				A10000000000000000000C02 /* XCLocalSwiftPackageReference "Packages/NestlyUI" */,
 				A10000000000000000000C03 /* XCLocalSwiftPackageReference "Packages/Shared" */,
 				A10000000000000000000C04 /* XCLocalSwiftPackageReference "Packages/Contract" */,
 				A10000000000000000000E01 /* XCRemoteSwiftPackageReference "ViewInspector" */,
@@ -573,9 +573,9 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Core;
 		};
-		A10000000000000000000C02 /* XCLocalSwiftPackageReference "Packages/UI" */ = {
+		A10000000000000000000C02 /* XCLocalSwiftPackageReference "Packages/NestlyUI" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/UI;
+			relativePath = Packages/NestlyUI;
 		};
 		A10000000000000000000C03 /* XCLocalSwiftPackageReference "Packages/Shared" */ = {
 			isa = XCLocalSwiftPackageReference;
@@ -648,7 +648,7 @@
 		};
 		A10000000000000000000C12 /* UI */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = UI;
+			productName = NestlyUI;
 		};
 		A10000000000000000000C13 /* Shared */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -669,7 +669,7 @@
 		};
 		A10000000000000000000E13 /* UI */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = UI;
+			productName = NestlyUI;
 		};
 		A10000000000000000000E15 /* Contract */ = {
 			isa = XCSwiftPackageProductDependency;

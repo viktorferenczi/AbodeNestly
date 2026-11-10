@@ -50,7 +50,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      # Xcode 26.6 aborts while syncing the package graph (DependencyPackagesGroup.sortedInsert); use the newest other release.
+      # Xcode 26.x aborts syncing the package graph when a local package named "UI" sits beside supabase-swift (hence Packages/NestlyUI). Keep off 26.6 anyway.
       - name: select Xcode (not 26.6)
         run: |
           ls -d /Applications/Xcode_*.app
