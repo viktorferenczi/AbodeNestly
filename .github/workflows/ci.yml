@@ -50,10 +50,11 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      # Xcode 26.6 aborts while syncing the package graph (DependencyPackagesGroup.sortedInsert); use the newest installed.
-      - name: select newest Xcode
+      # Xcode 26.6 aborts while syncing the package graph (DependencyPackagesGroup.sortedInsert); use the newest other release.
+      - name: select Xcode (not 26.6)
         run: |
-          x=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          ls -d /Applications/Xcode_*.app
+          x=$(ls -d /Applications/Xcode_*.app | grep -v 'Xcode_26\.6' | grep -vi beta | sort -V | tail -1)
           sudo xcode-select -s "$x"
           xcodebuild -version
       - name: pick an iPhone simulator
