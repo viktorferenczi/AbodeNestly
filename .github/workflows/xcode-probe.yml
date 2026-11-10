@@ -6,7 +6,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        strip: ["GRDB.swift", "ViewInspector", "UI Shared Contract", "Shopping Pantry Maintenance", "GRDB.swift Shopping Pantry Maintenance"]
+        strip: ["Core UI Shared Contract GRDB.swift ViewInspector", "Shopping Pantry Maintenance GRDB.swift ViewInspector", "Core UI Shared Contract Shopping Pantry Maintenance", "Shopping Pantry Maintenance Core UI Shared Contract GRDB.swift ViewInspector"]
     steps:
       - uses: actions/checkout@v4
       - run: sudo xcode-select -s /Applications/Xcode_26.4.1.app
