@@ -6,10 +6,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        strip: ["Core UI Shared Contract GRDB.swift ViewInspector", "Shopping Pantry Maintenance GRDB.swift ViewInspector", "Core UI Shared Contract Shopping Pantry Maintenance", "Shopping Pantry Maintenance Core UI Shared Contract GRDB.swift ViewInspector"]
+        mode: ["nolocals", "nolocals-nogrdb-novi", "nolocals-nostubs"]
     steps:
       - uses: actions/checkout@v4
       - run: sudo xcode-select -s /Applications/Xcode_26.4.1.app
-      - run: python3 .github/probe_strip.py ${{ matrix.strip }}
+      - run: |
+          f=apps/ios/Packages/Core/Package.swift
+          sed -i '' '/\.package(path:/d; s/"Contract", "Shared", "UI",//' $f
+          cat $f
+          case "${{ matrix.mode }}" in
+            nolocals-nogrdb-novi) python3 .github/probe_strip.py GRDB.swift ViewInspector ;;
+            nolocals-nostubs) python3 .github/probe_strip.py GRDB.swift ViewInspector Shopping Pantry Maintenance UI Shared Contract ;;
+          esac
       - working-directory: apps/ios
         run: xcodebuild -resolvePackageDependencies -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev"
