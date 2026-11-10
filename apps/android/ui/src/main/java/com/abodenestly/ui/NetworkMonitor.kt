@@ -24,17 +24,21 @@ class NetworkMonitor(online: Boolean = true) {
     companion object {
         fun observing(context: Context): NetworkMonitor {
             val manager = context.applicationContext.getSystemService(ConnectivityManager::class.java)
-            val monitor = NetworkMonitor(manager.hasValidatedNetwork())
+            val monitor = NetworkMonitor(manager.getNetworkCapabilities(manager.activeNetwork).isOnline())
             manager.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) = monitor.setOnline(true)
+                // Validation completes after onAvailable, so read the capabilities instead of assuming online.
+                override fun onAvailable(network: Network) = monitor.setOnline(manager.getNetworkCapabilities(network).isOnline())
                 override fun onLost(network: Network) = monitor.setOnline(false)
                 override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) =
-                    monitor.setOnline(capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+                    monitor.setOnline(capabilities.isOnline())
             })
             return monitor
         }
 
-        private fun ConnectivityManager.hasValidatedNetwork(): Boolean =
-            getNetworkCapabilities(activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        /** A captive portal or an unvalidated network has INTERNET but not VALIDATED, and must read as offline. */
+        private fun NetworkCapabilities?.isOnline(): Boolean =
+            this != null &&
+                hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 }

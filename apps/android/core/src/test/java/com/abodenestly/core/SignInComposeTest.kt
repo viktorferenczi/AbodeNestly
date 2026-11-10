@@ -50,6 +50,9 @@ class SignInComposeTest {
         rule.setContent { AbodeTheme { SignInScreen(vm, isOnline = online) } }
     }
 
+    /** The message is the field's supporting text, so it is merged into the field's node (one TalkBack control). */
+    private fun errorNode() = rule.onNodeWithTag("signin.error", useUnmergedTree = true)
+
     private fun typeEmail(text: String) = rule.onNodeWithTag("signin.email").performTextInput(text)
 
     @Test
@@ -112,7 +115,7 @@ class SignInComposeTest {
         typeEmail("nope")
         rule.onNodeWithTag("signin.send").performClick()
         rule.waitForIdle()
-        rule.onNodeWithTag("signin.error").assertTextEquals("Enter a valid email address.")
+        errorNode().assertTextEquals("Enter a valid email address.")
         assertTrue(auth.calls.isEmpty())
     }
 
@@ -123,7 +126,7 @@ class SignInComposeTest {
         typeEmail("ada@example.com")
         rule.onNodeWithTag("signin.send").performClick()
         rule.waitForIdle()
-        rule.onNodeWithTag("signin.error").assertTextEquals("Too many attempts. Wait a minute and try again.")
+        errorNode().assertTextEquals("Too many attempts. Wait a minute and try again.")
         rule.onNodeWithTag("signin.send").assertIsEnabled()
     }
 
@@ -134,7 +137,7 @@ class SignInComposeTest {
         typeEmail("ada@example.com")
         rule.onNodeWithTag("signin.send").performClick()
         rule.waitForIdle()
-        rule.onNodeWithTag("signin.error")
+        errorNode()
             .assertTextEquals("Couldn't reach the server. Check your connection and try again.")
     }
 

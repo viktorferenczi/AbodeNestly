@@ -128,13 +128,12 @@ private fun Form(
             label = { Text("Email") },
             singleLine = true,
             isError = error != null,
+            // Supporting text keeps the message and the field one control, so TalkBack announces them together.
+            supportingText = error?.let { { Text(signInMessage(it), color = tokens.danger, modifier = Modifier.testTag("signin.error")) } },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { if (!disabled) onSend() }),
             modifier = Modifier.fillMaxWidth().heightIn(min = Tokens.MinTouchTarget).testTag("signin.email"),
         )
-        if (error != null) {
-            Text(signInMessage(error), style = MaterialTheme.typography.bodySmall, color = tokens.danger, modifier = Modifier.testTag("signin.error"))
-        }
         Button(
             onClick = onSend,
             enabled = !disabled,

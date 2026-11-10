@@ -18,6 +18,7 @@ import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.withContext
@@ -50,20 +51,21 @@ class SupabaseAuthService(private val config: AppConfig) : AuthService {
 
     // MARK: Session
 
+    /**
+     * `currentSessionOrNull()` is null unless the status is `Authenticated`. After a failed refresh (offline) the
+     * session is still in storage, so fall back to it: an existing session stays usable offline (SPEC §6.5).
+     */
+    private suspend fun storedUserSession(): UserSession? =
+        auth.currentSessionOrNull() ?: auth.sessionManager.loadSession()
+
     override suspend fun currentSession(): AuthSession? {
         auth.awaitInitialization()
-        return auth.currentSessionOrNull()?.toAuthSession()
+        return storedUserSession()?.toAuthSession()
     }
 
     override val sessionChanges: Flow<AuthSession?>
         get() = auth.sessionStatus.transform { status ->
-            when (status) {
-                is SessionStatus.Authenticated -> emit(status.session.toAuthSession())
-                is SessionStatus.NotAuthenticated -> emit(null)
-                // An expired token that cannot refresh (offline) must not read as signed out (SPEC §6.5).
-                is SessionStatus.RefreshFailure -> emit(auth.currentSessionOrNull()?.toAuthSession())
-                is SessionStatus.Initializing -> Unit
-            }
+            emitSessionFor(status) { storedUserSession()?.toAuthSession() }
         }.distinctUntilChanged()
 
     override suspend fun handle(url: String) {
@@ -138,24 +140,28 @@ class SupabaseAuthService(private val config: AppConfig) : AuthService {
     }
 
     private suspend fun get(table: String, vararg query: Pair<String, String>): String {
-        val first = request(table, query, auth.currentAccessTokenOrNull())
+        // The user's JWT, never the anon key: an anon `200 []` would read as "no households" and land on Welcome.
+        val first = request(table, query, accessToken())
         if (first.code != 401) return first.require()
-        // The stored access token expired; refresh once and retry.
+        // The stored access token expired; refresh once and retry. A failed refresh stays a failed read.
         auth.refreshCurrentSession()
-        return request(table, query, auth.currentAccessTokenOrNull()).require()
+        return request(table, query, accessToken()).require()
     }
+
+    private suspend fun accessToken(): String =
+        storedUserSession()?.accessToken ?: throw IOException("No stored session")
 
     private class Reply(val code: Int, val body: String) {
         fun require(): String = if (code in 200..299) body else throw IOException("HTTP $code")
     }
 
-    private suspend fun request(table: String, query: Array<out Pair<String, String>>, token: String?): Reply =
+    private suspend fun request(table: String, query: Array<out Pair<String, String>>, token: String): Reply =
         withContext(Dispatchers.IO) {
             val url = config.supabaseUrl.trimEnd('/').plus("/rest/v1/$table").toHttpUrl().newBuilder()
                 .apply { query.forEach { (key, value) -> addQueryParameter(key, value) } }
                 .build()
             val request = Request.Builder().url(url)
-                .header("Authorization", "Bearer ${token ?: config.supabaseAnonKey}")
+                .header("Authorization", "Bearer $token")
                 .header("apikey", config.supabaseAnonKey)
                 .header("Accept", "application/json")
                 .build()
@@ -207,6 +213,20 @@ class SupabaseAuthService(private val config: AppConfig) : AuthService {
         }
 
         private val RATE_LIMIT_CODES = setOf("over_email_send_rate_limit", "over_request_rate_limit", "over_sms_send_rate_limit")
+    }
+}
+
+/** Maps a supabase-kt status to a session change; [stored] is read only when a refresh failed. */
+internal suspend fun FlowCollector<AuthSession?>.emitSessionFor(
+    status: SessionStatus,
+    stored: suspend () -> AuthSession?,
+) {
+    when (status) {
+        is SessionStatus.Authenticated -> emit(status.session.user?.let { AuthSession(UUID.fromString(it.id), it.email) })
+        is SessionStatus.NotAuthenticated -> emit(null)
+        // An expired token that cannot refresh (offline) must not read as signed out (SPEC §6.5).
+        is SessionStatus.RefreshFailure -> emit(stored())
+        is SessionStatus.Initializing -> Unit
     }
 }
 

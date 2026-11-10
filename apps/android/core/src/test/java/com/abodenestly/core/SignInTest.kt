@@ -10,7 +10,12 @@ import com.abodenestly.core.auth.FakeAuthService
 import com.abodenestly.core.auth.Fetch
 import com.abodenestly.core.auth.InMemoryLastHouseholdStore
 import com.abodenestly.core.auth.Landing
+import com.abodenestly.core.auth.AuthSession
 import com.abodenestly.core.auth.SessionStatus
+import com.abodenestly.core.auth.emitSessionFor
+import io.github.jan.supabase.auth.status.RefreshFailureCause
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.toList
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.auth.SupabaseAuthService
 import com.abodenestly.core.signin.SignInState
@@ -215,5 +220,22 @@ class SignInTest {
         assertEquals(AuthError.Unknown, SupabaseAuthService.mapRest(500, null))
         assertEquals(AuthError.Network, SupabaseAuthService.map(IOException("offline")))
         assertEquals(AuthError.Unknown, SupabaseAuthService.map(IllegalStateException()))
+    }
+
+    // ---- Status mapping (SPEC §6.5) ----
+
+    private suspend fun changes(status: io.github.jan.supabase.auth.status.SessionStatus, stored: AuthSession?) =
+        flow { emitSessionFor(status) { stored } }.toList()
+
+    @Test
+    fun `refresh failure keeps the stored session instead of signing out`() = runTest {
+        val failure = io.github.jan.supabase.auth.status.SessionStatus.RefreshFailure(RefreshFailureCause.NetworkError(IOException("offline")))
+        assertEquals(listOf<AuthSession?>(Fixtures.session), changes(failure, Fixtures.session))
+    }
+
+    @Test
+    fun `not authenticated signs out and initializing emits nothing`() = runTest {
+        assertEquals(listOf<AuthSession?>(null), changes(io.github.jan.supabase.auth.status.SessionStatus.NotAuthenticated(isSignOut = true), Fixtures.session))
+        assertEquals(emptyList<AuthSession?>(), changes(io.github.jan.supabase.auth.status.SessionStatus.Initializing, Fixtures.session))
     }
 }

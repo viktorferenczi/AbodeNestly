@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.material3.Text
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import com.abodenestly.core.auth.Destination
 import com.abodenestly.core.auth.InMemoryLastHouseholdStore
 import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
@@ -128,7 +129,8 @@ class SignInE2ETest {
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = true)
             SessionStatus.SignedIn -> {
                 TopBar("AbodeNestly", state.profile?.displayName)
-                if (state.destination != null) Text("Welcome", modifier = Modifier.testTag("welcome.title"))
+                // Only the landing rule may put "Welcome" here: no household → Destination.Welcome (AC4).
+                if (state.destination == Destination.Welcome) Text("Welcome", modifier = Modifier.testTag("welcome.title"))
             }
         }
     }
