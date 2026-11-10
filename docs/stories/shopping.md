@@ -11,7 +11,7 @@ The household can keep more than one list, including one that is archived rather
 SPEC §4 SHOP-01; §8 ShoppingList; TESTING §3 -db row
 
 ## Scope
-In: shopping_list with name, archived_at, is_template, store_id, and the standard sync columns. Members can read and write; non-members cannot.
+In: shopping_list with name, archived_at, is_template, store_id, and the standard sync columns. Members can read and write; non-members cannot. The table itself is created by CORE-02-db (migration 20261108100100); this story adds only its pgTAP test and no new migration.
 Out: The lists screen (SHOP-01 clients). Stores (SHOP-05). The Groceries seed (CORE-02-db). Skipped layers: -api — list CRUD is an outbox upsert, not an HTTP route. The default Groceries list is created by CORE-02-db.
 
 ## Acceptance criteria
@@ -31,7 +31,7 @@ Shopping off (X7): the Shopping tab is hidden and a shopping-table mutation is r
 
 ## Data and contract
 Tables: shopping_list  Endpoints: none  Types: ShoppingList
-Schema change: yes — supabase/migrations/20261108110000_SHOP-01_shopping_list.sql  Contract change: no
+Schema change: no (table created by CORE-02-db, migration 20261108100100_CORE-02_create_household.sql)  Contract change: no
 
 ## Tests required
 Unit: n/a (database behaviour is asserted in pgTAP, TESTING §2)
@@ -693,7 +693,7 @@ The household can name the shops it uses and point a list at one of them.
 SPEC §4 SHOP-05; §8 Store; TESTING §3 -db row
 
 ## Scope
-In: store table, and shopping_list.store_id referencing it.
+In: store table, and the foreign key from shopping_list.store_id (a plain uuid column since CORE-02-db) to it.
 Out: The stores screens (SHOP-05 clients). Aisle learning, which needs a store (X4). Skipped layers: -api — stores are outbox CRUD. §7 lists no store endpoint.
 
 ## Acceptance criteria

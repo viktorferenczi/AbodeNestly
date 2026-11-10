@@ -731,6 +731,7 @@ All cross-module behaviour is listed here. Nothing else may couple modules.
 | X5 | Pantry → Pantry | Trigger `pantry_movement_apply` (AFTER INSERT) | — | Applies `delta` to `pantry_item.quantity`. The only way quantity changes. |
 | X6 | Any → Core | Application code in API/sync | — | Sync writes an `activity` row for user-visible actions: check-off, pantry add/use, task done, member joined. |
 | X7 | Core → All | `household.module_*` flags | — | Sync rejects mutations for a disabled module's tables with `module_disabled`. Clients hide the module's tab. Triggers check the flag. |
+| X8 | Core → Shopping, Pantry | Function `create_household()` (security definer) | — (flags default on at insert) | Inserts one `shopping_list` named Groceries and `location` rows Fridge, Freezer, Pantry for the new household. The rows are kept if a module is later switched off (hidden by X7, not deleted). |
 
 Module disabled matrix — what still works:
 
@@ -980,12 +981,19 @@ end $$;
 create trigger member_guard before update on member for each row execute function guard_member_update();
 create trigger member_sync before insert or update on member for each row execute function set_sync_fields();
 
+-- Seeds the owner membership, the Groceries list and the default locations (CORE-02).
 create or replace function create_household(p_name text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare hid uuid;
 begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated' using errcode = '42501';
+  end if;
   insert into household(name, created_by) values (p_name, auth.uid()) returning id into hid;
   insert into member(household_id, user_id, role) values (hid, auth.uid(), 'owner');
+  insert into shopping_list(household_id, name) values (hid, 'Groceries');
+  insert into location(household_id, name, kind) values
+    (hid, 'Fridge', 'fridge'), (hid, 'Freezer', 'freezer'), (hid, 'Pantry', 'pantry');
   return hid;
 end $$;
 
