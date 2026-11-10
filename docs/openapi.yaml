@@ -25,6 +25,65 @@ components:
       scheme: bearer
       bearerFormat: JWT
   schemas:
+    Profile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        avatar_path:
+          type:
+            - string
+            - "null"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - display_name
+        - avatar_path
+        - created_at
+        - updated_at
+    Member:
+      type: object
+      properties:
+        household_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum:
+            - owner
+            - member
+        joined_at:
+          type: string
+          format: date-time
+        left_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        sync_seq:
+          type: integer
+      required:
+        - household_id
+        - user_id
+        - role
+        - joined_at
+        - left_at
+        - updated_at
+        - sync_seq
     HealthResponse:
       type: object
       properties:

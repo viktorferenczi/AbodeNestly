@@ -6,9 +6,27 @@
             <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "A10000000000000000000601" BuildableName = "AbodeNestly.app" BlueprintName = "AbodeNestly" ReferencedContainer = "container:AbodeNestly.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry buildForTesting = "YES" buildForRunning = "NO" buildForProfiling = "NO" buildForArchiving = "NO" buildForAnalyzing = "NO">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "A10000000000000000000D01" BuildableName = "AbodeNestlyTests.xctest" BlueprintName = "AbodeNestlyTests" ReferencedContainer = "container:AbodeNestly.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry buildForTesting = "YES" buildForRunning = "NO" buildForProfiling = "NO" buildForArchiving = "NO" buildForAnalyzing = "NO">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "A10000000000000000000D02" BuildableName = "AbodeNestlyUITests.xctest" BlueprintName = "AbodeNestlyUITests" ReferencedContainer = "container:AbodeNestly.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv = "YES">
+      <Testables>
+         <TestableReference skipped = "NO" parallelizable = "NO">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "A10000000000000000000D01" BuildableName = "AbodeNestlyTests.xctest" BlueprintName = "AbodeNestlyTests" ReferencedContainer = "container:AbodeNestly.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference skipped = "NO" parallelizable = "NO">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "A10000000000000000000D02" BuildableName = "AbodeNestlyUITests.xctest" BlueprintName = "AbodeNestlyUITests" ReferencedContainer = "container:AbodeNestly.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
    </TestAction>
    <LaunchAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle = "0" useCustomWorkingDirectory = "NO" ignoresPersistentStateOnLaunch = "NO" debugDocumentVersioning = "YES" debugServiceExtension = "internal" allowLocationSimulation = "YES">
       <BuildableProductRunnable runnableDebuggingMode = "0">

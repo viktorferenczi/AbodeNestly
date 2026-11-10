@@ -13,18 +13,47 @@
 		A10000000000000000000104 /* Shopping in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000404 /* Shopping */; };
 		A10000000000000000000105 /* Pantry in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000405 /* Pantry */; };
 		A10000000000000000000106 /* Maintenance in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000406 /* Maintenance */; };
+		A10000000000000000000C21 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000C11 /* Core */; };
+		A10000000000000000000C22 /* UI in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000C12 /* UI */; };
+		A10000000000000000000C23 /* Shared in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000C13 /* Shared */; };
+		A10000000000000000000C24 /* Contract in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000C14 /* Contract */; };
+		A10000000000000000000E03 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E02 /* ViewInspector */; };
+		A10000000000000000000E12 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E11 /* Core */; };
+		A10000000000000000000E14 /* UI in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E13 /* UI */; };
+		A10000000000000000000E16 /* Contract in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E15 /* Contract */; };
+		A10000000000000000000E22 /* Shared in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E21 /* Shared */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000D71 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000801 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000601;
+			remoteInfo = AbodeNestly;
+		};
+		A10000000000000000000D73 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000801 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000601;
+			remoteInfo = AbodeNestly;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000201 /* AbodeNestly.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AbodeNestly.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000202 /* Dev.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Dev.xcconfig; sourceTree = "<group>"; };
 		A10000000000000000000203 /* Prod.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Prod.xcconfig; sourceTree = "<group>"; };
+		A10000000000000000000D11 /* AbodeNestlyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AbodeNestlyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000D12 /* AbodeNestlyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AbodeNestlyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
 		A10000000000000000000301 /* Exceptions for "AbodeNestly" folder in "AbodeNestly" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				AbodeNestly.entitlements,
 				Info.plist,
 			);
 			target = A10000000000000000000601 /* AbodeNestly */;
@@ -40,6 +69,16 @@
 			path = AbodeNestly;
 			sourceTree = "<group>";
 		};
+		A10000000000000000000D21 /* AbodeNestlyTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AbodeNestlyTests;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000D22 /* AbodeNestlyUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AbodeNestlyUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,6 +92,29 @@
 				A10000000000000000000104 /* Shopping in Frameworks */,
 				A10000000000000000000105 /* Pantry in Frameworks */,
 				A10000000000000000000106 /* Maintenance in Frameworks */,
+				A10000000000000000000C21 /* Core in Frameworks */,
+				A10000000000000000000C22 /* UI in Frameworks */,
+				A10000000000000000000C23 /* Shared in Frameworks */,
+				A10000000000000000000C24 /* Contract in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000D32 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000E12 /* Core in Frameworks */,
+				A10000000000000000000E14 /* UI in Frameworks */,
+				A10000000000000000000E16 /* Contract in Frameworks */,
+				A10000000000000000000E22 /* Shared in Frameworks */,
+				A10000000000000000000E03 /* ViewInspector in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000D42 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -63,6 +125,8 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000302 /* AbodeNestly */,
+				A10000000000000000000D21 /* AbodeNestlyTests */,
+				A10000000000000000000D22 /* AbodeNestlyUITests */,
 				A10000000000000000000702 /* Config */,
 				A10000000000000000000703 /* Products */,
 			);
@@ -81,6 +145,8 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000201 /* AbodeNestly.app */,
+				A10000000000000000000D11 /* AbodeNestlyTests.xctest */,
+				A10000000000000000000D12 /* AbodeNestlyUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -111,10 +177,65 @@
 				A10000000000000000000404 /* Shopping */,
 				A10000000000000000000405 /* Pantry */,
 				A10000000000000000000406 /* Maintenance */,
+				A10000000000000000000C11 /* Core */,
+				A10000000000000000000C12 /* UI */,
+				A10000000000000000000C13 /* Shared */,
+				A10000000000000000000C14 /* Contract */,
 			);
 			productName = AbodeNestly;
 			productReference = A10000000000000000000201 /* AbodeNestly.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A10000000000000000000D01 /* AbodeNestlyTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000D53 /* Build configuration list for PBXNativeTarget "AbodeNestlyTests" */;
+			buildPhases = (
+				A10000000000000000000D31 /* Sources */,
+				A10000000000000000000D32 /* Frameworks */,
+				A10000000000000000000D33 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000D72 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000D21 /* AbodeNestlyTests */,
+			);
+			name = AbodeNestlyTests;
+			packageProductDependencies = (
+				A10000000000000000000E11 /* Core */,
+				A10000000000000000000E13 /* UI */,
+				A10000000000000000000E15 /* Contract */,
+				A10000000000000000000E21 /* Shared */,
+				A10000000000000000000E02 /* ViewInspector */,
+			);
+			productName = AbodeNestlyTests;
+			productReference = A10000000000000000000D11 /* AbodeNestlyTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A10000000000000000000D02 /* AbodeNestlyUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000D63 /* Build configuration list for PBXNativeTarget "AbodeNestlyUITests" */;
+			buildPhases = (
+				A10000000000000000000D41 /* Sources */,
+				A10000000000000000000D42 /* Frameworks */,
+				A10000000000000000000D43 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000D74 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000D22 /* AbodeNestlyUITests */,
+			);
+			name = AbodeNestlyUITests;
+			packageProductDependencies = (
+			);
+			productName = AbodeNestlyUITests;
+			productReference = A10000000000000000000D12 /* AbodeNestlyUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -128,6 +249,14 @@
 				TargetAttributes = {
 					A10000000000000000000601 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					A10000000000000000000D01 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = A10000000000000000000601;
+					};
+					A10000000000000000000D02 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = A10000000000000000000601;
 					};
 				};
 			};
@@ -146,6 +275,11 @@
 				A10000000000000000000A03 /* XCLocalSwiftPackageReference "Packages/Shopping" */,
 				A10000000000000000000A04 /* XCLocalSwiftPackageReference "Packages/Pantry" */,
 				A10000000000000000000A05 /* XCLocalSwiftPackageReference "Packages/Maintenance" */,
+				A10000000000000000000C01 /* XCLocalSwiftPackageReference "Packages/Core" */,
+				A10000000000000000000C02 /* XCLocalSwiftPackageReference "Packages/NestlyUI" */,
+				A10000000000000000000C03 /* XCLocalSwiftPackageReference "Packages/Shared" */,
+				A10000000000000000000C04 /* XCLocalSwiftPackageReference "Packages/Contract" */,
+				A10000000000000000000E01 /* XCRemoteSwiftPackageReference "ViewInspector" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A10000000000000000000703 /* Products */;
@@ -153,12 +287,28 @@
 			projectRoot = "";
 			targets = (
 				A10000000000000000000601 /* AbodeNestly */,
+				A10000000000000000000D01 /* AbodeNestlyTests */,
+				A10000000000000000000D02 /* AbodeNestlyUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A10000000000000000000603 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000D33 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000D43 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -175,7 +325,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000D31 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000D41 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000D72 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000601 /* AbodeNestly */;
+			targetProxy = A10000000000000000000D71 /* PBXContainerItemProxy */;
+		};
+		A10000000000000000000D74 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000601 /* AbodeNestly */;
+			targetProxy = A10000000000000000000D73 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A10000000000000000000B01 /* Debug */ = {
@@ -230,6 +407,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000000000000000000202 /* Dev.xcconfig */;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = AbodeNestly/AbodeNestly.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
@@ -254,6 +432,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000000000000000000203 /* Prod.xcconfig */;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = AbodeNestly/AbodeNestly.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
@@ -271,6 +450,68 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		A10000000000000000000D51 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.abodenestly.app.dev.tests;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AbodeNestly.app/AbodeNestly";
+			};
+			name = Debug;
+		};
+		A10000000000000000000D52 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.abodenestly.app.dev.tests;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AbodeNestly.app/AbodeNestly";
+			};
+			name = Release;
+		};
+		A10000000000000000000D61 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.abodenestly.app.dev.uitests;
+				TEST_TARGET_NAME = AbodeNestly;
+			};
+			name = Debug;
+		};
+		A10000000000000000000D62 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.abodenestly.app.dev.uitests;
+				TEST_TARGET_NAME = AbodeNestly;
 			};
 			name = Release;
 		};
@@ -295,6 +536,24 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A10000000000000000000D53 /* Build configuration list for PBXNativeTarget "AbodeNestlyTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000D51 /* Debug */,
+				A10000000000000000000D52 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000D63 /* Build configuration list for PBXNativeTarget "AbodeNestlyUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000D61 /* Debug */,
+				A10000000000000000000D62 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -309,6 +568,22 @@
 		A10000000000000000000A05 /* XCLocalSwiftPackageReference "Packages/Maintenance" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Maintenance;
+		};
+		A10000000000000000000C01 /* XCLocalSwiftPackageReference "Packages/Core" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Core;
+		};
+		A10000000000000000000C02 /* XCLocalSwiftPackageReference "Packages/NestlyUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/NestlyUI;
+		};
+		A10000000000000000000C03 /* XCLocalSwiftPackageReference "Packages/Shared" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Shared;
+		};
+		A10000000000000000000C04 /* XCLocalSwiftPackageReference "Packages/Contract" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Contract;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -327,6 +602,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 2.0.0;
+			};
+		};
+		A10000000000000000000E01 /* XCRemoteSwiftPackageReference "ViewInspector" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/nalexn/ViewInspector";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.10.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -358,6 +641,43 @@
 		A10000000000000000000406 /* Maintenance */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Maintenance;
+		};
+		A10000000000000000000C11 /* Core */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Core;
+		};
+		A10000000000000000000C12 /* UI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NestlyUI;
+		};
+		A10000000000000000000C13 /* Shared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Shared;
+		};
+		A10000000000000000000C14 /* Contract */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Contract;
+		};
+		A10000000000000000000E02 /* ViewInspector */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000E01 /* XCRemoteSwiftPackageReference "ViewInspector" */;
+			productName = ViewInspector;
+		};
+		A10000000000000000000E11 /* Core */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Core;
+		};
+		A10000000000000000000E13 /* UI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NestlyUI;
+		};
+		A10000000000000000000E15 /* Contract */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Contract;
+		};
+		A10000000000000000000E21 /* Shared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Shared;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
