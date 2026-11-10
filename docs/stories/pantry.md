@@ -11,7 +11,7 @@ The household can keep food in the fridge, the freezer, the pantry, or a place t
 SPEC §4 PANT-01; §8 Location; TESTING §3 -db row
 
 ## Scope
-In: location rows with a kind of fridge, freezer, pantry, or other. Members can write them.
+In: location rows with a kind of fridge, freezer, pantry, or other. Members can write them. The table is created by CORE-02-db (migration 20261108100100); this story adds only its pgTAP test and no new migration.
 Out: The location list (PANT-01 clients). The seed rows (CORE-02-db). Skipped layers: -api — locations are outbox CRUD. The three defaults are seeded by CORE-02-db.
 
 ## Acceptance criteria

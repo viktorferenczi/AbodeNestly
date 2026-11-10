@@ -299,7 +299,7 @@ Blocked by: CORE-01-db  Blocks: CORE-02-api, CORE-02-web, CORE-02-ios, CORE-02-a
 .claude/skills/sql-supabase/SKILL.md
 
 ## Open questions
-§14 create_household inserts only the household and the owner. §4 requires the Groceries list and Fridge, Freezer, and Pantry. Proposed default: this migration replaces the function so the defaults are created in the same transaction.
+§14 create_household inserts only the household and the owner. §4 requires the Groceries list and Fridge, Freezer, and Pantry. Resolved: the migration replaces the function so the defaults are created in the same transaction. It also creates the shopping_list and location tables (exactly as docs/schema.sql), since SHOP-01-db and PANT-01-db are blocked by this story; shopping_list.store_id is a plain uuid until SHOP-05-db adds the FK.
 
 # CORE-02-api — Create a household
 

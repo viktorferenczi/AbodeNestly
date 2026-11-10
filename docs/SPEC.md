@@ -980,12 +980,19 @@ end $$;
 create trigger member_guard before update on member for each row execute function guard_member_update();
 create trigger member_sync before insert or update on member for each row execute function set_sync_fields();
 
+-- Seeds the owner membership, the Groceries list and the default locations (CORE-02).
 create or replace function create_household(p_name text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare hid uuid;
 begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated' using errcode = '42501';
+  end if;
   insert into household(name, created_by) values (p_name, auth.uid()) returning id into hid;
   insert into member(household_id, user_id, role) values (hid, auth.uid(), 'owner');
+  insert into shopping_list(household_id, name) values (hid, 'Groceries');
+  insert into location(household_id, name, kind) values
+    (hid, 'Fridge', 'fridge'), (hid, 'Freezer', 'freezer'), (hid, 'Pantry', 'pantry');
   return hid;
 end $$;
 
