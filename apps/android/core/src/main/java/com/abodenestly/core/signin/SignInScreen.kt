@@ -173,8 +173,10 @@ private fun Providers(action: SignInAction?, disabled: Boolean, onApple: () -> U
         ) {
             if (action == SignInAction.Apple) {
                 Spinner(Color.White, "signin.apple.spinner")
-                Spacer8()
+            } else {
+                Image(painterResource(R.drawable.ic_apple), contentDescription = null, modifier = Modifier.size(18.dp))
             }
+            Spacer8()
             Text("Sign in with Apple", fontWeight = FontWeight.SemiBold)
         }
         OutlinedButton(
