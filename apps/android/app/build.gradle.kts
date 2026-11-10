@@ -33,6 +33,11 @@ android {
             create(name) {
                 dimension = "env"
                 if (name == "dev") applicationIdSuffix = ".dev"
+                // Magic link and OAuth return here. Dev's scheme is on the allow-list in supabase/config.toml;
+                // App Links replace the custom scheme once a domain exists (same note as the iOS README).
+                val scheme = if (name == "dev") "abodenestly-dev" else "abodenestly"
+                buildConfigField("String", "AUTH_URL_SCHEME", "\"$scheme\"")
+                manifestPlaceholders["authScheme"] = scheme
                 val props = envProperties(name)
                 envKeys.forEach { key ->
                     buildConfigField("String", key, "\"${props.getProperty(key, "")}\"")
@@ -55,11 +60,18 @@ android {
 kotlin { jvmToolchain(17) }
 
 dependencies {
+    implementation(project(":core"))
+    implementation(project(":ui"))
+    implementation(project(":shared"))
+    implementation(project(":contract"))
     implementation(project(":shopping"))
     implementation(project(":pantry"))
     implementation(project(":maintenance"))
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.kotlinx.coroutines.android)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)

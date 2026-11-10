@@ -59,7 +59,7 @@ syncEngine.kick()
 `ApiClient` in `:contract`: OkHttp, `kotlinx.serialization` with `ignoreUnknownKeys = true`, bearer token from Supabase session, one retry after token refresh on 401. Base URL from `BuildConfig.API_BASE_URL`, set per product flavor (`dev`, `prod`) from `env/dev.properties` / `env/prod.properties`; never hard-coded. Timeouts 15 s.
 
 ## Auth
-`supabase-kt` Auth: magic link via app link, Google via Credential Manager, Apple via OAuth web flow. Session persisted by the SDK.
+`supabase-kt` Auth: magic link, Google and Apple all use the supabase-kt web OAuth flow (system browser → `<scheme>://auth/callback`, no Credential Manager), matching iOS; App Links replace the custom scheme once a domain exists. Session persisted by the SDK.
 
 ## Platform features
 - **Barcode** (SHOP-10, PANT-09): CameraX `ImageAnalysis` + ML Kit `BarcodeScanning` (EAN-13/8, UPC-A). Lookup `GET /products/{barcode}`; cache in local `product` table.
