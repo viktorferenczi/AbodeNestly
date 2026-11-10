@@ -47,14 +47,28 @@ const paths: Record<string, Record<string, Json>> = {};
 const schemas: Record<string, Json> = { ...(componentSchemas as Record<string, Json>) };
 
 for (const route of routes) {
-  schemas[route.response.schemaName] = route.response.schema as Json;
+  // A route may reference a component schema by name (no inline `schema`) instead of redefining it.
+  if (route.requestBody) schemas[route.requestBody.schemaName] = route.requestBody.schema as Json;
+  if (route.response.schema) schemas[route.response.schemaName] = route.response.schema as Json;
   paths[route.path] ??= {};
   paths[route.path]![route.method] = {
     summary: route.summary,
     ...(route.public ? { security: [] } : {}),
+    ...(route.requestBody
+      ? {
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: `#/components/schemas/${route.requestBody.schemaName}` },
+              },
+            },
+          },
+        }
+      : {}),
     responses: {
       [String(route.response.status)]: {
-        description: 'OK',
+        description: route.response.status === 201 ? 'Created' : 'OK',
         content: {
           'application/json': {
             schema: { $ref: `#/components/schemas/${route.response.schemaName}` },
