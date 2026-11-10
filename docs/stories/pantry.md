@@ -31,7 +31,7 @@ Pantry off (X7): the Pantry tab is hidden and a pantry-table mutation is rejecte
 
 ## Data and contract
 Tables: location  Endpoints: none  Types: Location
-Schema change: yes — supabase/migrations/20261108120000_PANT-01_location.sql  Contract change: no
+Schema change: no (table created by CORE-02-db, migration 20261108100100_CORE-02_create_household.sql)  Contract change: no
 
 ## Tests required
 Unit: n/a (database behaviour is asserted in pgTAP, TESTING §2)

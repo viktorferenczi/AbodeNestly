@@ -262,7 +262,7 @@ Creating a household makes that person the owner and already gives them a Grocer
 SPEC §4 CORE-02; §7 POST /households; §14 create_household; TESTING §3 -db row
 
 ## Scope
-In: Replace create_household so it inserts the household, an owner membership, a shopping list named Groceries, and locations Fridge, Freezer, and Pantry.
+In: Create the shopping_list and location tables (moved here from SHOP-01-db and PANT-01-db; shopping_list.store_id stays a plain uuid until SHOP-05-db adds the FK). Replace create_household so it inserts the household, an owner membership, a shopping list named Groceries, and locations Fridge, Freezer, and Pantry. Recorded in SPEC §9 as X8.
 Out: The HTTP handler (CORE-02-api). The welcome screen (CORE-02 clients).
 
 ## Acceptance criteria

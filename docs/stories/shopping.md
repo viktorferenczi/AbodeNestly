@@ -31,7 +31,7 @@ Shopping off (X7): the Shopping tab is hidden and a shopping-table mutation is r
 
 ## Data and contract
 Tables: shopping_list  Endpoints: none  Types: ShoppingList
-Schema change: yes — supabase/migrations/20261108110000_SHOP-01_shopping_list.sql  Contract change: no
+Schema change: no (table created by CORE-02-db, migration 20261108100100_CORE-02_create_household.sql)  Contract change: no
 
 ## Tests required
 Unit: n/a (database behaviour is asserted in pgTAP, TESTING §2)
