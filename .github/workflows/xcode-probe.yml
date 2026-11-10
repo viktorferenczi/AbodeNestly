@@ -6,7 +6,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: ["nolocals", "nolocals-nogrdb-novi", "nolocals-nostubs"]
+        mode: ["UI","Shared","Contract","Shopping","Pantry","Maintenance"]
     steps:
       - uses: actions/checkout@v4
       - run: sudo xcode-select -s /Applications/Xcode_26.4.1.app
@@ -14,9 +14,8 @@ jobs:
           f=apps/ios/Packages/Core/Package.swift
           sed -i '' '/\.package(path:/d; s/"Contract", "Shared", "UI",//' $f
           cat $f
-          case "${{ matrix.mode }}" in
-            nolocals-nogrdb-novi) python3 .github/probe_strip.py GRDB.swift ViewInspector ;;
-            nolocals-nostubs) python3 .github/probe_strip.py GRDB.swift ViewInspector Shopping Pantry Maintenance UI Shared Contract ;;
-          esac
+          others=""
+          for n in UI Shared Contract Shopping Pantry Maintenance; do [ "$n" != "${{ matrix.mode }}" ] && others="$others $n"; done
+          python3 .github/probe_strip.py GRDB.swift ViewInspector $others
       - working-directory: apps/ios
         run: xcodebuild -resolvePackageDependencies -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev"
