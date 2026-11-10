@@ -3,6 +3,9 @@ plugins {
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.android.junit5) apply false
 }
 
 // SPEC §2 principle 2: a module never depends on another module. Fails the build if :shopping, :pantry or

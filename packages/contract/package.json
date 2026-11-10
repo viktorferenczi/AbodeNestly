@@ -11,7 +11,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "openapi": "tsx scripts/openapi.ts",
-    "swift": "tsx scripts/swift.ts"
+    "swift": "tsx scripts/swift.ts",
+    "kotlin": "tsx scripts/kotlin.ts"
   },
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "^2.42.1",

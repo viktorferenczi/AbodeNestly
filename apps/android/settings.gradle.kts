@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "AbodeNestly"
 
-include(":app", ":shopping", ":pantry", ":maintenance")
+include(":app", ":contract", ":shared", ":ui", ":core", ":shopping", ":pantry", ":maintenance")

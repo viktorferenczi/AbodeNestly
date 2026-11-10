@@ -11,7 +11,7 @@ concurrency:
 
 # TESTING §9 gates: the TypeScript workspace (`ts`) and the Supabase pgTAP suite (`db`).
 # `ios` runs unit + component tests; XCUITest e2e needs `supabase start` and runs locally/nightly like web e2e.
-# Android is added by the story that first needs it.
+# `android` runs lint, unit and Compose component tests; the instrumented e2e needs `supabase start` and a device, so it runs locally/nightly.
 jobs:
   ts:
     runs-on: ubuntu-latest
@@ -34,7 +34,8 @@ jobs:
         run: |
           pnpm --filter @abodenestly/contract openapi
           pnpm --filter @abodenestly/contract swift
-          git diff --exit-code docs/openapi.yaml apps/ios/Packages/Contract
+          pnpm --filter @abodenestly/contract kotlin
+          git diff --exit-code docs/openapi.yaml apps/ios/Packages/Contract apps/android/contract
   db:
     runs-on: ubuntu-latest
     steps:
@@ -69,3 +70,15 @@ jobs:
           xcodebuild test -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev"
           -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}"
           -skip-testing:AbodeNestlyUITests
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - name: module graph, lint, unit and component tests
+        working-directory: apps/android
+        run: ./gradlew checkModuleGraph lintDevDebug testDevDebugUnitTest
