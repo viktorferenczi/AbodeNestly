@@ -6,9 +6,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        xcode: ["26.0.1", "26.1.1", "26.2", "26.3", "26.4.1"]
+        sb: ["2.50.0", "2.45.0", "2.40.0", "2.35.0", "2.30.0", "2.25.0", "2.20.0", "2.10.0"]
     steps:
       - uses: actions/checkout@v4
-      - run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app && xcodebuild -version
+      - run: sudo xcode-select -s /Applications/Xcode_26.4.1.app && xcodebuild -version
+      - run: sed -i '' 's/from: "2.0.0"/exact: "${{ matrix.sb }}"/' apps/ios/Packages/Core/Package.swift && sed -i '' 's/minimumVersion = 2.0.0;/minimumVersion = 2.0.0;/' apps/ios/AbodeNestly.xcodeproj/project.pbxproj && grep exact apps/ios/Packages/Core/Package.swift
       - working-directory: apps/ios
         run: xcodebuild -resolvePackageDependencies -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev"
