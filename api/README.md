@@ -7,8 +7,10 @@ Vercel Node functions (SPEC §3, §7). One file per route; logic in `_lib/` (the
 ```bash
 pnpm --filter @abodenestly/api dev     # http://localhost:3000/health
 pnpm --filter @abodenestly/api test    # unit
-pnpm --filter @abodenestly/api test:int
+pnpm --filter @abodenestly/api test:int   # needs `supabase start`
 ```
+
+Routes: `GET /health`, `POST /households` (JWT required; creates the household with its defaults, returns 201 `Household`).
 
 `scripts/dev-server.ts` maps paths to handlers locally; add each new route to its table.
 
@@ -21,6 +23,7 @@ pnpm --filter @abodenestly/api test:int
 | `DATABASE_URL` | Supabase pooler, transaction mode (port 6543 in prod) |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_JWKS_URL` | JWT verification keys |
+| `SUPABASE_ANON_KEY` | **Tests only.** Integration tests sign up users via GoTrue; fill in `.env.development.local` from `supabase status` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Cron delivery and product cache writes only |
 | `API_BASE_URL` | Share links and PDF export URLs |
 | `CRON_SECRET` | `x-cron-secret` header on internal cron routes |

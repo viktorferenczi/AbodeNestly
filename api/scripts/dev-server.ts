@@ -3,11 +3,13 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import health from '../health.ts';
+import households from '../households/index.ts';
 
 type Handler = (req: Request) => Promise<Response>;
 
 const routes: Record<string, Handler> = {
   '/health': health,
+  '/households': households,
 };
 
 async function toRequest(req: IncomingMessage): Promise<Request> {
