@@ -24,6 +24,8 @@ public final class FakeAuthService: AuthService {
         var continuations: [AsyncStream<AuthSession?>.Continuation] = []
         var held: [CheckedContinuation<Void, Never>] = []
         var holdSend = false
+        var token: String? = "fake-token"
+        var tokenRequests: [Bool] = []
     }
 
     private let state: OSAllocatedUnfairLock<State>
@@ -33,6 +35,9 @@ public final class FakeAuthService: AuthService {
     }
 
     public var calls: [Call] { state.withLock { $0.calls } }
+    /// The `refresh` flag of every `accessToken` request, in order.
+    public var tokenRequests: [Bool] { state.withLock { $0.tokenRequests } }
+    public func setAccessToken(_ token: String?) { state.withLock { $0.token = token } }
 
     public func setSendMagicLinkError(_ error: AuthError?) { state.withLock { $0.sendMagicLinkError = error } }
     public func setAppleError(_ error: AuthError?) { state.withLock { $0.appleError = error } }
@@ -105,6 +110,13 @@ public final class FakeAuthService: AuthService {
     public func signOut() async {
         record(.signOut)
         emit(nil)
+    }
+
+    public func accessToken(refresh: Bool) async -> String? {
+        state.withLock { state in
+            state.tokenRequests.append(refresh)
+            return state.token
+        }
     }
 
     public func fetchProfile(userId: UUID) async -> Result<Profile?, AuthError> { state.withLock { $0.profile } }

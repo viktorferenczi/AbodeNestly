@@ -33,12 +33,16 @@ simulator. They are checked by hand only, never in e2e (TESTING §5).
 | What | Command |
 |---|---|
 | Unit and component tests | `cd apps/ios && xcodebuild test -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev" -destination 'platform=iOS Simulator,name=iPhone 16 Pro' -skip-testing:AbodeNestlyUITests` |
-| E2E (XCUITest) | `TEST_RUNNER_SUPABASE_SERVICE_ROLE_KEY=<from supabase status> xcodebuild test … -only-testing:AbodeNestlyUITests` |
+| E2E (XCUITest) | `TEST_RUNNER_SUPABASE_SERVICE_ROLE_KEY=<from supabase status> xcodebuild test … -only-testing:AbodeNestlyUITests` (sign-in: Supabase only; create household: also the API) |
 
-The e2e journey creates its own user through the admin API, reads the magic link from Mailpit
-(`127.0.0.1:54324`), follows the verify URL without redirects and opens the resulting
-`abodenestly-dev://auth/callback?code=…` in the app for a real PKCE exchange, then deletes the user.
-Without the key it skips. The app launches with `-reset-session` (Debug builds only) to start signed out.
+E2E-CORE-1 runs in two UI tests that share `AbodeNestlyUITests/E2EHelpers.swift`: `SignInUITests` (sign in, Welcome,
+relaunch) and `WelcomeUITests` (create a household, land on Home, check the seeded defaults). Each test creates its
+own user through the admin API, reads the magic link from Mailpit (`127.0.0.1:54324`), follows the verify URL without
+redirects and opens the resulting `abodenestly-dev://auth/callback?code=…` in the app for a real PKCE exchange, then
+deletes the user (and its household). `WelcomeUITests` also needs the API on :3000
+(`pnpm --filter @abodenestly/api dev`) and reads `shopping_list` / `location` with the service role.
+Without the key both skip. The app launches with `-reset-session` (Debug builds only) to start signed out.
+Core has no test target of its own, so its unit and component tests live in `AbodeNestlyTests`.
 If a name-based destination fails because a paired watch is attached, use `id=<simulator udid>` from `xcrun simctl list devices`.
 
 ## Generated models

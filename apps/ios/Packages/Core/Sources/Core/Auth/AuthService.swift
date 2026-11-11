@@ -33,6 +33,8 @@ public protocol AuthService: Sendable {
     /// Completes a magic-link sign-in from the app's custom-scheme callback URL.
     func handle(url: URL) async
     func signOut() async
+    /// The JWT for API calls. `refresh: true` forces a token refresh (after a 401); `nil` when there is no session.
+    func accessToken(refresh: Bool) async -> String?
     /// `.success(nil)`: the server trigger has not created the row yet.
     func fetchProfile(userId: UUID) async -> Result<Profile?, AuthError>
     func fetchMemberships(userId: UUID) async -> Result<[Membership], AuthError>

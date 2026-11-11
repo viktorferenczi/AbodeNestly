@@ -40,7 +40,7 @@ private struct RootContent: View {
             case .signedOut:
                 SignInView(model: signIn, isOnline: environment.network.isOnline)
             case .signedIn:
-                SignedInView(session: session)
+                SignedInView(session: session, environment: environment)
             }
         }
         .task {
@@ -55,6 +55,24 @@ private struct RootContent: View {
 
 private struct SignedInView: View {
     let session: SessionModel
+    let environment: AppEnvironment
+    @State private var welcome: WelcomeModel
+
+    init(session: SessionModel, environment: AppEnvironment) {
+        self.session = session
+        self.environment = environment
+        _welcome = State(initialValue: WelcomeModel(api: environment.api) { [session] outcome in
+            switch outcome {
+            case .created(let household):
+                session.enter(LandingHousehold(
+                    id: household.id, moduleShopping: household.moduleShopping,
+                    modulePantry: household.modulePantry, moduleMaintenance: household.moduleMaintenance
+                ))
+            case .joined(let householdId):
+                session.enterJoined(householdId: householdId)
+            }
+        })
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -82,30 +100,17 @@ private struct SignedInView: View {
             case nil:
                 Color.clear
             case .welcome:
-                WelcomePlaceholder(session: session)
+                WelcomeView(
+                    model: welcome, displayName: session.profile?.displayName,
+                    isOnline: environment.network.isOnline,
+                    onSignOut: { Task { await session.signOut() } }
+                )
             case .household(_, let tab):
                 MainTabs(household: session.household, start: tab)
             case .home:
                 MainTabs(household: nil, start: .home)
             }
         }
-    }
-}
-
-/// B2 content (create or join) is CORE-02; this only proves the landing rule.
-private struct WelcomePlaceholder: View {
-    let session: SessionModel
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Welcome")
-                .font(.title.weight(.semibold))
-                .foregroundStyle(Tokens.text)
-                .accessibilityIdentifier("welcome.title")
-            Button("Sign out") { Task { await session.signOut() } }
-                .accessibilityIdentifier("welcome.signout")
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
