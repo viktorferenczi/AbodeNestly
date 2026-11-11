@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +39,7 @@ class SessionViewModel(
     private val auth: AuthService,
     private val lastHousehold: LastHouseholdStore,
     private val isOnline: () -> Boolean,
+    private val profileCache: ProfileCache = InMemoryProfileCache(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : ViewModel(scope) {
     private val mutableState = MutableStateFlow(SessionState())
@@ -46,6 +48,9 @@ class SessionViewModel(
     private var userId: UUID? = null
     private var startJob: Job? = null
     private var loadJob: Job? = null
+
+    /** A household the person just joined: it opens on Home whatever its modules (DESIGN B4). */
+    private var landOnHome: UUID? = null
 
     /** Reads the stored session, then follows changes for the life of the app. Idempotent. */
     fun start() {
@@ -62,6 +67,34 @@ class SessionViewModel(
 
     fun retry() {
         userId?.let(::load)
+    }
+
+    /** A household was just created: open it on Home without another round trip (CORE-02 AC2). */
+    fun enter(household: LandingHousehold) {
+        loadJob?.cancel()
+        scope.launch {
+            lastHousehold.write(household.id)
+            mutableState.update {
+                it.copy(
+                    household = household,
+                    destination = Destination.Household(household.id, AppTab.Home),
+                    loadFailed = false,
+                )
+            }
+        }
+    }
+
+    /** An invite was accepted: reload the memberships and open that household on Home. */
+    fun enterJoined(householdId: UUID) {
+        val user = userId ?: return
+        landOnHome = householdId
+        // Load only after the write lands, so the landing rule picks the joined household.
+        loadJob?.cancel()
+        mutableState.update { it.copy(destination = null, household = null, loadFailed = false) }
+        loadJob = scope.launch {
+            lastHousehold.write(householdId)
+            runLoad(user)
+        }
     }
 
     /** Resolves once the profile and landing destination for the current session are in. */
@@ -86,35 +119,42 @@ class SessionViewModel(
     private fun load(userId: UUID) {
         loadJob?.cancel()
         mutableState.update { it.copy(destination = null, household = null, loadFailed = false) }
-        loadJob = scope.launch {
-            val (profileResult, membershipsResult) = coroutineScope {
-                val profile = async { auth.fetchProfile(userId) }
-                val memberships = async { auth.fetchMemberships(userId) }
-                profile.await() to memberships.await()
+        loadJob = scope.launch { runLoad(userId) }
+    }
+
+    private suspend fun runLoad(userId: UUID) {
+        val (profileResult, membershipsResult) = coroutineScope {
+            val profile = async { auth.fetchProfile(userId) }
+            val memberships = async { auth.fetchMemberships(userId) }
+            profile.await() to memberships.await()
+        }
+        if (!currentCoroutineContext().isActive || this.userId != userId) return
+        // A missing row (trigger not run yet) leaves the name empty; a failed read (offline) falls back to the
+        // last profile seen on this device so the name still renders.
+        val profile = when (profileResult) {
+            is Fetch.Success -> profileResult.value?.also { profileCache.write(userId, it) }
+            is Fetch.Failure -> profileCache.read(userId)
+        }
+        when (membershipsResult) {
+            is Fetch.Success -> {
+                val memberships = membershipsResult.value
+                val lastId = lastHousehold.read()
+                val chosen = Landing.pickHousehold(memberships, lastId)
+                if (chosen != null) lastHousehold.write(chosen.householdId)
+                var destination = Landing.destination(memberships, lastId)
+                if (destination is Destination.Household && destination.id == landOnHome) {
+                    destination = destination.copy(tab = AppTab.Home)
+                }
+                landOnHome = null
+                mutableState.update {
+                    it.copy(profile = profile, household = chosen?.household, destination = destination)
+                }
             }
-            if (!isActive || this@SessionViewModel.userId != userId) return@launch
-            // A missing row (trigger not run yet) or a failed read leaves the name empty.
-            val profile = (profileResult as? Fetch.Success)?.value
-            when (membershipsResult) {
-                is Fetch.Success -> {
-                    val memberships = membershipsResult.value
-                    val lastId = lastHousehold.read()
-                    val chosen = Landing.pickHousehold(memberships, lastId)
-                    if (chosen != null) lastHousehold.write(chosen.householdId)
-                    mutableState.update {
-                        it.copy(
-                            profile = profile,
-                            household = chosen?.household,
-                            destination = Landing.destination(memberships, lastId),
-                        )
-                    }
-                }
-                // Offline, an existing session stays usable (SPEC §6.5): enter the shell at Home.
-                // Online, a failure is a real problem and stays a blocking error.
-                is Fetch.Failure -> mutableState.update {
-                    if (isOnline()) it.copy(profile = profile, loadFailed = true)
-                    else it.copy(profile = profile, destination = Destination.Home)
-                }
+            // Offline, an existing session stays usable (SPEC §6.5): enter the shell at Home.
+            // Online, a failure is a real problem and stays a blocking error.
+            is Fetch.Failure -> mutableState.update {
+                if (isOnline()) it.copy(profile = profile, loadFailed = true)
+                else it.copy(profile = profile, destination = Destination.Home)
             }
         }
     }

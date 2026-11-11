@@ -1,5 +1,6 @@
 package com.abodenestly.core
 
+import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Profile
 import com.abodenestly.core.auth.AuthSession
 import com.abodenestly.core.auth.LandingHousehold
@@ -15,6 +16,11 @@ object Fixtures {
     fun id(n: Int): UUID = UUID.fromString("00000000-0000-4000-8000-%012d".format(n))
 
     fun profile(name: String = "Ada") = Profile(userId, name, null, OffsetDateTime.now(), OffsetDateTime.now())
+
+    fun household(n: Int, name: String = "Test Home") = Household(
+        id(n), name, userId, moduleShopping = true, modulePantry = true, moduleMaintenance = true,
+        currency = "USD", createdAt = OffsetDateTime.now(), updatedAt = OffsetDateTime.now(), deletedAt = null, syncSeq = 1,
+    )
 
     fun membership(
         n: Int,

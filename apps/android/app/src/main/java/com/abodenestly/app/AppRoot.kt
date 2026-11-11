@@ -33,6 +33,8 @@ import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.signin.SignInScreen
 import com.abodenestly.core.signin.SignInViewModel
+import com.abodenestly.core.welcome.WelcomeScreen
+import com.abodenestly.core.welcome.WelcomeViewModel
 import com.abodenestly.ui.LocalTokens
 import com.abodenestly.ui.NetworkMonitor
 import com.abodenestly.ui.Tokens
@@ -40,7 +42,7 @@ import com.abodenestly.ui.TopBar
 
 /** Loading → sign-in → shell. The landing rule (Welcome or the household's start tab) is resolved in [SessionViewModel]. */
 @Composable
-fun AppRoot(session: SessionViewModel, signIn: SignInViewModel, network: NetworkMonitor) {
+fun AppRoot(session: SessionViewModel, signIn: SignInViewModel, welcome: WelcomeViewModel, network: NetworkMonitor) {
     val state by session.state.collectAsState()
     val online by network.isOnline.collectAsState()
     // Edge-to-edge is on (targetSdk 35): the background runs under the system bars, the content stays clear of them.
@@ -48,13 +50,19 @@ fun AppRoot(session: SessionViewModel, signIn: SignInViewModel, network: Network
         when (state.status) {
             SessionStatus.Loading -> Box(Modifier.fillMaxSize().testTag("session.loading"))
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = online)
-            SessionStatus.SignedIn -> SignedInShell(state, onRetry = session::retry, onSignOut = session::signOut)
+            SessionStatus.SignedIn -> SignedInShell(state, welcome, isOnline = online, onRetry = session::retry, onSignOut = session::signOut)
         }
     }
 }
 
 @Composable
-private fun SignedInShell(state: SessionState, onRetry: () -> Unit, onSignOut: () -> Unit) {
+private fun SignedInShell(
+    state: SessionState,
+    welcome: WelcomeViewModel,
+    isOnline: Boolean,
+    onRetry: () -> Unit,
+    onSignOut: () -> Unit,
+) {
     // AC8: the TopBar shows the person's display name once the profile row is in.
     Scaffold(topBar = { TopBar("AbodeNestly", state.profile?.displayName) }, containerColor = LocalTokens.current.bg) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
@@ -64,12 +72,8 @@ private fun SignedInShell(state: SessionState, onRetry: () -> Unit, onSignOut: (
                     Button(onClick = onRetry, modifier = Modifier.testTag("session.retry")) { Text("Try again") }
                 }
                 state.destination == null -> Centered { CircularProgressIndicator(Modifier.testTag("session.loading")) }
-                state.destination == Destination.Welcome -> Centered {
-                    // Create/join arrives with CORE-02; this placeholder proves the landing rule.
-                    Text("Welcome", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.testTag("welcome.title"))
-                    state.profile?.let { Text(it.displayName, modifier = Modifier.testTag("welcome.name")) }
-                    TextButton(onClick = onSignOut, modifier = Modifier.testTag("welcome.signout")) { Text("Sign out") }
-                }
+                state.destination == Destination.Welcome ->
+                    WelcomeScreen(welcome, displayName = state.profile?.displayName, isOnline = isOnline, onSignOut = onSignOut)
                 else -> Tabs(state.destination, state.household, onSignOut)
             }
         }

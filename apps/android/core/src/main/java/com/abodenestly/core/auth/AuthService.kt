@@ -48,6 +48,12 @@ interface AuthService {
     suspend fun handle(url: String)
     suspend fun signOut()
 
+    /**
+     * The stored access token for the API, or `null` without a session. [refresh] first exchanges the refresh
+     * token (after a 401); `null` when that fails.
+     */
+    suspend fun accessToken(refresh: Boolean): String?
+
     /** `Success(null)`: the server trigger has not created the row yet. */
     suspend fun fetchProfile(userId: UUID): Fetch<Profile?>
     suspend fun fetchMemberships(userId: UUID): Fetch<List<Membership>>

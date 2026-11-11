@@ -31,6 +31,10 @@ class FakeAuthService(session: AuthSession? = null) : AuthService {
     @Volatile var profile: Fetch<Profile?> = Fetch.Success(null)
     @Volatile var memberships: Fetch<List<Membership>> = Fetch.Success(emptyList())
 
+    /** The token [accessToken] returns, and the `refresh` argument of each request, in order. */
+    @Volatile var token: String? = "fake-token"
+    val tokenRequests = CopyOnWriteArrayList<Boolean>()
+
     @Volatile private var gate: CompletableDeferred<Unit>? = null
 
     val calls: List<Call> get() = recorded.toList()
@@ -87,6 +91,11 @@ class FakeAuthService(session: AuthSession? = null) : AuthService {
     override suspend fun signOut() {
         recorded += Call.SignOut
         emit(null)
+    }
+
+    override suspend fun accessToken(refresh: Boolean): String? {
+        tokenRequests += refresh
+        return token
     }
 
     override suspend fun fetchProfile(userId: UUID): Fetch<Profile?> {
