@@ -18,6 +18,22 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/HealthResponse"
+  /households:
+    post:
+      summary: "Create household with defaults"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreateHouseholdRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Household"
 components:
   securitySchemes:
     bearerAuth:
@@ -25,6 +41,50 @@ components:
       scheme: bearer
       bearerFormat: JWT
   schemas:
+    Household:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        created_by:
+          type: string
+          format: uuid
+        module_shopping:
+          type: boolean
+        module_pantry:
+          type: boolean
+        module_maintenance:
+          type: boolean
+        currency:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        sync_seq:
+          type: integer
+      required:
+        - id
+        - name
+        - created_by
+        - module_shopping
+        - module_pantry
+        - module_maintenance
+        - currency
+        - created_at
+        - updated_at
+        - deleted_at
+        - sync_seq
     Profile:
       type: object
       properties:
@@ -92,3 +152,10 @@ components:
           const: true
       required:
         - ok
+    CreateHouseholdRequest:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name

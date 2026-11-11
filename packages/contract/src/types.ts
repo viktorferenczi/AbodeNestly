@@ -29,13 +29,21 @@ export interface Profile {
   readonly updated_at: ISODateTime;
 }
 
-export interface Household extends Synced {
+export interface Household extends Omit<Synced, 'household_id'> {
   name: string;
   created_by: UUID;
   module_shopping: boolean;
   module_pantry: boolean;
   module_maintenance: boolean;
   currency: string; // ISO 4217
+}
+
+/** `POST /households` body. Trimmed-non-empty is checked by the API (`validation`). */
+export type CreateHouseholdRequest = { name: string };
+
+/** Error body for every non-2xx response (SPEC §7, §8). */
+export interface ApiError {
+  error: { code: string; message: string };
 }
 
 export interface Member {

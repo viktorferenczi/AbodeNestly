@@ -28,14 +28,33 @@ jobs:
         run: pnpm -r typecheck
       - name: unit
         run: pnpm -r test
-      - name: api integration (local dev server, no Supabase)
-        run: pnpm --filter @abodenestly/api test:int
       - name: contract
         run: |
           pnpm --filter @abodenestly/contract openapi
           pnpm --filter @abodenestly/contract swift
           pnpm --filter @abodenestly/contract kotlin
           git diff --exit-code docs/openapi.yaml apps/ios/Packages/Contract apps/android/contract
+  # API integration tests hit a real local Supabase (auth + rest + db only; the rest is excluded to start faster).
+  api-int:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+      - name: start Supabase (applies migrations)
+        run: supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,vector,logflare,postgres-meta,mailpit
+      - name: export test env
+        run: |
+          supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          echo "SUPABASE_ANON_KEY=$(grep '^ANON_KEY=' "$RUNNER_TEMP/supabase.env" | cut -d= -f2- | tr -d '"')" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: api integration
+        run: pnpm --filter @abodenestly/api test:int
   db:
     runs-on: ubuntu-latest
     steps:

@@ -364,7 +364,7 @@ export interface Profile {
   readonly updated_at: ISODateTime;
 }
 
-export interface Household extends Synced {
+export interface Household extends Omit<Synced, 'household_id'> {
   name: string;
   created_by: UUID;
   module_shopping: boolean;
@@ -372,6 +372,8 @@ export interface Household extends Synced {
   module_maintenance: boolean;
   currency: string; // ISO 4217
 }
+
+export type CreateHouseholdRequest = { name: string };
 
 export interface Member {
   household_id: UUID;

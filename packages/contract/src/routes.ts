@@ -18,7 +18,9 @@ export type Route = {
   path: string;
   summary: string;
   public: boolean;
-  response: { status: number; schemaName: string; schema: JsonSchema };
+  requestBody?: { schemaName: string; schema: JsonSchema };
+  // A `schemaName` that already exists in `componentSchemas` is referenced, not redefined.
+  response: { status: number; schemaName: string; schema?: JsonSchema };
 };
 
 export const routes: Route[] = [
@@ -37,6 +39,21 @@ export const routes: Route[] = [
       },
     },
   },
+  {
+    method: 'post',
+    path: '/households',
+    summary: 'Create household with defaults',
+    public: false,
+    requestBody: {
+      schemaName: 'CreateHouseholdRequest',
+      schema: {
+        type: 'object',
+        properties: { name: { type: 'string' } },
+        required: ['name'],
+      },
+    },
+    response: { status: 201, schemaName: 'Household' },
+  },
 ];
 
 const uuid: JsonSchema = { type: 'string', format: 'uuid' };
@@ -45,10 +62,28 @@ const nullableDateTime: JsonSchema = { type: ['string', 'null'], format: 'date-t
 
 /**
  * Component schemas for shared entities in types.ts (SPEC §8); Swift/Kotlin models are generated from these.
- * `Household` is deliberately absent: `types.ts` extends `Synced` (adds `household_id`), which SPEC §14's
- * `household` table does not have. Add it once the type and SPEC agree.
- */
+  */
 export const componentSchemas: Record<string, JsonSchema> = {
+  Household: {
+    type: 'object',
+    properties: {
+      id: uuid,
+      name: { type: 'string' },
+      created_by: uuid,
+      module_shopping: { type: 'boolean' },
+      module_pantry: { type: 'boolean' },
+      module_maintenance: { type: 'boolean' },
+      currency: { type: 'string' },
+      created_at: dateTime,
+      updated_at: dateTime,
+      deleted_at: nullableDateTime,
+      sync_seq: { type: 'integer' },
+    },
+    required: [
+      'id', 'name', 'created_by', 'module_shopping', 'module_pantry', 'module_maintenance',
+      'currency', 'created_at', 'updated_at', 'deleted_at', 'sync_seq',
+    ],
+  },
   Profile: {
     type: 'object',
     properties: {
