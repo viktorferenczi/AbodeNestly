@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router';
+import { Welcome } from '../core/Welcome.tsx';
 import { Landing } from '../core/auth/Landing.tsx';
 import { RequireAuth } from '../core/auth/RequireAuth.tsx';
 import { SignIn } from '../core/auth/SignIn.tsx';
@@ -17,7 +18,7 @@ export function createAppRouter() {
           element: <Shell />,
           children: [
             { path: '/', element: <Landing /> },
-            { path: '/welcome', element: <Placeholder /> },
+            { path: '/welcome', element: <Welcome /> },
             { path: '/home', element: <Placeholder /> },
             { path: '/shopping', element: <Placeholder /> },
             { path: '/pantry', element: <Placeholder /> },

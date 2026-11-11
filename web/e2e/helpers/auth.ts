@@ -4,7 +4,8 @@ import { expect, type Page } from '@playwright/test';
 const SUPABASE_URL = process.env.E2E_SUPABASE_URL ?? 'http://127.0.0.1:54321';
 const MAILPIT_URL = process.env.E2E_MAILPIT_URL ?? 'http://127.0.0.1:54324';
 
-function adminClient() {
+/** Service-role client for test setup and assertions that bypass RLS. */
+export function adminClient() {
   // Service role key is read from the process env only; it is never VITE_-prefixed, so it cannot reach the bundle.
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for e2e (see web/README.md)');

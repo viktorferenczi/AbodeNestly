@@ -2,6 +2,25 @@ import type { Profile } from '@abodenestly/contract';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AuthClient, AuthSession } from './authClient.ts';
 
+const profileKey = (userId: string) => `abodenestly:profile:${userId}`;
+
+function readCachedProfile(userId: string): Profile | null {
+  try {
+    const raw = localStorage.getItem(profileKey(userId));
+    return raw ? (JSON.parse(raw) as Profile) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedProfile(userId: string, profile: Profile): void {
+  try {
+    localStorage.setItem(profileKey(userId), JSON.stringify(profile));
+  } catch {
+    // Storage blocked (private mode): the name just isn't available offline.
+  }
+}
+
 export type AuthState = {
   status: 'loading' | 'signedIn' | 'signedOut';
   session: AuthSession | null;
@@ -38,8 +57,15 @@ export function AuthProvider({ client, children }: { client: AuthClient; childre
     if (!userId) return;
     let active = true;
     void client.fetchProfile(userId).then((result) => {
-      // A missing row (trigger not run yet) or a failed read leaves the name empty.
-      if (active) setProfile(result.ok ? result.value : null);
+      if (!active) return;
+      if (result.ok) {
+        // A missing row (trigger not run yet) leaves the name empty.
+        setProfile(result.value);
+        if (result.value) writeCachedProfile(userId, result.value);
+      } else {
+        // Offline or failed read: fall back to the last good profile so the greeting still has a name.
+        setProfile(readCachedProfile(userId));
+      }
     });
     return () => {
       active = false;
