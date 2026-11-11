@@ -43,7 +43,7 @@ jobs:
         with:
           version: 3.1.0
       - name: start Supabase (applies migrations)
-        run: supabase start -x studio,imgproxy,storage-api,realtime,inbucket,edge-runtime,vector,logflare,postgres-meta,mailpit
+        run: supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,vector,logflare,postgres-meta,mailpit
       - name: export test env
         run: |
           supabase status -o env > "$RUNNER_TEMP/supabase.env"
