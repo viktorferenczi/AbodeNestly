@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-// Stand-in until CORE-02 (welcome), the module stories and CORE-06 (profile) replace each route.
+// Stand-in until the module stories and CORE-06 (profile) replace each route.
 export function Placeholder({ children }: { children?: ReactNode }) {
   return (
     <div style={{ padding: 16 }}>
