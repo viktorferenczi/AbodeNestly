@@ -41,8 +41,10 @@ export interface Household extends Omit<Synced, 'household_id'> {
 /** `POST /households` body. Trimmed-non-empty is checked by the API (`validation`). */
 export type CreateHouseholdRequest = { name: string };
 
-/** Error body for every non-2xx response (SPEC §7). */
-export type ApiErrorBody = { error: { code: string; message: string } };
+/** Error body for every non-2xx response (SPEC §7, §8). */
+export interface ApiError {
+  error: { code: string; message: string };
+}
 
 export interface Member {
   household_id: UUID;

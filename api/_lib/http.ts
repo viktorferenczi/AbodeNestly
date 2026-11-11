@@ -1,4 +1,4 @@
-import type { ApiErrorBody } from '@abodenestly/contract';
+import type { ApiError as ApiErrorBody } from '@abodenestly/contract';
 import { ApiError } from './errors.ts';
 
 export function json<T>(body: T, status = 200): Response {

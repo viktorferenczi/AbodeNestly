@@ -11,7 +11,6 @@ export type JsonSchema = {
   const?: string | number | boolean;
   enum?: string[];
   items?: JsonSchema;
-  minLength?: number;
 };
 
 export type Route = {
@@ -49,7 +48,7 @@ export const routes: Route[] = [
       schemaName: 'CreateHouseholdRequest',
       schema: {
         type: 'object',
-        properties: { name: { type: 'string', minLength: 1 } },
+        properties: { name: { type: 'string' } },
         required: ['name'],
       },
     },
