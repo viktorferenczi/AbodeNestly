@@ -1,4 +1,3 @@
-import type { Household } from '@abodenestly/contract';
 import type { ApiFailure } from './api/apiClient.ts';
 
 export type WelcomeState =
@@ -31,8 +30,7 @@ export function welcomeReducer(_state: WelcomeState, action: WelcomeAction): Wel
   }
 }
 
-/** DESIGN B4. Every household opens on Home; the argument is for the later per-household route. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- signature fixed for the per-household route
-export function householdHomePath(_household: Pick<Household, 'id'>): string {
+/** DESIGN B4. Every household opens on Home; the active one is `lastHousehold`, not part of the route. */
+export function householdHomePath(): string {
   return '/home';
 }

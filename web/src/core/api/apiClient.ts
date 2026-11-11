@@ -11,16 +11,17 @@ export interface ApiClient {
   acceptInvite(code: string): Promise<ApiResult<{ household_id: string }>>;
 }
 
-// CORE-03-api has not fixed its error code yet; the SQL raises `invalid_invite`.
-const INVALID_CODE_STATUSES = new Set([400, 404, 410]);
+// CORE-03-api has not fixed its error code yet; the SQL raises `invalid_invite`. `not_found` and
+// `gone` are accepted so the pre-CORE-03 missing route (dev server: 404 `not_found`) reads as an
+// invalid code. Any other code, `validation` included, stays `unknown`.
+const INVALID_CODE_CODES = new Set(['invalid_invite', 'not_found', 'gone']);
 
-function toFailure(status: number, body: ApiError | null): ApiFailure {
+/** Maps an accept-invite error response to a failure; exported for the table test. */
+export function toAcceptFailure(status: number, body: ApiError | null): ApiFailure {
   const code = body?.error?.code;
-  if (code === 'invalid_invite' || INVALID_CODE_STATUSES.has(status)) {
-    // A create-household 400 is `validation`; callers that care map it (see createHousehold).
-    return { code: 'invalid_code' };
-  }
-  return { code: 'unknown' };
+  if (code) return { code: INVALID_CODE_CODES.has(code) ? 'invalid_code' : 'unknown' };
+  // No parseable error body (e.g. a bare proxy 404): fall back to the status.
+  return { code: status === 404 || status === 410 ? 'invalid_code' : 'unknown' };
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -89,7 +90,7 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
         `/invites/${encodeURIComponent(code)}/accept`,
         {},
         (s) => s >= 200 && s < 300,
-        toFailure,
+        toAcceptFailure,
       );
     },
   };

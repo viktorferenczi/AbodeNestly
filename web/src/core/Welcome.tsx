@@ -57,7 +57,7 @@ export function Welcome() {
     if (!result.ok) return dispatch({ type: 'create-failed', code: result.error.code });
     // Remember it so the next `/` load lands on this household.
     writeLastHousehold(result.value.id);
-    void navigate(householdHomePath(result.value), { replace: true });
+    void navigate(householdHomePath(), { replace: true });
   }
 
   async function onJoin(event: FormEvent) {
@@ -69,7 +69,7 @@ export function Welcome() {
     const result = await api.acceptInvite(trimmed);
     if (!result.ok) return dispatch({ type: 'join-failed', code: result.error.code });
     writeLastHousehold(result.value.household_id);
-    void navigate(householdHomePath({ id: result.value.household_id }), { replace: true });
+    void navigate(householdHomePath(), { replace: true });
   }
 
   const displayName = profile?.display_name;
@@ -120,7 +120,9 @@ export function Welcome() {
           name="invite-code"
           type="text"
           autoComplete="off"
-          autoCapitalize="characters"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           className={styles.input}
           value={code}
           onChange={(e) => setCode(e.target.value)}

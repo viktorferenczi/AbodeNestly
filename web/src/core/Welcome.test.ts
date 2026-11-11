@@ -1,14 +1,10 @@
-import type { Household } from '@abodenestly/contract';
 import { describe, expect, it } from 'vitest';
 import { householdHomePath, welcomeReducer, type WelcomeState } from './Welcome.ts';
 
-const household = { id: 'h-new' } as Household;
-
 describe('CORE-02: Welcome reducer', () => {
-  it('CORE-02: AC2 after a fake success the landing route is the new household home', () => {
-    const creating = welcomeReducer({ kind: 'idle' }, { type: 'create' });
-    expect(creating).toEqual({ kind: 'creating' });
-    expect(householdHomePath(household)).toBe('/home');
+  it('CORE-02: AC2 after a fake success the landing route is the household home', () => {
+    expect(welcomeReducer({ kind: 'idle' }, { type: 'create' })).toEqual({ kind: 'creating' });
+    expect(householdHomePath()).toBe('/home');
   });
 
   it.each<[string, WelcomeState, Parameters<typeof welcomeReducer>[1], WelcomeState]>([
