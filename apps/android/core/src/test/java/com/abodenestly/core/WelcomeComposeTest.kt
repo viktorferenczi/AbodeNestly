@@ -87,6 +87,20 @@ class WelcomeComposeTest {
     }
 
     @Test
+    fun `joining shows a spinner on Join and disables both buttons`() {
+        api.hold()
+        show()
+        typeCode("ABC123")
+        rule.onNodeWithTag("welcome.join").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("welcome.joining").assertExists()
+        rule.onNodeWithTag("welcome.creating").assertDoesNotExist()
+        rule.onNodeWithTag("welcome.create").assertIsNotEnabled()
+        rule.onNodeWithTag("welcome.join").assertIsNotEnabled()
+        api.release()
+    }
+
+    @Test
     fun `AC3 a create error is shown and the typed name stays`() {
         api.createResult = ApiResult.Failure(ApiFailure.Network)
         show()

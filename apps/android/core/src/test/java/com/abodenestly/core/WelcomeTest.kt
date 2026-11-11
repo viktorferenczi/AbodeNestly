@@ -17,11 +17,14 @@ import com.abodenestly.core.auth.AuthError
 import com.abodenestly.core.auth.InMemoryLastHouseholdStore
 import com.abodenestly.core.auth.InMemoryProfileCache
 import com.abodenestly.core.auth.LandingHousehold
+import com.abodenestly.core.auth.LastHouseholdStore
+import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.welcome.WelcomeOutcome
 import com.abodenestly.core.welcome.WelcomeState
 import com.abodenestly.core.welcome.WelcomeViewModel
 import com.abodenestly.core.welcome.land
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -75,6 +78,36 @@ class WelcomeTest {
         assertEquals(WelcomeViewModel.landing(Fixtures.household(1)), session.state.value.destination)
         assertEquals(household, session.state.value.household)
         assertEquals(id(1), runBlocking { last.read() })
+    }
+
+    @Test
+    fun `AC2 enter publishes Home before the last-household write returns`() {
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : LastHouseholdStore {
+            override suspend fun read(): UUID? = null
+            override suspend fun write(id: UUID) = gate.await()
+        }
+        val session = SessionViewModel(FakeAuthService(Fixtures.session), slow, isOnline = { true }, scope = scope())
+        session.enter(LandingHousehold(id(1), true, true, true))
+        assertEquals(Destination.Household(id(1), AppTab.Home), session.state.value.destination)
+        gate.complete(Unit)
+    }
+
+    @Test
+    fun `a sign-out during the write is not overwritten`() {
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : LastHouseholdStore {
+            override suspend fun read(): UUID? = null
+            override suspend fun write(id: UUID) = gate.await()
+        }
+        val auth = FakeAuthService(Fixtures.session)
+        val session = SessionViewModel(auth, slow, isOnline = { true }, scope = scope())
+        session.start()
+        session.enter(LandingHousehold(id(1), true, true, true))
+        auth.emit(null)
+        gate.complete(Unit)
+        assertEquals(SessionStatus.SignedOut, session.state.value.status)
+        assertNull(session.state.value.destination)
     }
 
     @Test

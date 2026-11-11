@@ -48,6 +48,7 @@ class SessionViewModel(
     private var userId: UUID? = null
     private var startJob: Job? = null
     private var loadJob: Job? = null
+    private var writeJob: Job? = null
 
     /** A household the person just joined: it opens on Home whatever its modules (DESIGN B4). */
     private var landOnHome: UUID? = null
@@ -72,16 +73,17 @@ class SessionViewModel(
     /** A household was just created: open it on Home without another round trip (CORE-02 AC2). */
     fun enter(household: LandingHousehold) {
         loadJob?.cancel()
-        scope.launch {
-            lastHousehold.write(household.id)
-            mutableState.update {
-                it.copy(
-                    household = household,
-                    destination = Destination.Household(household.id, AppTab.Home),
-                    loadFailed = false,
-                )
-            }
+        // Publish before the DataStore write suspends: the shell must leave Welcome on this turn, or the idle form
+        // is tappable again and a second tap sends another POST /households.
+        mutableState.update {
+            it.copy(
+                household = household,
+                destination = Destination.Household(household.id, AppTab.Home),
+                loadFailed = false,
+            )
         }
+        writeJob?.cancel()
+        writeJob = scope.launch { lastHousehold.write(household.id) }
     }
 
     /** An invite was accepted: reload the memberships and open that household on Home. */
@@ -106,6 +108,7 @@ class SessionViewModel(
         if (session == null) {
             userId = null
             loadJob?.cancel()
+            writeJob?.cancel()
             mutableState.value = SessionState(status = SessionStatus.SignedOut)
             return
         }
