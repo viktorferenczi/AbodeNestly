@@ -74,7 +74,8 @@ class WelcomeE2ETest {
         val user = user!!
         val config = keys.config()
         val auth = SupabaseAuthService(config)
-        runBlocking { auth.signOut() }
+        // Await initialization first: signing out before the stored session loads leaves the last journey's session in place.
+        runBlocking { auth.currentSession(); auth.signOut() }
         val session = SessionViewModel(auth, InMemoryLastHouseholdStore(), isOnline = { true })
         val signIn = SignInViewModel(auth, config.authCallbackUrl)
         val welcome = WelcomeViewModel(HttpApiService(config, auth), onLanded = session::land)

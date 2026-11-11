@@ -98,7 +98,8 @@ class SignInE2ETest {
     // MARK: Hosting
 
     private fun launch(auth: SupabaseAuthService, reset: Boolean): ActivityScenario<ComponentActivity> {
-        if (reset) runBlocking { auth.signOut() }
+        // Await initialization first: signing out before the stored session loads leaves an earlier journey's session in place.
+        if (reset) runBlocking { auth.currentSession(); auth.signOut() }
         val session = SessionViewModel(auth, InMemoryLastHouseholdStore(), isOnline = { true })
         val signIn = SignInViewModel(auth, config.authCallbackUrl)
         return ActivityScenario.launch(ComponentActivity::class.java).onActivity { activity ->
