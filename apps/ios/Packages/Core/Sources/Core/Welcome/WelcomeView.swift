@@ -60,7 +60,8 @@ public struct WelcomeView: View {
                 }
                 card(
                     title: "Create a household", label: "Household name", field: "welcome.name",
-                    text: $model.name, error: createError, errorId: "welcome.createError"
+                    text: $model.name, error: createError, errorId: "welcome.createError",
+                    submit: { Task { await model.create() } }
                 ) {
                     action(
                         "Create household", busy: model.state == .creating,
@@ -69,7 +70,8 @@ public struct WelcomeView: View {
                 }
                 card(
                     title: "Join with a code", label: "Invite code", field: "welcome.code",
-                    text: $model.code, error: joinError, errorId: "welcome.joinError", isCode: true
+                    text: $model.code, error: joinError, errorId: "welcome.joinError", isCode: true,
+                    submit: { Task { await model.join() } }
                 ) {
                     action(
                         "Join household", busy: model.state == .joining,
@@ -94,7 +96,7 @@ public struct WelcomeView: View {
 
     private func card(
         title: String, label: String, field: String, text: Binding<String>, error: String?, errorId: String,
-        isCode: Bool = false, @ViewBuilder action: () -> some View
+        isCode: Bool = false, submit: @escaping () -> Void, @ViewBuilder action: () -> some View
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
@@ -107,6 +109,7 @@ public struct WelcomeView: View {
                 .textInputAutocapitalization(isCode ? .never : .words)
                 .autocorrectionDisabled(isCode)
                 .submitLabel(.go)
+                .onSubmit { if !disabled { submit() } }
                 .padding(12)
                 .frame(minHeight: Tokens.minTouchTarget)
                 .background(Tokens.surface2, in: RoundedRectangle(cornerRadius: Tokens.cardRadius))
@@ -115,6 +118,8 @@ public struct WelcomeView: View {
                         .stroke(error == nil ? Tokens.line : Tokens.danger)
                 )
                 .accessibilityLabel(label)
+                // The web field is `aria-describedby` its error; VoiceOver reads the hint after the label.
+                .accessibilityHint(error ?? "")
                 .accessibilityIdentifier(field)
             if let error {
                 Text(error)
@@ -128,6 +133,10 @@ public struct WelcomeView: View {
         .background(Tokens.surface, in: RoundedRectangle(cornerRadius: Tokens.cardRadius))
         .overlay(RoundedRectangle(cornerRadius: Tokens.cardRadius).stroke(Tokens.line))
         .accessibilityElement(children: .contain)
+        // Focus stays on the button after a failed request, so say what went wrong (web: `role="alert"`).
+        .onChange(of: error) { _, message in
+            if let message { AccessibilityNotification.Announcement(message).post() }
+        }
     }
 
     private func action(

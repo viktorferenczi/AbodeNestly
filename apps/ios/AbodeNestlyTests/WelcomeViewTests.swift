@@ -179,4 +179,28 @@ struct WelcomeViewTests {
         _ = try h.view().find(text: "Enter your invite code.")
         #expect(h.api.calls.isEmpty)
     }
+
+    @Test("CORE-02: pressing Go on the keyboard submits each card")
+    func keyboardSubmit() async throws {
+        let h = Harness()
+        h.api.setCreateResult(.success(makeHousehold()))
+        h.model.name = "Test Home"
+        try h.view().find(viewWithAccessibilityIdentifier: "welcome.name").callOnSubmit()
+        await waitFor { h.api.calls.count == 1 }
+        #expect(h.api.calls == [.createHousehold(name: "Test Home")])
+
+        h.model.code = "ABC123"
+        try h.view().find(viewWithAccessibilityIdentifier: "welcome.code").callOnSubmit()
+        await waitFor { h.api.calls.count == 2 }
+        #expect(h.api.calls.last == .acceptInvite(code: "ABC123"))
+    }
+
+    @Test("CORE-02: the field's hint carries its error for VoiceOver")
+    func errorHint() async throws {
+        let h = Harness()
+        h.model.name = ""
+        await h.model.create()
+        let hint = try h.view().find(viewWithAccessibilityIdentifier: "welcome.name").accessibilityHint().string()
+        #expect(hint == "Enter a name for your household.")
+    }
 }
