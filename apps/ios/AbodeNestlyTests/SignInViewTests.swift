@@ -243,6 +243,7 @@ struct SessionBootstrapTests {
         let auth = FakeAuthService(session: user)
         let model = SessionModel(
             auth: auth, lastHousehold: LastHouseholdStore(suiteName: "SessionBootstrapTests-\(UUID())"),
+            profileCache: ProfileCache(suiteName: "SessionBootstrapTests-profile-\(UUID())"),
             isOnline: { true }
         )
         let started = Task { await model.start() }
@@ -257,6 +258,7 @@ struct SessionBootstrapTests {
     func noSession() async {
         let model = SessionModel(
             auth: FakeAuthService(), lastHousehold: LastHouseholdStore(suiteName: "SessionBootstrapTests-\(UUID())"),
+            profileCache: ProfileCache(suiteName: "SessionBootstrapTests-profile-\(UUID())"),
             isOnline: { true }
         )
         let started = Task { await model.start() }

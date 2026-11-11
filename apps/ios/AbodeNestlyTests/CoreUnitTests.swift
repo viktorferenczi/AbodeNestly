@@ -67,6 +67,7 @@ struct SessionModelTests {
     private func makeModel(_ auth: FakeAuthService, online: Bool = true) -> SessionModel {
         SessionModel(
             auth: auth, lastHousehold: LastHouseholdStore(suiteName: "SessionModelTests-\(UUID())"),
+            profileCache: ProfileCache(suiteName: "SessionModelTests-profile-\(UUID())"),
             isOnline: { online }
         )
     }

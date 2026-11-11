@@ -7,15 +7,18 @@ import UI
 struct AppEnvironment: Sendable {
     let config: AppConfig
     let auth: any AuthService
+    let api: any ApiService
     let network: NetworkMonitor
     let lastHousehold: LastHouseholdStore
 
     @MainActor
     static func live() -> AppEnvironment {
         let config = AppConfig.main
+        let auth = SupabaseAuthService(config: config)
         return AppEnvironment(
             config: config,
-            auth: SupabaseAuthService(config: config),
+            auth: auth,
+            api: HttpApiService(config: config, auth: auth),
             network: .live(),
             lastHousehold: LastHouseholdStore()
         )

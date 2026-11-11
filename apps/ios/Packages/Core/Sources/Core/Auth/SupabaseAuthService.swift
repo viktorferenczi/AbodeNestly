@@ -59,6 +59,15 @@ public final class SupabaseAuthService: AuthService {
         try? await client.signOut(scope: .local)
     }
 
+    public func accessToken(refresh: Bool) async -> String? {
+        do {
+            // `session` itself refreshes an expired token; `refreshSession` forces it.
+            return refresh ? try await client.refreshSession().accessToken : try await client.session.accessToken
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: Sign in
 
     public func sendMagicLink(email: String, redirectTo: URL) async throws(AuthError) {
