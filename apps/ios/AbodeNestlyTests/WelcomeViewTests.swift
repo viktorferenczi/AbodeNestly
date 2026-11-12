@@ -149,7 +149,7 @@ struct WelcomeViewTests {
         #expect(h.landed.outcomes == [.created(household)])
     }
 
-    @Test("CORE-02: tapping Join calls acceptInvite with the trimmed code and reports the household id")
+    @Test("CORE-02: tapping Join calls acceptInvite with the trimmed, lowercased code and reports the household id")
     func joinTap() async throws {
         let h = Harness()
         let id = UUID()
@@ -157,7 +157,7 @@ struct WelcomeViewTests {
         h.model.code = " ABC123 "
         try h.view().find(viewWithAccessibilityIdentifier: "welcome.join").button().tap()
         await waitFor { !h.landed.outcomes.isEmpty }
-        #expect(h.api.calls == [.acceptInvite(code: "ABC123")])
+        #expect(h.api.calls == [.acceptInvite(code: "abc123")])
         #expect(h.landed.outcomes == [.joined(householdId: id)])
     }
 
@@ -192,7 +192,7 @@ struct WelcomeViewTests {
         h.model.code = "ABC123"
         try h.view().find(viewWithAccessibilityIdentifier: "welcome.code").callOnSubmit()
         await waitFor { h.api.calls.count == 2 }
-        #expect(h.api.calls.last == .acceptInvite(code: "ABC123"))
+        #expect(h.api.calls.last == .acceptInvite(code: "abc123"))
     }
 
     @Test("CORE-02: the field's hint carries its error for VoiceOver")

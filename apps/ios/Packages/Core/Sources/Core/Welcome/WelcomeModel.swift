@@ -56,7 +56,8 @@ public final class WelcomeModel {
 
     public func join() async {
         guard !isBusy else { return }
-        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Codes are lowercase hex; people type or paste them in any case (web does the same).
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !trimmed.isEmpty else { return state = .joinError(.validation) }
         state = .joining
         switch await api.acceptInvite(code: trimmed) {

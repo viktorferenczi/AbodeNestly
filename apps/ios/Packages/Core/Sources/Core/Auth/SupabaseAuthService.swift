@@ -231,6 +231,13 @@ enum PostgrestJSON {
         return decoder
     }
 
+    /// ISO 8601 with fractional seconds, like JS `toISOString()`.
+    static func format(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
+
     static func parseDate(_ text: String) -> Date? {
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

@@ -7,12 +7,19 @@ public final class FakeApiService: ApiService {
     public enum Call: Sendable, Equatable {
         case createHousehold(name: String)
         case acceptInvite(code: String)
+        case createInvite(householdId: UUID)
+        case fetchLiveInvite(householdId: UUID)
+        case retireInvite(id: UUID)
     }
 
     private struct State {
         var calls: [Call] = []
         var createResult: Result<Household, ApiFailure> = .failure(.unknown)
         var acceptResult: Result<UUID, ApiFailure> = .failure(.unknown)
+        var createInviteResults: [Result<Invite, ApiFailure>] = []
+        var createInviteResult: Result<Invite, ApiFailure> = .failure(.unknown)
+        var liveInviteResult: Result<Invite?, ApiFailure> = .success(nil)
+        var retireResult: Result<Void, ApiFailure> = .success(())
         var held: [CheckedContinuation<Void, Never>] = []
         var hold = false
     }
@@ -25,6 +32,19 @@ public final class FakeApiService: ApiService {
 
     public func setCreateResult(_ result: Result<Household, ApiFailure>) { state.withLock { $0.createResult = result } }
     public func setAcceptResult(_ result: Result<UUID, ApiFailure>) { state.withLock { $0.acceptResult = result } }
+
+    /// Every `createInvite` returns this.
+    public func setCreateInviteResult(_ result: Result<Invite, ApiFailure>) {
+        state.withLock { $0.createInviteResult = result }
+    }
+    /// Queued results for `createInvite`, consumed in order before falling back to `setCreateInviteResult`.
+    public func queueCreateInviteResult(_ result: Result<Invite, ApiFailure>) {
+        state.withLock { $0.createInviteResults.append(result) }
+    }
+    public func setLiveInviteResult(_ result: Result<Invite?, ApiFailure>) {
+        state.withLock { $0.liveInviteResult = result }
+    }
+    public func setRetireResult(_ result: Result<Void, ApiFailure>) { state.withLock { $0.retireResult = result } }
 
     /// Makes calls suspend until `release()`, so tests can observe `creating` / `joining`.
     public func hold() { state.withLock { $0.hold = true } }
@@ -59,5 +79,25 @@ public final class FakeApiService: ApiService {
         state.withLock { $0.calls.append(.acceptInvite(code: code)) }
         await suspendIfHeld()
         return state.withLock { $0.acceptResult }
+    }
+
+    public func createInvite(householdId: UUID) async -> Result<Invite, ApiFailure> {
+        state.withLock { $0.calls.append(.createInvite(householdId: householdId)) }
+        await suspendIfHeld()
+        return state.withLock { state in
+            state.createInviteResults.isEmpty ? state.createInviteResult : state.createInviteResults.removeFirst()
+        }
+    }
+
+    public func fetchLiveInvite(householdId: UUID) async -> Result<Invite?, ApiFailure> {
+        state.withLock { $0.calls.append(.fetchLiveInvite(householdId: householdId)) }
+        await suspendIfHeld()
+        return state.withLock { $0.liveInviteResult }
+    }
+
+    public func retireInvite(id: UUID) async -> Result<Void, ApiFailure> {
+        state.withLock { $0.calls.append(.retireInvite(id: id)) }
+        await suspendIfHeld()
+        return state.withLock { $0.retireResult }
     }
 }

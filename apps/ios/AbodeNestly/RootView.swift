@@ -106,9 +106,9 @@ private struct SignedInView: View {
                     onSignOut: { Task { await session.signOut() } }
                 )
             case .household(_, let tab):
-                MainTabs(household: session.household, start: tab)
+                MainTabs(household: session.household, start: tab, environment: environment)
             case .home:
-                MainTabs(household: nil, start: .home)
+                MainTabs(household: nil, start: .home, environment: environment)
             }
         }
     }
@@ -117,10 +117,12 @@ private struct SignedInView: View {
 /// Bottom tabs filtered by the household's module flags (DESIGN A6). Content arrives with the module stories.
 private struct MainTabs: View {
     let household: LandingHousehold?
+    let environment: AppEnvironment
     @State private var selection: AppTab
 
-    init(household: LandingHousehold?, start: AppTab) {
+    init(household: LandingHousehold?, start: AppTab, environment: AppEnvironment) {
         self.household = household
+        self.environment = environment
         _selection = State(initialValue: start)
     }
 
@@ -135,15 +137,43 @@ private struct MainTabs: View {
     var body: some View {
         TabView(selection: $selection) {
             ForEach(tabs, id: \.self) { tab in
-                Text(title(tab))
-                    .foregroundStyle(Tokens.text)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                tabContent(tab)
                     .tabItem { Label(title(tab), systemImage: icon(tab)) }
                     .tag(tab)
-                    .accessibilityIdentifier("tab.\(tab.rawValue).content")
             }
         }
         .tint(Tokens.accent)
+    }
+
+    @ViewBuilder
+    private func tabContent(_ tab: AppTab) -> some View {
+        if tab == .home {
+            // The household may be unknown offline at launch; fall back to the last one used.
+            let householdId = household?.id ?? environment.lastHousehold.read()
+            NavigationStack {
+                VStack(spacing: 16) {
+                    Text(title(tab))
+                        .foregroundStyle(Tokens.text)
+                        .accessibilityIdentifier("tab.home.content")
+                    if let householdId {
+                        NavigationLink("Members") {
+                            MembersView(
+                                householdId: householdId, api: environment.api,
+                                isOnline: environment.network.isOnline, webBaseURL: environment.config.webBaseURL
+                            )
+                        }
+                        .accessibilityIdentifier("home.members")
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Tokens.bg)
+            }
+        } else {
+            Text(title(tab))
+                .foregroundStyle(Tokens.text)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier("tab.\(tab.rawValue).content")
+        }
     }
 
     private func title(_ tab: AppTab) -> String {

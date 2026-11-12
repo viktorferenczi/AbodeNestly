@@ -16,4 +16,10 @@ public protocol ApiService: Sendable {
     func createHousehold(name: String) async -> Result<Household, ApiFailure>
     /// `POST /invites/{code}/accept` (CORE-03). Success carries the joined household's id.
     func acceptInvite(code: String) async -> Result<UUID, ApiFailure>
+    /// `POST /households/{id}/invites` with `{}` (201): the DB defaults apply (member, 7 days, 10 uses).
+    func createInvite(householdId: UUID) async -> Result<Invite, ApiFailure>
+    /// Newest usable invite (not retired, not expired, uses left) or `nil`. Read under RLS, no API route.
+    func fetchLiveInvite(householdId: UUID) async -> Result<Invite?, ApiFailure>
+    /// Sets `deleted_at`; the only change a client may make to an invite (SPEC §14).
+    func retireInvite(id: UUID) async -> Result<Void, ApiFailure>
 }

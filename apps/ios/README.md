@@ -13,6 +13,11 @@ Sign in with a magic link; the email lands in Mailpit at `http://127.0.0.1:54324
 Safari on the simulator, or paste the `Location` of the verify redirect with
 `xcrun simctl openurl booted "abodenestly-dev://auth/callback?code=…"`.
 
+### Web base URL
+
+`WEB_BASE_URL` (xcconfig → Info.plist) is the web app's origin; the invite sheet shares `<WEB_BASE_URL>/join/<code>`,
+which web routes to its join card (Dev: `http://localhost:5173`). Universal links come with the production domain.
+
 ### Callback URL scheme
 
 Magic link and Google return to a custom scheme: `abodenestly-dev://auth/callback` (Dev) and
@@ -35,8 +40,9 @@ simulator. They are checked by hand only, never in e2e (TESTING §5).
 | Unit and component tests | `cd apps/ios && xcodebuild test -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev" -destination 'platform=iOS Simulator,name=iPhone 16 Pro' -skip-testing:AbodeNestlyUITests` |
 | E2E (XCUITest) | `TEST_RUNNER_SUPABASE_SERVICE_ROLE_KEY=<from supabase status> xcodebuild test … -only-testing:AbodeNestlyUITests` (sign-in: Supabase only; create household: also the API) |
 
-E2E-CORE-1 runs in two UI tests that share `AbodeNestlyUITests/E2EHelpers.swift`: `SignInUITests` (sign in, Welcome,
-relaunch) and `WelcomeUITests` (create a household, land on Home, check the seeded defaults). Each test creates its
+E2E-CORE-1 runs in three UI tests that share `AbodeNestlyUITests/E2EHelpers.swift`: `SignInUITests` (sign in, Welcome,
+relaunch), `WelcomeUITests` (create a household, land on Home, check the seeded defaults) and `InviteSheetUITests`
+(read the invite code from Home → Members → Invite, a second user joins with it). Each test creates its
 own user through the admin API, reads the magic link from Mailpit (`127.0.0.1:54324`), follows the verify URL without
 redirects and opens the resulting `abodenestly-dev://auth/callback?code=…` in the app for a real PKCE exchange, then
 deletes the user (and its household). `WelcomeUITests` also needs the API on :3000
