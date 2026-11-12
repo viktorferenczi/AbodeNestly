@@ -23,6 +23,10 @@ export type Route = {
   response: { status: number; schemaName: string; schema?: JsonSchema };
 };
 
+// Path parameter names, derived from the `{name}` segments of a route path.
+export const pathParams = (path: string): string[] =>
+  [...path.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!);
+
 export const routes: Route[] = [
   {
     method: 'get',
@@ -54,6 +58,40 @@ export const routes: Route[] = [
     },
     response: { status: 201, schemaName: 'Household' },
   },
+  {
+    method: 'post',
+    path: '/households/{id}/invites',
+    summary: 'Create an invite code',
+    public: false,
+    requestBody: {
+      schemaName: 'CreateInviteRequest',
+      schema: {
+        type: 'object',
+        properties: {
+          role: { type: 'string', enum: ['owner', 'member'] },
+          expires_in_days: { type: 'integer' },
+          max_uses: { type: 'integer' },
+        },
+        required: [],
+      },
+    },
+    response: { status: 201, schemaName: 'Invite' },
+  },
+  {
+    method: 'post',
+    path: '/invites/{code}/accept',
+    summary: 'Join a household with an invite code',
+    public: false,
+    response: {
+      status: 200,
+      schemaName: 'AcceptInviteResponse',
+      schema: {
+        type: 'object',
+        properties: { household_id: { type: 'string', format: 'uuid' } },
+        required: ['household_id'],
+      },
+    },
+  },
 ];
 
 const uuid: JsonSchema = { type: 'string', format: 'uuid' };
@@ -82,6 +120,27 @@ export const componentSchemas: Record<string, JsonSchema> = {
     required: [
       'id', 'name', 'created_by', 'module_shopping', 'module_pantry', 'module_maintenance',
       'currency', 'created_at', 'updated_at', 'deleted_at', 'sync_seq',
+    ],
+  },
+  Invite: {
+    type: 'object',
+    properties: {
+      id: uuid,
+      household_id: uuid,
+      code: { type: 'string' },
+      role: { type: 'string', enum: ['owner', 'member'] },
+      created_by: uuid,
+      expires_at: dateTime,
+      max_uses: { type: 'integer' },
+      uses: { type: 'integer' },
+      created_at: dateTime,
+      updated_at: dateTime,
+      deleted_at: nullableDateTime,
+      sync_seq: { type: 'integer' },
+    },
+    required: [
+      'id', 'household_id', 'code', 'role', 'created_by', 'expires_at', 'max_uses', 'uses',
+      'created_at', 'updated_at', 'deleted_at', 'sync_seq',
     ],
   },
   Profile: {

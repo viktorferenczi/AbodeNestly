@@ -2,7 +2,7 @@
 // A tiny YAML emitter keeps the contract package dependency-free.
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { componentSchemas, routes } from '../src/routes.ts';
+import { componentSchemas, pathParams, routes } from '../src/routes.ts';
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
@@ -53,6 +53,16 @@ for (const route of routes) {
   paths[route.path] ??= {};
   paths[route.path]![route.method] = {
     summary: route.summary,
+    ...(pathParams(route.path).length
+      ? {
+          parameters: pathParams(route.path).map((name): Json => ({
+            name,
+            in: 'path',
+            required: true,
+            schema: name === 'id' ? { type: 'string', format: 'uuid' } : { type: 'string' },
+          })),
+        }
+      : {}),
     ...(route.public ? { security: [] } : {}),
     ...(route.requestBody
       ? {

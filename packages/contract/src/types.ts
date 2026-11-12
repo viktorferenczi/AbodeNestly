@@ -55,3 +55,18 @@ export interface Member {
   readonly updated_at: ISODateTime;
   readonly sync_seq: number;
 }
+
+export interface Invite extends Synced {
+  code: string;
+  role: Role;
+  created_by: UUID;
+  expires_at: ISODateTime;
+  max_uses: number;
+  uses: number;
+}
+
+/** `POST /households/{id}/invites` body. Ranges are checked by the API (`validation`). */
+export type CreateInviteRequest = { role?: Role; expires_in_days?: number; max_uses?: number };
+
+/** `POST /invites/{code}/accept` response. */
+export type AcceptInviteResponse = { household_id: UUID };

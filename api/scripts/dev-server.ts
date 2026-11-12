@@ -4,6 +4,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { fileURLToPath } from 'node:url';
 import health from '../health.ts';
 import households from '../households/index.ts';
+import householdInvites from '../households/[id]/invites.ts';
+import acceptInvite from '../invites/[code]/accept.ts';
 
 type Handler = (req: Request) => Promise<Response>;
 
@@ -11,6 +13,12 @@ const routes: Record<string, Handler> = {
   '/health': health,
   '/households': households,
 };
+
+// Vercel's [param] routes, as path patterns.
+const patterns: Array<[RegExp, Handler]> = [
+  [/^\/households\/[^/]+\/invites$/, householdInvites],
+  [/^\/invites\/[^/]+\/accept$/, acceptInvite],
+];
 
 async function toRequest(req: IncomingMessage): Promise<Request> {
   const chunks: Buffer[] = [];
@@ -36,7 +44,7 @@ async function send(res: ServerResponse, response: Response): Promise<void> {
 export function createDevServer(): Server {
   return createServer(async (req, res) => {
     const path = new URL(req.url ?? '/', 'http://localhost').pathname;
-    const handler = routes[path];
+    const handler = routes[path] ?? patterns.find(([re]) => re.test(path))?.[1];
     if (!handler) {
       res.statusCode = 404;
       res.setHeader('content-type', 'application/json; charset=utf-8');
