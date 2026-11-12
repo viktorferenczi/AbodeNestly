@@ -8,6 +8,7 @@ import androidx.activity.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.signin.SignInViewModel
+import com.abodenestly.core.welcome.WelcomeViewModel
 import com.abodenestly.ui.AbodeTheme
 import kotlinx.coroutines.launch
 
@@ -15,11 +16,12 @@ class MainActivity : ComponentActivity() {
     private val graph get() = (application as AbodeNestlyApp).graph
     private val session: SessionViewModel by viewModels { graph.viewModelFactory }
     private val signIn: SignInViewModel by viewModels { graph.viewModelFactory }
+    private val welcome: WelcomeViewModel by viewModels { graph.welcomeFactory(session) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            AbodeTheme { AppRoot(session, signIn, graph.network) }
+            AbodeTheme { AppRoot(session, signIn, welcome, graph.network) }
         }
         lifecycleScope.launch {
             // E2E starts signed out; the session is cleared before it is read.

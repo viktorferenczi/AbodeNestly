@@ -39,7 +39,7 @@ Checked by hand only, never in e2e (TESTING §5).
 | What | Command |
 |---|---|
 | Module graph, lint, unit and Compose component tests (JVM, Robolectric) | `./gradlew checkModuleGraph lintDevDebug testDevDebugUnitTest` |
-| E2E (instrumented, needs `supabase start`) | `./gradlew :core:pixel6Api34DevDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.serviceRoleKey=<key> -Pandroid.testInstrumentationRunnerArguments.anonKey=<key>` |
+| E2E (instrumented, needs `supabase start` and the API on :3000: `pnpm --filter @abodenestly/api dev`) | `./gradlew :core:pixel6Api34DevDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.serviceRoleKey=<key> -Pandroid.testInstrumentationRunnerArguments.anonKey=<key>` |
 
 Use `:core:connectedDevDebugAndroidTest` instead to run on an already-running emulator. Without both keys the e2e skips.
 
@@ -47,10 +47,10 @@ JUnit 5 runs the pure logic tests; the Robolectric/Compose tests are JUnit 4 and
 vintage engine. In coroutine tests use `runCurrent()`, not `advanceUntilIdle()`: work in `backgroundScope` is ignored
 by the latter.
 
-The e2e journey (E2E-CORE-1, first half) creates its own user through the admin API, reads the magic link from Mailpit
-(`10.0.2.2:54324`), follows the verify URL without redirects and hands the `abodenestly-dev://auth/callback?code=…`
-URL to the real `SupabaseAuthService` for a PKCE exchange, then deletes the user. It lives in `:core`, so it hosts the
-real sign-in screen and session view model in a plain activity rather than `:app`'s `MainActivity`. Debug builds of the
+The e2e journeys (E2E-CORE-1: sign-in, then create-a-household from Welcome, which needs the API on :3000 too) each create their own user through the admin API, read the magic link from Mailpit
+(`10.0.2.2:54324`), follow the verify URL without redirects and hand the `abodenestly-dev://auth/callback?code=…`
+URL to the real `SupabaseAuthService` for a PKCE exchange, then delete the user (and any household it created). They live in `:core`, so they host the
+real screens and session view model in a plain activity rather than `:app`'s `MainActivity`. Debug builds of the
 app also accept the `reset-session` boolean intent extra to start signed out
 (`adb shell am start -n com.abodenestly.app.dev/com.abodenestly.app.MainActivity --ez reset-session true`).
 

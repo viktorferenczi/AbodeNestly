@@ -89,6 +89,19 @@ class SupabaseAuthService(private val config: AppConfig) : AuthService {
         }
     }
 
+    override suspend fun accessToken(refresh: Boolean): String? {
+        if (refresh) {
+            try {
+                auth.refreshCurrentSession()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return null
+            }
+        }
+        return storedUserSession()?.accessToken
+    }
+
     // MARK: Sign in
 
     override suspend fun sendMagicLink(email: String, redirectTo: String) = mapping {
