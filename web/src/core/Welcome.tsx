@@ -1,5 +1,5 @@
 import { useReducer, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { OfflineBanner } from '../ui/OfflineBanner.tsx';
 import { useOnline } from '../ui/useOnline.ts';
 import { useApi } from './api/ApiProvider.tsx';
@@ -32,7 +32,9 @@ export function Welcome() {
   const [state, dispatch] = useReducer(welcomeReducer, { kind: 'idle' });
   // Kept outside the reducer so typed values survive every error state (AC3).
   const [name, setName] = useState('');
-  const [code, setCode] = useState('');
+  const [searchParams] = useSearchParams();
+  // From an invite link (/join/:code); joining still needs a tap on the button.
+  const [code, setCode] = useState(() => searchParams.get('code') ?? '');
 
   const creating = state.kind === 'creating';
   const joining = state.kind === 'joining';
@@ -63,7 +65,8 @@ export function Welcome() {
   async function onJoin(event: FormEvent) {
     event.preventDefault();
     if (disabled) return;
-    const trimmed = code.trim();
+    // Codes are lowercase hex; people may type capitals.
+    const trimmed = code.trim().toLowerCase();
     if (!trimmed) return dispatch({ type: 'join-failed', code: 'validation' });
     dispatch({ type: 'join' });
     const result = await api.acceptInvite(trimmed);

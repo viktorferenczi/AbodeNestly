@@ -71,6 +71,8 @@ System fonts (SF Pro / Roboto / system-ui). Scale: Title 28/34 semibold, Heading
 | `MoneyField` | Locale currency, decimal input, never spinner |
 | `RRulePicker` | Presets: Weekly, Monthly, Every 3 months, Twice a year, Yearly, Custom (interval + unit). Shows "Next: 12 Mar 2027" |
 
+_Web deviation (CORE-03-web): `Sheet` dismisses via Close, Esc and backdrop tap only; drag-to-dismiss is not built yet. It traps focus and makes the page behind inert._
+
 ### A7. Screen plan format
 Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **States** (each must have a component test), **Interactions** (each must have a component test; primary one has e2e), **Offline**, **Module gating**.
 

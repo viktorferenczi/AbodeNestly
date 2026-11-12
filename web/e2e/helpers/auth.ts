@@ -50,11 +50,11 @@ async function magicLinkFromMailpit(email: string): Promise<string> {
 /**
  * Real PKCE magic-link sign-in: request the link from `/signin` (this stores the code verifier in the
  * page's browser context), read the email from local Mailpit, and open the link in the same page so
- * `detectSessionInUrl` performs the code exchange. The admin `generateLink` URL cannot be used: it is
+ * `detectSessionInUrl` performs the code exchange. `next` is carried through to `/auth/callback`. The admin `generateLink` URL cannot be used: it is
  * implicit-flow and supabase-js rejects it under PKCE.
  */
-export async function signInWithMagicLink(page: Page, user: E2eUser): Promise<void> {
-  await page.goto('/signin');
+export async function signInWithMagicLink(page: Page, user: E2eUser, next?: string): Promise<void> {
+  await page.goto(next ? `/signin?next=${encodeURIComponent(next)}` : '/signin');
   await page.getByLabel('Email').fill(user.email);
   await page.getByRole('button', { name: 'Send magic link' }).click();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
