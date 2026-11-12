@@ -108,7 +108,7 @@ All features below are **in scope for v1**. IDs are stable and must be reference
 |---|---|---|
 | CORE-01 | Sign in with email magic link, Apple, Google | Supabase Auth; `profile` row created by the `on_auth_user_created` trigger on `auth.users` (display name from provider metadata, else email local part) |
 | CORE-02 | Create household | Creator becomes owner; default list "Groceries" and default locations (Fridge, Freezer, Pantry) are created |
-| CORE-03 | Invite by link/code | Invite has expiry and max uses; accepting joins as member |
+| CORE-03 | Invite by link/code | Invite has expiry and max uses; accepting joins with the invite's role (member by default) |
 | CORE-04 | Member list, roles (owner/member), remove member, leave household | Owner can remove; last owner cannot leave |
 | CORE-05 | Module toggles per household | Owner toggles shopping/pantry/maintenance; UI hides tab, triggers respect flag |
 | CORE-06 | Profile (name, avatar) | Avatar via Storage |
@@ -761,7 +761,7 @@ Module disabled matrix — what still works:
 
 - Every household-scoped table: `select/insert/update/delete` allowed only when `is_member(household_id)`.
 - `household` insert allowed to any authenticated user; update only to owners.
-- `invite`: only owners may create `role='owner'` invites; `accept_invite()` is a no-op for an already-active member.
+- `invite`: only owners may create `role='owner'` invites; `members cannot change an invite's `role`, `uses`, `max_uses` or `expires_at` (only retire it); `accept_invite()` is a no-op for an already-active member.
 - `member` rows are created only by `create_household()` and `accept_invite()` (security definer).
 - `profile` readable by anyone sharing a household with the user. Rows are created by the `on_auth_user_created` trigger (security definer) on `auth.users`; clients only update their own row.
 - `product` readable by all authenticated users; written only by the API with the service role.
@@ -1020,6 +1020,28 @@ drop policy invite_insert on invite;
 create policy invite_insert on invite for insert with check (
   is_member(household_id) and created_by = auth.uid()
   and (role = 'member' or is_owner(household_id)));
+
+-- Clients may only retire an invite (deleted_at). uses is bumped only by accept_invite (function owner,
+-- which returns early); role / max_uses / expires_at are owner-only and 'owner' invites need an owner.
+create or replace function guard_invite_update() returns trigger
+language plpgsql as $$
+begin
+  if current_user <> 'authenticated' then return new; end if;
+  if new.household_id is distinct from old.household_id
+     or new.code is distinct from old.code
+     or new.created_by is distinct from old.created_by
+     or new.uses is distinct from old.uses then
+    raise exception 'invite_field_immutable' using errcode = '42501';
+  end if;
+  if not is_owner(old.household_id)
+     and (new.role is distinct from old.role
+          or new.max_uses is distinct from old.max_uses
+          or new.expires_at is distinct from old.expires_at) then
+    raise exception 'invite_owner_only' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+create trigger invite_guard before update on invite for each row execute function guard_invite_update();
 
 create or replace function accept_invite(p_code text) returns uuid
 language plpgsql security definer set search_path = public as $$

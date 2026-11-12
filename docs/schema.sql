@@ -194,6 +194,28 @@ create policy invite_insert on invite for insert with check (
   is_member(household_id) and created_by = auth.uid()
   and (role = 'member' or is_owner(household_id)));
 
+-- Clients may only retire an invite (deleted_at). uses is bumped only by accept_invite (function owner,
+-- which returns early); role / max_uses / expires_at are owner-only and 'owner' invites need an owner.
+create or replace function guard_invite_update() returns trigger
+language plpgsql as $$
+begin
+  if current_user <> 'authenticated' then return new; end if;
+  if new.household_id is distinct from old.household_id
+     or new.code is distinct from old.code
+     or new.created_by is distinct from old.created_by
+     or new.uses is distinct from old.uses then
+    raise exception 'invite_field_immutable' using errcode = '42501';
+  end if;
+  if not is_owner(old.household_id)
+     and (new.role is distinct from old.role
+          or new.max_uses is distinct from old.max_uses
+          or new.expires_at is distinct from old.expires_at) then
+    raise exception 'invite_owner_only' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+create trigger invite_guard before update on invite for each row execute function guard_invite_update();
+
 create or replace function accept_invite(p_code text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare inv invite;

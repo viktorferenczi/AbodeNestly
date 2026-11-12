@@ -1,7 +1,7 @@
 -- CORE-03: invite table and accept_invite (expiry, max uses, role, rejoin, RLS)
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(28);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'owner@example.com', 'authenticated', 'authenticated'),
@@ -118,6 +118,19 @@ select throws_ok(
   $$insert into public.invite(household_id, created_by) values
     (current_setting('test.hid')::uuid, '00000000-0000-0000-0000-0000000000a1')$$,
   '42501', null, 'RLS: created_by must be the caller');
+
+-- Update guard: a member cannot escalate role or reset uses; may still retire an invite
+select throws_ok($$update public.invite set role = 'owner' where code = 'live'$$, '42501', 'invite_owner_only',
+  'guard: member cannot set role to owner');
+select throws_ok($$update public.invite set uses = 0 where code = 'full'$$, '42501', 'invite_field_immutable',
+  'guard: member cannot reset uses');
+select lives_ok($$update public.invite set deleted_at = now() where code = 'ownerinv'$$,
+  'guard: member can retire an invite');
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}', true);
+select lives_ok(
+  $$insert into public.invite(household_id, created_by, role) values
+    (current_setting('test.hid')::uuid, '00000000-0000-0000-0000-0000000000a1', 'owner')$$,
+  'RLS: owner can create an owner invite');
 
 reset role;
 select * from finish();
