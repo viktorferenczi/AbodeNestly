@@ -34,6 +34,47 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/Household"
+  "/households/{id}/invites":
+    post:
+      summary: "Create an invite code"
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreateInviteRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Invite"
+  "/invites/{code}/accept":
+    post:
+      summary: "Join a household with an invite code"
+      parameters:
+        -
+          name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AcceptInviteResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -81,6 +122,58 @@ components:
         - module_pantry
         - module_maintenance
         - currency
+        - created_at
+        - updated_at
+        - deleted_at
+        - sync_seq
+    Invite:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        household_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        role:
+          type: string
+          enum:
+            - owner
+            - member
+        created_by:
+          type: string
+          format: uuid
+        expires_at:
+          type: string
+          format: date-time
+        max_uses:
+          type: integer
+        uses:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        sync_seq:
+          type: integer
+      required:
+        - id
+        - household_id
+        - code
+        - role
+        - created_by
+        - expires_at
+        - max_uses
+        - uses
         - created_at
         - updated_at
         - deleted_at
@@ -159,3 +252,24 @@ components:
           type: string
       required:
         - name
+    CreateInviteRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - owner
+            - member
+        expires_in_days:
+          type: integer
+        max_uses:
+          type: integer
+      required: []
+    AcceptInviteResponse:
+      type: object
+      properties:
+        household_id:
+          type: string
+          format: uuid
+      required:
+        - household_id

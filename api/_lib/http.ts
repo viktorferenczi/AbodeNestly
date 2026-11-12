@@ -28,3 +28,9 @@ export async function parseJson<T>(req: Request, guard: (v: unknown) => v is T):
   if (!guard(value)) throw new ApiError(400, 'validation', 'Body has the wrong shape');
   return value;
 }
+
+// Path segment by index, read from the URL so it works under Vercel and the dev server alike.
+// `/households/<id>/invites` -> index 1 is the id.
+export function pathSegment(req: Request, index: number): string {
+  return decodeURIComponent(new URL(req.url).pathname.split('/').filter(Boolean)[index] ?? '');
+}
