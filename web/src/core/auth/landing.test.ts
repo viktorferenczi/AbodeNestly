@@ -40,6 +40,21 @@ describe('CORE-01: landingPath', () => {
     ['/signin next is ignored', { memberships: [A], lastHouseholdId: null, next: '/signin?next=/x' }, '/shopping'],
     ['/auth/callback next is ignored', { memberships: [A], lastHouseholdId: null, next: '/auth/callback' }, '/shopping'],
     ['no household plus next → /welcome', { memberships: [], lastHouseholdId: null, next: '/pantry' }, '/welcome'],
+    [
+      'CORE-03: no household plus an invite link keeps the link',
+      { memberships: [], lastHouseholdId: null, next: '/join/0123456789ab' },
+      '/join/0123456789ab',
+    ],
+    [
+      'CORE-03: no household plus a look-alike path → /welcome',
+      { memberships: [], lastHouseholdId: null, next: '/joinery' },
+      '/welcome',
+    ],
+    [
+      'CORE-03: no household plus //join is not an invite link',
+      { memberships: [], lastHouseholdId: null, next: '//join/x' },
+      '/welcome',
+    ],
   ];
 
   it.each(cases)('CORE-01: %s', (_name, input, expected) => {

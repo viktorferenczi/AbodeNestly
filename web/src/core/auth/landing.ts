@@ -40,6 +40,10 @@ export function landingPath(input: {
 }): string {
   const { memberships, lastHouseholdId, next } = input;
   const chosen = pickHousehold(memberships, lastHouseholdId);
-  if (!chosen) return '/welcome';
+  if (!chosen) {
+    // An invite link must survive sign-in for someone with no household yet; other targets need one.
+    const target = safeNext(next);
+    return target?.startsWith('/join/') ? target : '/welcome';
+  }
   return safeNext(next) ?? startTab(chosen.household);
 }

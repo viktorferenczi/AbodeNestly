@@ -1,4 +1,10 @@
-import type { ApiError, CreateHouseholdRequest, Household } from '@abodenestly/contract';
+import type {
+  ApiError,
+  CreateHouseholdRequest,
+  CreateInviteRequest,
+  Household,
+  Invite,
+} from '@abodenestly/contract';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type ApiFailure = { code: 'validation' | 'invalid_code' | 'network' | 'unknown' };
@@ -9,6 +15,12 @@ export interface ApiClient {
   createHousehold(name: string): Promise<ApiResult<Household>>;
   /** CORE-03 endpoint; wired here so the Welcome screen is complete once it exists. */
   acceptInvite(code: string): Promise<ApiResult<{ household_id: string }>>;
+  /** Mints an invite with the DB defaults (member / 7 days / 10 uses). */
+  createInvite(householdId: string): Promise<ApiResult<Invite>>;
+  /** Newest usable invite (not retired, not expired, uses left) or `null`. Read under RLS, no API route. */
+  fetchLiveInvite(householdId: string): Promise<ApiResult<Invite | null>>;
+  /** Sets `deleted_at`; the only change a client may make to an invite (SPEC §14). */
+  retireInvite(id: string): Promise<ApiResult<null>>;
 }
 
 // CORE-03-api has not fixed its error code yet; the SQL raises `invalid_invite`. `not_found` and
@@ -84,6 +96,46 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
           return { code: 'unknown' };
         },
       );
+    },
+    createInvite(householdId) {
+      const body: CreateInviteRequest = {};
+      return call<Invite>(
+        `/households/${encodeURIComponent(householdId)}/invites`,
+        body,
+        (s) => s === 201,
+        () => ({ code: 'unknown' }),
+      );
+    },
+    async fetchLiveInvite(householdId) {
+      try {
+        const { data, error } = await supabase
+          .from('invite')
+          .select('*')
+          .eq('household_id', householdId)
+          .is('deleted_at', null)
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false });
+        if (error) return { ok: false, error: { code: 'unknown' } };
+        // PostgREST cannot compare two columns, so uses < max_uses is filtered here.
+        const live = ((data ?? []) as Invite[]).find((i) => i.uses < i.max_uses) ?? null;
+        return { ok: true, value: live };
+      } catch {
+        return { ok: false, error: { code: 'network' } };
+      }
+    },
+    async retireInvite(id) {
+      try {
+        const { data, error } = await supabase
+          .from('invite')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', id)
+          .select('id');
+        // RLS hides rows silently, so an empty result means nothing was retired.
+        if (error || !data || data.length === 0) return { ok: false, error: { code: 'unknown' } };
+        return { ok: true, value: null };
+      } catch {
+        return { ok: false, error: { code: 'network' } };
+      }
     },
     acceptInvite(code) {
       return call<{ household_id: string }>(

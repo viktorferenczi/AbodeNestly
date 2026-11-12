@@ -22,7 +22,11 @@ async function flush() {
 const profile = { id: 'u1', display_name: 'Ada', avatar_path: null } as Profile;
 const household = { id: 'h-new', name: 'Test Home' } as Household;
 
-async function renderWelcome(auth = new FakeAuthClient({ user: { id: 'u1' } }), api = new FakeApiClient()) {
+async function renderWelcome(
+  auth = new FakeAuthClient({ user: { id: 'u1' } }),
+  api = new FakeApiClient(),
+  entry = '/welcome',
+) {
   auth.profile ??= profile;
   const router = createMemoryRouter(
     [
@@ -30,7 +34,7 @@ async function renderWelcome(auth = new FakeAuthClient({ user: { id: 'u1' } }), 
       { path: '/home', element: <p>home</p> },
       { path: '/signin', element: <p>signin</p> },
     ],
-    { initialEntries: ['/welcome'] },
+    { initialEntries: [entry] },
   );
   render(
     <AuthProvider client={auth}>
@@ -156,7 +160,7 @@ describe('CORE-02: Welcome', () => {
     await renderWelcome(undefined, api);
     submitJoin();
     await flush();
-    expect(api.acceptCalls).toEqual(['ABC123']);
+    expect(api.acceptCalls).toEqual(['abc123']);
     expect(joinButton().disabled).toBe(true);
     expect(joinButton().getAttribute('aria-busy')).toBe('true');
   });
@@ -179,5 +183,28 @@ describe('CORE-02: Welcome', () => {
     await flush();
     expect(router.state.location.pathname).toBe('/home');
     expect(readLastHousehold()).toBe('h-joined');
+  });
+
+  it('CORE-03: ?code= prefills the join card and does not join by itself', async () => {
+    const { api } = await renderWelcome(undefined, undefined, '/welcome?code=0123456789ab');
+    expect((screen.getByLabelText('Invite code') as HTMLInputElement).value).toBe('0123456789ab');
+    expect(api.acceptCalls).toEqual([]);
+  });
+
+  it('CORE-03: a prefilled code is joined on tap', async () => {
+    const api = new FakeApiClient();
+    api.acceptResult = { ok: true, value: { household_id: 'h-joined' } };
+    const { router } = await renderWelcome(undefined, api, '/welcome?code=0123456789ab');
+    fireEvent.click(joinButton());
+    await flush();
+    expect(api.acceptCalls).toEqual(['0123456789ab']);
+    expect(router.state.location.pathname).toBe('/home');
+  });
+
+  it('CORE-03: a typed code is lowercased on submit', async () => {
+    const { api } = await renderWelcome();
+    submitJoin('  0123ABCDEF45 ');
+    await flush();
+    expect(api.acceptCalls).toEqual(['0123abcdef45']);
   });
 });
