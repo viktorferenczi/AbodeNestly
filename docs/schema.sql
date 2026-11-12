@@ -188,15 +188,28 @@ create table invite (
   sync_seq      bigint not null default nextval('sync_seq_global')
 );
 call setup_scoped('invite');
+-- Only owners may mint owner invites; members may create member invites.
+drop policy invite_insert on invite;
+create policy invite_insert on invite for insert with check (
+  is_member(household_id) and created_by = auth.uid()
+  and (role = 'member' or is_owner(household_id)));
 
 create or replace function accept_invite(p_code text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare inv invite;
 begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated' using errcode = '42501';
+  end if;
   select * into inv from invite
    where code = p_code and deleted_at is null and expires_at > now() and uses < max_uses
    for update;
   if not found then raise exception 'invalid_invite'; end if;
+  -- Already an active member: no-op (no demotion, no use burned).
+  if exists (select 1 from member
+              where household_id = inv.household_id and user_id = auth.uid() and left_at is null) then
+    return inv.household_id;
+  end if;
   insert into member(household_id, user_id, role) values (inv.household_id, auth.uid(), inv.role)
     on conflict (household_id, user_id) do update set left_at = null, role = excluded.role;
   update invite set uses = uses + 1 where id = inv.id;
