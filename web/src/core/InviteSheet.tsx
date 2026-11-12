@@ -61,7 +61,7 @@ export function InviteSheet({ householdId, onClose }: { householdId: string; onC
   }
 
   async function onCopyCode() {
-    if (!invite) return;
+    if (!invite || rotating) return;
     setNotice((await copyText(invite.code)) ? 'Code copied' : "Couldn't copy. Select the code instead.");
   }
 
@@ -70,7 +70,7 @@ export function InviteSheet({ householdId, onClose }: { householdId: string; onC
   }
 
   async function onShare() {
-    if (!invite || !online) return;
+    if (!invite || !online || rotating) return;
     const url = inviteLink(location.origin, invite.code);
     if (typeof navigator.share !== 'function') return copyLink(url);
     try {
@@ -83,7 +83,7 @@ export function InviteSheet({ householdId, onClose }: { householdId: string; onC
 
   const failed = state.kind === 'error';
   const sharing = (
-    <button type="button" className={styles.primary} disabled={!online || !invite} onClick={() => void onShare()}>
+    <button type="button" className={styles.primary} disabled={!online || !invite || rotating} onClick={() => void onShare()}>
       Share link
     </button>
   );
@@ -96,10 +96,10 @@ export function InviteSheet({ householdId, onClose }: { householdId: string; onC
         {invite ? (
           <>
             <div className={styles.codeRow}>
-              <code className={styles.code} aria-label="Invite code">
+              <code className={styles.code} aria-label={`Invite code ${invite.code}`}>
                 {invite.code}
               </code>
-              <button type="button" className={styles.secondary} onClick={() => void onCopyCode()}>
+              <button type="button" className={styles.secondary} disabled={rotating} onClick={() => void onCopyCode()}>
                 Copy
               </button>
             </div>

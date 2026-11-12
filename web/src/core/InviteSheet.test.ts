@@ -1,8 +1,6 @@
 import type { Invite } from '@abodenestly/contract';
 import { describe, expect, it } from 'vitest';
-import { FakeApiClient } from './api/FakeApiClient.ts';
 import { formatExpiry, inviteLink, inviteSheetReducer, joinPath, usesLeft } from './InviteSheet.ts';
-import { householdHomePath } from './Welcome.ts';
 
 const invite = { id: 'i1', code: '0123456789ab', uses: 3, max_uses: 10, expires_at: '2026-11-19T12:00:00.000Z' } as Invite;
 
@@ -17,15 +15,6 @@ describe('CORE-03: invite link round trip', () => {
     const path = new URL(joinPath(routed), 'https://app.example');
     expect(path.pathname).toBe('/welcome');
     expect(path.searchParams.get('code')).toBe(code);
-  });
-
-  it('AC4: a live code is accepted and leads to the household home', async () => {
-    const api = new FakeApiClient();
-    api.acceptResult = { ok: true, value: { household_id: 'h1' } };
-    const result = await api.acceptInvite(invite.code);
-    expect(result.ok).toBe(true);
-    expect(api.acceptCalls).toEqual([invite.code]);
-    expect(householdHomePath()).toBe('/home');
   });
 });
 

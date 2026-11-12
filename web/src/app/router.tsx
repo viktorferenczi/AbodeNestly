@@ -10,7 +10,7 @@ import { Placeholder } from './Placeholder.tsx';
 import { Shell } from './Shell.tsx';
 
 // An invite link opens the join card with the code filled in; joining still needs a tap.
-function JoinRedirect() {
+export function JoinRedirect() {
   const { code = '' } = useParams();
   return <Navigate to={joinPath(code)} replace />;
 }

@@ -42,7 +42,7 @@ async function renderSheet(api = new FakeApiClient(), onClose = () => {}) {
   return api;
 }
 
-const code = () => screen.getByLabelText('Invite code').textContent;
+const code = () => screen.getByLabelText(/^Invite code /).textContent;
 const newCodeButton = () => screen.getByRole('button', { name: 'New code' }) as HTMLButtonElement;
 const shareButton = () => screen.getByRole('button', { name: 'Share link' }) as HTMLButtonElement;
 
@@ -71,6 +71,7 @@ describe('CORE-03: InviteSheet', () => {
     await renderSheet(api);
     expect(screen.getByRole('dialog', { name: 'Invite to household' })).toBeTruthy();
     expect(code()).toBe(OLD.code);
+    expect(screen.getByLabelText(`Invite code ${OLD.code}`)).toBeTruthy();
     expect(screen.getByText(`7 uses left · Expires ${formatExpiry(EXPIRES)}`)).toBeTruthy();
     expect(api.createInviteCalls).toEqual([]);
   });
@@ -102,6 +103,22 @@ describe('CORE-03: InviteSheet', () => {
     await flush();
     expect(written).toEqual([OLD.code]);
     expect(screen.getByText('Code copied')).toBeTruthy();
+  });
+
+  it('CORE-03: Tab stays inside the sheet and the page behind is inert', async () => {
+    const api = new FakeApiClient();
+    api.fetchInviteResult = { ok: true, value: OLD };
+    await renderSheet(api);
+    const dialog = screen.getByRole('dialog');
+    const close = screen.getByRole('button', { name: 'Close' });
+    const share = shareButton();
+    share.focus();
+    fireEvent.keyDown(share, { key: 'Tab' });
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(share);
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    expect(document.querySelectorAll('body > [inert]').length).toBeGreaterThan(0);
   });
 
   it('CORE-03: Esc and Close both call onClose', async () => {
@@ -161,6 +178,9 @@ describe('CORE-03: InviteSheet', () => {
     await flush();
     expect(newCodeButton().disabled).toBe(true);
     expect(newCodeButton().getAttribute('aria-busy')).toBe('true');
+    // The old code is about to be retired, so it must not be handed out meanwhile.
+    expect(shareButton().disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Copy' }) as HTMLButtonElement).disabled).toBe(true);
     api.pending = false;
     api.resolvePending();
     await flush();
