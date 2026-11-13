@@ -1,6 +1,7 @@
 package com.abodenestly.core
 
 import com.abodenestly.contract.models.Household
+import com.abodenestly.contract.models.Invite
 import com.abodenestly.contract.models.Profile
 import com.abodenestly.core.auth.AuthSession
 import com.abodenestly.core.auth.LandingHousehold
@@ -29,4 +30,19 @@ object Fixtures {
         pantry: Boolean = true,
         maintenance: Boolean = true,
     ) = Membership(id(n), Instant.EPOCH.plusSeconds(joinedDay * 86_400), LandingHousehold(id(n), shopping, pantry, maintenance))
+
+    /** 19 Nov 2026, noon UTC: the same day in every zone from UTC-11 to UTC+11. */
+    val expiry: OffsetDateTime = OffsetDateTime.parse("2026-11-19T12:00:00Z")
+
+    fun invite(
+        code: String = "abc123def456",
+        id: UUID = UUID.randomUUID(),
+        uses: Int = 0,
+        maxUses: Int = 10,
+        role: Invite.Role = Invite.Role.member,
+        householdId: UUID = id(1),
+    ) = Invite(
+        id, householdId, code, role, userId, expiry, maxUses, uses,
+        createdAt = OffsetDateTime.now(), updatedAt = OffsetDateTime.now(), deletedAt = null, syncSeq = 1,
+    )
 }

@@ -87,7 +87,7 @@ Two environments, `dev` and `prod`, each with its own Supabase project and Verce
 | `api/` | `.env.development`, `.env.production` (Vercel env vars in the dashboard; local via `vercel env pull`) | `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_JWKS_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `API_BASE_URL`, `CRON_SECRET`, push keys |
 | `web/` | `.env.development`, `.env.production` (Vite) | `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_VAPID_PUBLIC_KEY` |
 | `apps/ios/` | `Config/Dev.xcconfig`, `Config/Prod.xcconfig` → `Info.plist` keys, read via `Bundle.main.infoDictionary` | `API_BASE_URL`, `WEB_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` |
-| `apps/android/` | `app/src/dev/`, `app/src/prod/` product flavors reading `env/dev.properties`, `env/prod.properties` into `BuildConfig` | `API_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` |
+| `apps/android/` | `app/src/dev/`, `app/src/prod/` product flavors reading `env/dev.properties`, `env/prod.properties` into `BuildConfig` | `API_BASE_URL`, `WEB_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` |
 
 `.env.development` and `*.example` files are committed; `.env.production`, `Prod.xcconfig` and `prod.properties` are git-ignored and provided by CI secrets.
 

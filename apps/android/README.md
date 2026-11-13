@@ -18,6 +18,12 @@ curl -si "<verify URL from the email>" | grep -i '^location:'
 adb shell am start -a android.intent.action.VIEW -d "abodenestly-dev://auth/callback?code=…"
 ```
 
+### Web base URL
+
+`WEB_BASE_URL` (`env/*.properties` → `BuildConfig`) is the web app's origin; the invite sheet shares
+`<WEB_BASE_URL>/join/<code>`, which web routes to its join card. Dev is `http://localhost:5173`, not `10.0.2.2`:
+the link is for other devices. App Links come with the production domain.
+
 ### Callback URL scheme
 
 Magic link, Apple and Google all return to a custom scheme: `abodenestly-dev://auth/callback` (dev flavor) and

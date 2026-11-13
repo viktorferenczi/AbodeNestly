@@ -13,7 +13,7 @@ fun envProperties(flavor: String): Properties = Properties().apply {
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
-val envKeys = listOf("API_BASE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY")
+val envKeys = listOf("API_BASE_URL", "WEB_BASE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY")
 
 android {
     namespace = "com.abodenestly.app"

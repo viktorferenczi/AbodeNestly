@@ -171,7 +171,7 @@ class WelcomeTest {
         val vm = welcome()
         vm.onCodeChange(" ABC123 ")
         vm.join()
-        assertEquals(listOf<Call>(Call.AcceptInvite("ABC123")), api.calls)
+        assertEquals(listOf<Call>(Call.AcceptInvite("abc123")), api.calls)
         assertEquals(WelcomeState.ErrorInvalidCode, vm.state.value)
         assertEquals(" ABC123 ", vm.code.value)
     }

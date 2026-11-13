@@ -2,6 +2,7 @@ package com.abodenestly.core.api
 
 import com.abodenestly.contract.infrastructure.Serializer
 import com.abodenestly.contract.models.Household
+import com.abodenestly.contract.models.Invite
 import com.abodenestly.core.auth.AuthService
 import com.abodenestly.shared.AppConfig
 import kotlinx.coroutines.CancellationException
@@ -10,7 +11,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -18,6 +23,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -59,23 +67,75 @@ class HttpApiService(
             .fold({ ApiResult.Success(it) }, { ApiResult.Failure(ApiFailure.Unknown) })
     }
 
+    override suspend fun createInvite(householdId: UUID): ApiResult<Invite> = guarded {
+        val url = url { addPathSegment("households"); addPathSegment(householdId.toString()); addPathSegment("invites") }
+        val reply = post(url, "{}")
+        if (reply.status != 201) return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        runCatching { Serializer.kotlinxSerializationJson.decodeFromString(Invite.serializer(), reply.body) }
+            .fold({ ApiResult.Success(it) }, { ApiResult.Failure(ApiFailure.Unknown) })
+    }
+
+    override suspend fun fetchLiveInvite(householdId: UUID): ApiResult<Invite?> = guarded {
+        val url = restUrl(
+            "household_id" to "eq.$householdId",
+            "deleted_at" to "is.null",
+            "expires_at" to "gt.${timestamp()}",
+            "order" to "created_at.desc",
+        )
+        val reply = perform(url, "GET", restHeaders())
+        if (reply.status != 200) return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        runCatching {
+            Serializer.kotlinxSerializationJson.decodeFromString(ListSerializer(Invite.serializer()), reply.body)
+        }.fold(
+            // PostgREST cannot compare two columns, so `uses < max_uses` is filtered here.
+            { invites -> ApiResult.Success(invites.firstOrNull { it.uses < it.maxUses }) },
+            { ApiResult.Failure(ApiFailure.Unknown) },
+        )
+    }
+
+    override suspend fun retireInvite(id: UUID): ApiResult<Unit> = guarded {
+        val body = buildJsonObject { put("deleted_at", timestamp()) }.toString()
+        val headers = restHeaders() + ("Prefer" to "return=representation")
+        val reply = perform(restUrl("id" to "eq.$id"), "PATCH", headers, body)
+        // RLS hides rows silently, so an empty array means nothing was retired.
+        val retired = reply.status in 200..299 &&
+            (runCatching { lenient.parseToJsonElement(reply.body) }.getOrNull() as? JsonArray)?.isNotEmpty() == true
+        if (retired) ApiResult.Success(Unit) else ApiResult.Failure(ApiFailure.Unknown)
+    }
+
     // MARK: Transport
 
     private class Reply(val status: Int, val body: String)
 
     private fun url(build: HttpUrl.Builder.() -> Unit): HttpUrl = config.apiBaseUrl.toHttpUrl().newBuilder().apply(build).build()
 
-    private suspend fun post(url: HttpUrl, body: String): Reply {
-        val first = send(url, body, auth.accessToken(refresh = false))
+    /** `<supabaseUrl>/rest/v1/invite?…`; query values are percent-encoded by OkHttp. */
+    private fun restUrl(vararg query: Pair<String, String>): HttpUrl =
+        config.supabaseUrl.trimEnd('/').plus("/rest/v1/invite").toHttpUrl().newBuilder()
+            .apply { query.forEach { (key, value) -> addQueryParameter(key, value) } }
+            .build()
+
+    private fun restHeaders(): Map<String, String> = mapOf("apikey" to config.supabaseAnonKey)
+
+    private suspend fun post(url: HttpUrl, body: String): Reply = perform(url, "POST", emptyMap(), body)
+
+    /** Sends with the user's JWT; on a 401 refreshes the session once and retries. */
+    private suspend fun perform(url: HttpUrl, method: String, headers: Map<String, String>, body: String? = null): Reply {
+        val first = send(url, method, headers, body, auth.accessToken(refresh = false))
         if (first.status != 401) return first
-        return send(url, body, auth.accessToken(refresh = true))
+        return send(url, method, headers, body, auth.accessToken(refresh = true))
     }
 
-    private suspend fun send(url: HttpUrl, body: String, token: String?): Reply = withContext(Dispatchers.IO) {
+    private suspend fun send(
+        url: HttpUrl, method: String, headers: Map<String, String>, body: String?, token: String?,
+    ): Reply = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url)
-            .post(body.toRequestBody(JSON))
+            .method(method, body?.toRequestBody(JSON))
             .header("Accept", "application/json")
-            .apply { if (token != null) header("Authorization", "Bearer $token") }
+            .apply {
+                headers.forEach { (name, value) -> header(name, value) }
+                if (token != null) header("Authorization", "Bearer $token")
+            }
             .build()
         http.newCall(request).execute().use { Reply(it.code, it.body?.string().orEmpty()) }
     }
@@ -109,6 +169,10 @@ class HttpApiService(
         private const val TIMEOUT_SECONDS = 15L
         private val JSON = "application/json".toMediaType()
         private val lenient = Json { ignoreUnknownKeys = true }
+
+        /** ISO 8601 UTC with an explicit offset, which PostgREST accepts in `gt.` filters and `timestamptz` bodies. */
+        private fun timestamp(now: OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)): String =
+            DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(now)
 
         private fun errorCode(body: String): String? =
             runCatching { lenient.decodeFromString(ErrorBody.serializer(), body).error?.code }.getOrNull()

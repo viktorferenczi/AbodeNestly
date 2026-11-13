@@ -87,7 +87,8 @@ class WelcomeViewModel(
 
     fun join() {
         if (isBusy) return
-        val trimmed = mutableCode.value.trim()
+        // Codes are lowercase hex, so a pasted or auto-capitalised "ABC123" still works (matches iOS and web).
+        val trimmed = mutableCode.value.trim().lowercase()
         if (trimmed.isEmpty()) {
             mutableState.value = WelcomeState.JoinError(ApiFailure.Validation)
             return
