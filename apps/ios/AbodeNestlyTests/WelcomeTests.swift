@@ -162,7 +162,8 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 struct HttpApiServiceTests {
     private let config = AppConfig(
         apiBaseURL: URL(string: "http://api.test")!, supabaseURL: URL(string: "http://supabase.test")!,
-        supabaseAnonKey: "anon", authURLScheme: "abodenestly-dev"
+        supabaseAnonKey: "anon", authURLScheme: "abodenestly-dev",
+        webBaseURL: URL(string: "http://localhost:5173")!
     )
 
     private func makeService(_ auth: FakeAuthService) -> HttpApiService {
@@ -247,9 +248,91 @@ struct HttpApiServiceTests {
         #expect(seen.withLock { $0 }?.path(percentEncoded: true) == "/invites/AB%2F12%20x/accept")
     }
 
+    private static func inviteJSON(_ invite: Invite) -> String {
+        """
+        {"id":"\(invite.id)","household_id":"\(invite.householdId)","code":"\(invite.code)","role":"member",
+         "created_by":"\(invite.createdBy)","expires_at":"2026-11-19T09:46:40.123456+00:00","max_uses":10,"uses":\(invite.uses),
+         "created_at":"2026-11-12T09:46:40.5Z","updated_at":"2026-11-12T09:46:40Z","deleted_at":null,"sync_seq":1}
+        """
+    }
+
+    @Test("CORE-03: createInvite posts {} to /households/{id}/invites and decodes the 201")
+    func createInviteHttp() async throws {
+        let invite = makeInvite()
+        let seen = OSAllocatedUnfairLock<[URLRequest]>(initialState: [])
+        StubURLProtocol.handler.withLock {
+            $0 = { request in
+                seen.withLock { $0.append(request) }
+                return (201, Data(Self.inviteJSON(invite).utf8))
+            }
+        }
+        let result = await makeService(FakeAuthService()).createInvite(householdId: invite.householdId)
+        #expect(try result.get().code == invite.code)
+        let request = try #require(seen.withLock { $0.first })
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path == "/households/\(invite.householdId.uuidString.lowercased())/invites")
+        StubURLProtocol.handler.withLock { $0 = { _ in (400, Data()) } }
+        #expect(await makeService(FakeAuthService()).createInvite(householdId: UUID()) == .failure(.unknown))
+        StubURLProtocol.handler.withLock { $0 = { _ in throw URLError(.notConnectedToInternet) } }
+        #expect(await makeService(FakeAuthService()).createInvite(householdId: UUID()) == .failure(.network))
+    }
+
+    @Test("CORE-03: fetchLiveInvite queries PostgREST with apikey and picks the first invite with uses left")
+    func fetchLiveHttp() async throws {
+        let used = makeInvite(code: "used00000000", uses: 10), free = makeInvite(code: "free00000000", uses: 2)
+        let seen = OSAllocatedUnfairLock<[URLRequest]>(initialState: [])
+        StubURLProtocol.handler.withLock {
+            $0 = { request in
+                seen.withLock { $0.append(request) }
+                return (200, Data("[\(Self.inviteJSON(used)),\(Self.inviteJSON(free))]".utf8))
+            }
+        }
+        let result = await makeService(FakeAuthService()).fetchLiveInvite(householdId: free.householdId)
+        #expect(try result.get()?.code == "free00000000")
+        let request = try #require(seen.withLock { $0.first })
+        #expect(request.httpMethod == "GET")
+        #expect(request.url?.path == "/rest/v1/invite")
+        let query = request.url?.query ?? ""
+        #expect(query.contains("household_id=eq.\(free.householdId.uuidString.lowercased())"))
+        #expect(query.contains("deleted_at=is.null") && query.contains("expires_at=gt.") && query.contains("order=created_at.desc"))
+        #expect(request.value(forHTTPHeaderField: "apikey") == "anon")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fake-token")
+
+        StubURLProtocol.handler.withLock { $0 = { _ in (200, Data("[]".utf8)) } }
+        #expect(try await makeService(FakeAuthService()).fetchLiveInvite(householdId: UUID()).get() == nil)
+        StubURLProtocol.handler.withLock { $0 = { _ in (500, Data()) } }
+        #expect(await makeService(FakeAuthService()).fetchLiveInvite(householdId: UUID()) == .failure(.unknown))
+    }
+
+    @Test("CORE-03: retireInvite patches deleted_at; an empty result (RLS) is a failure")
+    func retireHttp() async throws {
+        let id = UUID()
+        let seen = OSAllocatedUnfairLock<[URLRequest]>(initialState: [])
+        StubURLProtocol.handler.withLock {
+            $0 = { request in
+                seen.withLock { $0.append(request) }
+                return (200, Data(#"[{"id":"x"}]"#.utf8))
+            }
+        }
+        #expect(await makeService(FakeAuthService()).retireInvite(id: id).failure == nil)
+        let request = try #require(seen.withLock { $0.first })
+        #expect(request.httpMethod == "PATCH")
+        #expect(request.url?.query == "id=eq.\(id.uuidString.lowercased())")
+        #expect(request.value(forHTTPHeaderField: "Prefer") == "return=representation")
+
+        StubURLProtocol.handler.withLock { $0 = { _ in (200, Data("[]".utf8)) } }
+        #expect(await makeService(FakeAuthService()).retireInvite(id: id).failure == .unknown)
+    }
+
     @Test("CORE-02: an unknown code is invalidCode")
     func acceptInvalid() async {
         StubURLProtocol.handler.withLock { $0 = { _ in (404, Data(#"{"error":{"code":"not_found"}}"#.utf8)) } }
         #expect(await makeService(FakeAuthService()).acceptInvite(code: "nope") == .failure(.invalidCode))
     }
+}
+
+
+extension Result {
+    /// The failure, if any; lets tests compare `Result<Void, _>`, which is not `Equatable`.
+    var failure: Failure? { if case .failure(let error) = self { error } else { nil } }
 }

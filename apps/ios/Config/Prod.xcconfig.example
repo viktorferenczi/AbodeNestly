@@ -1,6 +1,7 @@
 // Copy to Prod.xcconfig (git-ignored); CI writes it from secrets. Never commit real values.
 PRODUCT_BUNDLE_IDENTIFIER = com.abodenestly.app
 API_BASE_URL = https:/$()/<api-domain>
+WEB_BASE_URL = https:/$()/<web-domain>
 SUPABASE_URL = https:/$()/<project-ref>.supabase.co
 AUTH_URL_SCHEME = abodenestly
 SUPABASE_ANON_KEY =

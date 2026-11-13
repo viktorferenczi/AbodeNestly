@@ -7,12 +7,15 @@ public struct AppConfig: Sendable, Equatable {
     public let supabaseAnonKey: String
     /// Custom URL scheme for auth callbacks, e.g. `abodenestly-dev`.
     public let authURLScheme: String
+    /// Origin of the web app; invite links are `<webBaseURL>/join/<code>`.
+    public let webBaseURL: URL
 
-    public init(apiBaseURL: URL, supabaseURL: URL, supabaseAnonKey: String, authURLScheme: String) {
+    public init(apiBaseURL: URL, supabaseURL: URL, supabaseAnonKey: String, authURLScheme: String, webBaseURL: URL) {
         self.apiBaseURL = apiBaseURL
         self.supabaseURL = supabaseURL
         self.supabaseAnonKey = supabaseAnonKey
         self.authURLScheme = authURLScheme
+        self.webBaseURL = webBaseURL
     }
 
     /// The URL Supabase redirects to after a magic link or OAuth round trip.
@@ -41,7 +44,8 @@ public struct AppConfig: Sendable, Equatable {
             supabaseURL: url("SUPABASE_URL"),
             // The anon key may be blank until Dev.local.xcconfig is filled in; requests will 401, not crash.
             supabaseAnonKey: (info["SUPABASE_ANON_KEY"] as? String) ?? "",
-            authURLScheme: string("AUTH_URL_SCHEME")
+            authURLScheme: string("AUTH_URL_SCHEME"),
+            webBaseURL: url("WEB_BASE_URL")
         )
     }
 }
