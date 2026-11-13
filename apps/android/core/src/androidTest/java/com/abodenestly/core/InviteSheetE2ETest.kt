@@ -18,6 +18,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
@@ -117,7 +119,7 @@ class InviteSheetE2ETest {
 
         // Sign out; user B signs in, enters the code on Welcome and lands on Home.
         rule.onNodeWithTag("home.signout").performClick()
-        rule.waitUntil(10_000) { exists("signin.title") }
+        awaitTag("signin.title", 10_000)
         signIn = SignInViewModel(auth, config.authCallbackUrl)
         signInThroughMagicLink(auth, joiner)
         rule.waitUntil(15_000) { exists("welcome.title") }
@@ -154,17 +156,26 @@ class InviteSheetE2ETest {
                 is Destination.Household -> if (destination.tab == AppTab.Home) {
                     var members by rememberSaveable { mutableStateOf(false) }
                     Column {
+                        TextButton(onClick = session::signOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
                         if (members) {
-                            MembersScreen(destination.id, api, isOnline = true, webBaseUrl = webBaseUrl)
+                            MembersScreen(destination.id, api, isOnline = true, webBaseUrl = webBaseUrl, modifier = Modifier.weight(1f))
                         } else {
                             Text("Home", modifier = Modifier.testTag("tab.home.content"))
                             TextButton(onClick = { members = true }, modifier = Modifier.testTag("home.members")) { Text("Members") }
                         }
-                        TextButton(onClick = session::signOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
                     }
                 }
                 else -> Unit
             }
+        }
+    }
+
+    /** Waits for [tag]; a timeout carries the visible UI tree so a CI log shows where the journey stopped. */
+    private fun awaitTag(tag: String, millis: Long = 15_000) {
+        try {
+            rule.waitUntil(millis) { exists(tag) }
+        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("No '$tag' after $millis ms. UI:\n" + rule.onRoot(useUnmergedTree = true).printToString(), e)
         }
     }
 
