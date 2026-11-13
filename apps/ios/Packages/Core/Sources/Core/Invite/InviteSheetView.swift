@@ -86,7 +86,11 @@ public struct InviteSheetView: View {
                     .accessibilityLabel("Invite code \(invite.code)")
                     .accessibilityIdentifier("invite.code")
                 Spacer(minLength: 0)
-                Button("Copy") { model.copyCode() }
+                Button("Copy") {
+                    model.copyCode()
+                    // Posted per tap (not via onChange) so a repeat copy is announced too.
+                    if let notice = model.notice { AccessibilityNotification.Announcement(notice).post() }
+                }
                     .buttonStyle(.bordered)
                     .tint(Tokens.accent)
                     .frame(minHeight: Tokens.minTouchTarget)
