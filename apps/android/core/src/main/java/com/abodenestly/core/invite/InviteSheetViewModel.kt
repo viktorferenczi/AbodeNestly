@@ -100,12 +100,13 @@ class InviteSheetViewModel(
     }
 
     companion object {
-        /** `<base>/join/<code>`; web routes it to the Welcome join card. The code is one path segment, so `/` and `?` stay inert. */
-        fun link(base: String, code: String): String {
-            val root = base.trimEnd('/')
-            val url = root.toHttpUrlOrNull() ?: return root
-            return url.newBuilder().addPathSegment("join").addPathSegment(code).build().toString()
-        }
+        /**
+         * `<base>/join/<code>`; web routes it to the Welcome join card. The code is one path segment, so `/` and `?`
+         * stay inert. `null` when [base] is blank or not an HTTP(S) URL, so Share is disabled instead of sending a codeless link.
+         */
+        fun link(base: String, code: String): String? =
+            base.trimEnd('/').toHttpUrlOrNull()
+                ?.newBuilder()?.addPathSegment("join")?.addPathSegment(code)?.build()?.toString()
 
         fun usesLeft(invite: Invite): Int = invite.maxUses - invite.uses
 

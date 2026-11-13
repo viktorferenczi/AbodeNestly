@@ -24,6 +24,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.ZoneOffset
@@ -39,7 +40,7 @@ class InviteSheetTest {
     private fun sheet() = InviteSheetViewModel(household, api, copy = { copied += it }, scope = scope())
 
     @Test
-    fun `AC4 a pasted upper-case code with spaces is joined lowercase and lands on Home`() {
+    fun `CORE-03 - AC4 a pasted upper-case code with spaces is joined lowercase and lands on Home`() {
         val auth = FakeAuthService(Fixtures.session)
         auth.memberships = Fetch.Success(emptyList())
         val last = InMemoryLastHouseholdStore()
@@ -63,7 +64,7 @@ class InviteSheetTest {
     }
 
     @Test
-    fun `a live invite is shown and none is created`() {
+    fun `CORE-03 - a live invite is shown and none is created`() {
         val live = invite()
         api.liveInviteResult = ApiResult.Success(live)
         val vm = sheet()
@@ -73,7 +74,7 @@ class InviteSheetTest {
     }
 
     @Test
-    fun `with no live invite one is created`() {
+    fun `CORE-03 - with no live invite one is created`() {
         val created = invite("fedcba654321")
         api.createInviteResult = ApiResult.Success(created)
         val vm = sheet()
@@ -83,7 +84,7 @@ class InviteSheetTest {
     }
 
     @Test
-    fun `a failed load is an error without an invite and Try again can recover`() {
+    fun `CORE-03 - a failed load is an error without an invite and Try again can recover`() {
         api.liveInviteResult = ApiResult.Failure(ApiFailure.Network)
         val vm = sheet()
         vm.loadIfNeeded()
@@ -96,7 +97,7 @@ class InviteSheetTest {
     }
 
     @Test
-    fun `AC2 New code creates the new invite, then retires the old one`() {
+    fun `CORE-03 - AC2 New code creates the new invite, then retires the old one`() {
         val old = invite("aaaaaaaaaaaa")
         val fresh = invite("bbbbbbbbbbbb")
         api.liveInviteResult = ApiResult.Success(old)
@@ -113,7 +114,7 @@ class InviteSheetTest {
     }
 
     @Test
-    fun `AC2 a failed retire keeps the new code and sets oldCodeMayWork`() {
+    fun `CORE-03 - AC2 a failed retire keeps the new code and sets oldCodeMayWork`() {
         val old = invite("aaaaaaaaaaaa")
         val fresh = invite("bbbbbbbbbbbb")
         api.liveInviteResult = ApiResult.Success(old)
@@ -127,7 +128,7 @@ class InviteSheetTest {
     }
 
     @Test
-    fun `a failed create keeps the old invite and retires nothing`() {
+    fun `CORE-03 - a failed create keeps the old invite and retires nothing`() {
         val old = invite("aaaaaaaaaaaa")
         api.liveInviteResult = ApiResult.Success(old)
         api.createInviteResult = ApiResult.Failure(ApiFailure.Network)
@@ -139,7 +140,7 @@ class InviteSheetTest {
     }
 
     @Test
-    fun `copy hands the code to the clipboard and shows a notice`() {
+    fun `CORE-03 - copy hands the code to the clipboard and shows a notice`() {
         api.liveInviteResult = ApiResult.Success(invite("abc123def456"))
         val vm = sheet()
         vm.loadIfNeeded()
@@ -149,14 +150,20 @@ class InviteSheetTest {
     }
 
     @Test
-    fun `link joins the base and the code as one encoded path segment`() {
+    fun `CORE-03 - link joins the base and the code as one encoded path segment`() {
         assertEquals("http://localhost:5173/join/abc123", InviteSheetViewModel.link("http://localhost:5173", "abc123"))
         assertEquals("https://app.example.com/join/abc123", InviteSheetViewModel.link("https://app.example.com/", "abc123"))
         assertEquals("http://localhost:5173/join/a%2Fb%3Fc%20d", InviteSheetViewModel.link("http://localhost:5173", "a/b?c d"))
     }
 
     @Test
-    fun `metaText reads uses left and the expiry day`() {
+    fun `CORE-03 - link is null for a blank or invalid base`() {
+        assertNull(InviteSheetViewModel.link("", "abc123"))
+        assertNull(InviteSheetViewModel.link("not a url", "abc123"))
+    }
+
+    @Test
+    fun `CORE-03 - metaText reads uses left and the expiry day`() {
         val utc = ZoneOffset.UTC
         assertEquals("1 use left · Expires 19 Nov", InviteSheetViewModel.metaText(invite(uses = 9), Locale.ENGLISH, utc))
         assertEquals("10 uses left · Expires 19 Nov", InviteSheetViewModel.metaText(invite(uses = 0), Locale.ENGLISH, utc))

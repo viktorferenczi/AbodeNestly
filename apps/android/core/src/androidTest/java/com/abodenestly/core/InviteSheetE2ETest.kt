@@ -83,7 +83,7 @@ class InviteSheetE2ETest {
     }
 
     @Test
-    fun inviteCodeLetsASecondUserJoin() {
+    fun testCORE03_inviteCodeLetsASecondUserJoin() {
         val keys = keys!!
         val owner = owner!!
         val joiner = joiner!!

@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -67,19 +68,21 @@ class InviteSheetComposeTest {
     private fun text(tag: String) = rule.onNodeWithTag(tag, useUnmergedTree = true)
 
     @Test
-    fun `AC1 the code, meta and enabled buttons show with no banner`() {
+    fun `CORE-03 - AC1 the code, meta and enabled buttons show with no banner`() {
         api.liveInviteResult = ApiResult.Success(invite("abc123def456", uses = 0))
         show()
         rule.waitForIdle()
         text("invite.code").assertTextEquals("abc123def456")
-        text("invite.meta").assertTextEquals("10 uses left · Expires 19 Nov")
+        // Locale and zone are the host's, so compare with the formatter and pin only the stable part.
+        text("invite.meta").assertTextEquals(InviteSheetViewModel.metaText(invite("abc123def456", uses = 0)))
+        text("invite.meta").assertTextContains("10 uses left · Expires ", substring = true)
         for (tag in listOf("invite.copy", "invite.newCode", "invite.share")) rule.onNodeWithTag(tag).assertIsEnabled()
         rule.onNodeWithTag("offline-banner").assertDoesNotExist()
         rule.onNodeWithTag("invite.close").assertExists()
     }
 
     @Test
-    fun `AC2 New code swaps in the new code and retires the old one`() {
+    fun `CORE-03 - AC2 New code swaps in the new code and retires the old one`() {
         val old = invite("aaaaaaaaaaaa")
         api.liveInviteResult = ApiResult.Success(old)
         api.createInviteResults.add(ApiResult.Success(invite("bbbbbbbbbbbb")))
@@ -93,7 +96,7 @@ class InviteSheetComposeTest {
     }
 
     @Test
-    fun `AC2 while rotating the spinner shows and Share, Copy and New code are disabled`() {
+    fun `CORE-03 - AC2 while rotating the spinner shows and Share, Copy and New code are disabled`() {
         api.liveInviteResult = ApiResult.Success(invite("aaaaaaaaaaaa"))
         show()
         api.hold()
@@ -105,7 +108,7 @@ class InviteSheetComposeTest {
     }
 
     @Test
-    fun `AC2 a failed retire says the old code may still work`() {
+    fun `CORE-03 - AC2 a failed retire says the old code may still work`() {
         api.liveInviteResult = ApiResult.Success(invite("aaaaaaaaaaaa"))
         api.createInviteResult = ApiResult.Success(invite("bbbbbbbbbbbb"))
         api.retireResult = ApiResult.Failure(ApiFailure.Unknown)
@@ -117,7 +120,7 @@ class InviteSheetComposeTest {
     }
 
     @Test
-    fun `a failed New code keeps the old code and says so`() {
+    fun `CORE-03 - a failed New code keeps the old code and says so`() {
         api.liveInviteResult = ApiResult.Success(invite("aaaaaaaaaaaa"))
         api.createInviteResult = ApiResult.Failure(ApiFailure.Network)
         show()
@@ -129,7 +132,7 @@ class InviteSheetComposeTest {
     }
 
     @Test
-    fun `AC3 Share passes the join link to onShare`() {
+    fun `CORE-03 - AC3 Share passes the join link to onShare`() {
         api.liveInviteResult = ApiResult.Success(invite("abc123def456"))
         show()
         rule.onNodeWithTag("invite.share").performClick()
@@ -137,7 +140,7 @@ class InviteSheetComposeTest {
     }
 
     @Test
-    fun `AC5 offline with an invite shows the banner and disables New code and Share`() {
+    fun `CORE-03 - AC5 offline with an invite shows the banner and disables New code and Share`() {
         // Seed the invite while online, then flip offline in the content directly.
         val live = invite("abc123def456")
         rule.setContent {
@@ -155,7 +158,7 @@ class InviteSheetComposeTest {
     }
 
     @Test
-    fun `AC5 offline with no invite shows Connect and makes no API call`() {
+    fun `CORE-03 - AC5 offline with no invite shows Connect and makes no API call`() {
         show(online = false)
         rule.waitForIdle()
         text("invite.connect").assertTextEquals("Connect to see the invite code.")
@@ -165,7 +168,23 @@ class InviteSheetComposeTest {
     }
 
     @Test
-    fun `Copy shows Code copied`() {
+    fun `CORE-03 - Share is disabled when the web base URL is blank`() {
+        api.liveInviteResult = ApiResult.Success(invite("abc123def456"))
+        val vm = InviteSheetViewModel(id(1), api, copy = {}, scope = CoroutineScope(Job() + Dispatchers.Unconfined))
+        rule.setContent {
+            AbodeTheme {
+                val state by vm.state.collectAsState()
+                androidx.compose.runtime.LaunchedEffect(Unit) { vm.loadIfNeeded() }
+                InviteSheetContent(state, false, null, true, "", {}, {}, { shared += it }, {}, {})
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("invite.share").assertIsNotEnabled()
+        rule.onNodeWithTag("invite.newCode").assertIsEnabled()
+    }
+
+    @Test
+    fun `CORE-03 - Copy shows Code copied`() {
         api.liveInviteResult = ApiResult.Success(invite("abc123def456"))
         show()
         rule.onNodeWithTag("invite.copy").performClick()
@@ -175,7 +194,7 @@ class InviteSheetComposeTest {
     }
 
     @Test
-    fun `a load error shows the message and Try again loads the invite`() {
+    fun `CORE-03 - a load error shows the message and Try again loads the invite`() {
         api.liveInviteResult = ApiResult.Failure(ApiFailure.Network)
         show()
         text("invite.loadError").assertTextEquals("Couldn't load the invite code. Try again.")
@@ -201,8 +220,8 @@ class InviteSheetComposeTest {
     }
 
     @Test
-    fun `owner sees Invite and the sheet opens`() = membersOpensSheet(Invite.Role.owner)
+    fun `CORE-03 - owner sees Invite and the sheet opens`() = membersOpensSheet(Invite.Role.owner)
 
     @Test
-    fun `member sees Invite and the sheet opens`() = membersOpensSheet(Invite.Role.member)
+    fun `CORE-03 - member sees Invite and the sheet opens`() = membersOpensSheet(Invite.Role.member)
 }

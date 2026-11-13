@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -114,7 +115,10 @@ internal fun InviteSheetContent(
     val invite = state.shownInvite
     val rotating = state is InviteSheetState.Rotating
     val failed = state is InviteSheetState.Error
-    val actionsEnabled = isOnline && !rotating && invite != null
+    val shareUrl = invite?.let { InviteSheetViewModel.link(webBaseUrl, it.code) }
+    val actionsEnabled = isOnline && !rotating && shareUrl != null
+    // The notice is a StateFlow value, so a repeat Copy sets the same text and emits nothing; announce from the tap itself.
+    val view = LocalView.current
     Column(
         modifier.testTag("invite.sheet").widthIn(max = 480.dp).fillMaxWidth()
             .verticalScroll(rememberScrollState()).padding(horizontal = Tokens.ScreenPadding).padding(bottom = Tokens.ScreenPadding),
@@ -142,7 +146,11 @@ internal fun InviteSheetContent(
                     modifier = Modifier.weight(1f).testTag("invite.code").semantics { contentDescription = "Invite code ${invite.code}" },
                 )
                 OutlinedButton(
-                    onClick = onCopy, enabled = !rotating,
+                    onClick = {
+                        onCopy()
+                        @Suppress("DEPRECATION") view.announceForAccessibility("Code copied")
+                    },
+                    enabled = !rotating,
                     modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("invite.copy"),
                 ) { Text("Copy", color = if (rotating) Color.Unspecified else tokens.accent) }
             }
@@ -177,7 +185,7 @@ internal fun InviteSheetContent(
             Text(notice, style = MaterialTheme.typography.bodySmall, color = tokens.text2, modifier = Modifier.testTag("invite.notice").semantics { liveRegion = LiveRegionMode.Polite })
         }
         Button(
-            onClick = { invite?.let { onShare(InviteSheetViewModel.link(webBaseUrl, it.code)) } }, enabled = actionsEnabled,
+            onClick = { shareUrl?.let(onShare) }, enabled = actionsEnabled,
             colors = ButtonDefaults.buttonColors(containerColor = tokens.accent, contentColor = Color.White),
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.fillMaxWidth().heightIn(min = Tokens.MinTouchTarget).testTag("invite.share"),
