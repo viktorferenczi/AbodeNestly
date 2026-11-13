@@ -19,9 +19,10 @@ object E2E {
     const val SUPABASE_URL = "http://10.0.2.2:54321"
     const val MAILPIT_URL = "http://10.0.2.2:54324"
     const val API_URL = "http://10.0.2.2:3000"
+    const val WEB_URL = "http://localhost:5173"
 
     class Keys(val anon: String, val serviceRole: String) {
-        fun config() = AppConfig(API_URL, SUPABASE_URL, anon, "abodenestly-dev")
+        fun config() = AppConfig(API_URL, WEB_URL, SUPABASE_URL, anon, "abodenestly-dev")
     }
 
     /** `null` when either key is missing, so the journey can skip with `assumeTrue`. */

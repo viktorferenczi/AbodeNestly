@@ -155,7 +155,7 @@ class WelcomeComposeTest {
         typeCode("ABC123")
         rule.onNodeWithTag("welcome.join").performClick()
         rule.waitForIdle()
-        assertEquals(listOf<Call>(Call.AcceptInvite("ABC123")), api.calls)
+        assertEquals(listOf<Call>(Call.AcceptInvite("abc123")), api.calls)
         assertEquals(listOf<WelcomeOutcome>(WelcomeOutcome.Joined(Fixtures.id(7))), outcomes)
     }
 

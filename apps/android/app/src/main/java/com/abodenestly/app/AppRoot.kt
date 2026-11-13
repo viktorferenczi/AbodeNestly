@@ -1,5 +1,6 @@
 package com.abodenestly.app
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,8 +17,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -25,12 +28,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.abodenestly.core.api.ApiService
 import com.abodenestly.core.auth.AppTab
 import com.abodenestly.core.auth.Destination
 import com.abodenestly.core.auth.LandingHousehold
+import com.abodenestly.core.auth.LastHouseholdStore
 import com.abodenestly.core.auth.SessionState
 import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
+import com.abodenestly.core.members.MembersScreen
 import com.abodenestly.core.signin.SignInScreen
 import com.abodenestly.core.signin.SignInViewModel
 import com.abodenestly.core.welcome.WelcomeScreen
@@ -39,10 +45,19 @@ import com.abodenestly.ui.LocalTokens
 import com.abodenestly.ui.NetworkMonitor
 import com.abodenestly.ui.Tokens
 import com.abodenestly.ui.TopBar
+import java.util.UUID
 
 /** Loading → sign-in → shell. The landing rule (Welcome or the household's start tab) is resolved in [SessionViewModel]. */
 @Composable
-fun AppRoot(session: SessionViewModel, signIn: SignInViewModel, welcome: WelcomeViewModel, network: NetworkMonitor) {
+fun AppRoot(
+    session: SessionViewModel,
+    signIn: SignInViewModel,
+    welcome: WelcomeViewModel,
+    network: NetworkMonitor,
+    api: ApiService,
+    lastHousehold: LastHouseholdStore,
+    webBaseUrl: String,
+) {
     val state by session.state.collectAsState()
     val online by network.isOnline.collectAsState()
     // Edge-to-edge is on (targetSdk 35): the background runs under the system bars, the content stays clear of them.
@@ -50,7 +65,10 @@ fun AppRoot(session: SessionViewModel, signIn: SignInViewModel, welcome: Welcome
         when (state.status) {
             SessionStatus.Loading -> Box(Modifier.fillMaxSize().testTag("session.loading"))
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = online)
-            SessionStatus.SignedIn -> SignedInShell(state, welcome, isOnline = online, onRetry = session::retry, onSignOut = session::signOut)
+            SessionStatus.SignedIn -> SignedInShell(
+                state, welcome, api, lastHousehold, webBaseUrl,
+                isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
+            )
         }
     }
 }
@@ -59,6 +77,9 @@ fun AppRoot(session: SessionViewModel, signIn: SignInViewModel, welcome: Welcome
 private fun SignedInShell(
     state: SessionState,
     welcome: WelcomeViewModel,
+    api: ApiService,
+    lastHousehold: LastHouseholdStore,
+    webBaseUrl: String,
     isOnline: Boolean,
     onRetry: () -> Unit,
     onSignOut: () -> Unit,
@@ -74,7 +95,7 @@ private fun SignedInShell(
                 state.destination == null -> Centered { CircularProgressIndicator(Modifier.testTag("session.loading")) }
                 state.destination == Destination.Welcome ->
                     WelcomeScreen(welcome, displayName = state.profile?.displayName, isOnline = isOnline, onSignOut = onSignOut)
-                else -> Tabs(state.destination, state.household, onSignOut)
+                else -> Tabs(state.destination, state.household, api, lastHousehold, webBaseUrl, isOnline, onSignOut)
             }
         }
     }
@@ -82,7 +103,15 @@ private fun SignedInShell(
 
 /** Bottom tabs, hidden for disabled modules (DESIGN A6). Content is a placeholder until the module stories land. */
 @Composable
-private fun Tabs(destination: Destination?, household: LandingHousehold?, onSignOut: () -> Unit) {
+private fun Tabs(
+    destination: Destination?,
+    household: LandingHousehold?,
+    api: ApiService,
+    lastHousehold: LastHouseholdStore,
+    webBaseUrl: String,
+    isOnline: Boolean,
+    onSignOut: () -> Unit,
+) {
     val start = (destination as? Destination.Household)?.tab ?: AppTab.Home
     val tabs = buildList {
         if (household?.moduleShopping == true) add(AppTab.Shopping)
@@ -91,11 +120,27 @@ private fun Tabs(destination: Destination?, household: LandingHousehold?, onSign
         add(AppTab.Home)
     }
     var selected by rememberSaveable(destination) { mutableStateOf(start) }
+    // No NavHost yet, so Members is a flag over the Home tab. The household may be unknown offline at launch; fall back to the last one used.
+    var showMembers by rememberSaveable(destination) { mutableStateOf(false) }
+    var householdId by remember { mutableStateOf<UUID?>(household?.id) }
+    LaunchedEffect(household) { householdId = household?.id ?: lastHousehold.read() }
+    val members = householdId
+    if (showMembers && members != null) {
+        BackHandler { showMembers = false }
+        Column(Modifier.fillMaxSize()) {
+            TextButton(onClick = { showMembers = false }, modifier = Modifier.testTag("members.back")) { Text("Back") }
+            MembersScreen(members, api, isOnline, webBaseUrl, Modifier.weight(1f))
+        }
+        return
+    }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().testTag("tab.${selected.key}.content"), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(selected.key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.headlineMedium)
-                if (selected == AppTab.Home) TextButton(onClick = onSignOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
+                if (selected == AppTab.Home) {
+                    if (members != null) TextButton(onClick = { showMembers = true }, modifier = Modifier.testTag("home.members")) { Text("Members") }
+                    TextButton(onClick = onSignOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
+                }
             }
         }
         NavigationBar(containerColor = LocalTokens.current.surface) {

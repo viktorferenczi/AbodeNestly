@@ -25,6 +25,7 @@ import kotlinx.coroutines.SupervisorJob
 class AppGraph(context: Context) {
     val config = AppConfig(
         apiBaseUrl = BuildConfig.API_BASE_URL,
+        webBaseUrl = BuildConfig.WEB_BASE_URL,
         supabaseUrl = BuildConfig.SUPABASE_URL,
         supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
         authScheme = BuildConfig.AUTH_URL_SCHEME,
