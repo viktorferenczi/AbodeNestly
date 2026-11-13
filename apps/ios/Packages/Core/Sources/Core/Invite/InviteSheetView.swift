@@ -65,7 +65,6 @@ public struct InviteSheetView: View {
         .onChange(of: announcement) { _, message in
             if let message { AccessibilityNotification.Announcement(message).post() }
         }
-        .accessibilityIdentifier("invite.sheet")
     }
 
     private var announcement: String? {

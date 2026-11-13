@@ -47,8 +47,9 @@ final class InviteSheetUITests: XCTestCase {
         appA.buttons["home.members"].tap()
         appA.buttons["members.invite"].tap()
 
-        let codeText = appA.staticTexts["invite.code"]
-        XCTAssertTrue(codeText.waitForExistence(timeout: 15))
+        // `textSelection` can change the element type, so match the identifier whatever it is.
+        let codeText = appA.descendants(matching: .any)["invite.code"]
+        XCTAssertTrue(codeText.waitForExistence(timeout: 15), appA.debugDescription)
         let code = codeText.label.replacingOccurrences(of: "Invite code ", with: "")
         XCTAssertFalse(code.isEmpty)
         XCTAssertTrue(appA.buttons["invite.share"].isEnabled)

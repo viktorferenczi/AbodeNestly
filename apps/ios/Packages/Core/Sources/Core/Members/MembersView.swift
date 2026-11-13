@@ -41,6 +41,5 @@ public struct MembersView: View {
         .sheet(item: $invite) { model in
             InviteSheetView(model: model, isOnline: isOnline, webBaseURL: webBaseURL)
         }
-        .accessibilityIdentifier("members.screen")
     }
 }
