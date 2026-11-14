@@ -885,6 +885,8 @@ Blocked by: CORE-04-db, CORE-04-api  Blocks: MAINT-15-web
 ## Open questions
 DESIGN B6 includes make owner, and §4 names the roles but does not say an existing member's role can be changed. Proposed default: the overflow action promotes a member to owner, because the screen plan lists it and §4 already has both roles.
 
+**Resolved:** the overflow action promotes a member to owner, with a direct `member.role` update under RLS (no contract change).
+
 # CORE-04-ios — Members, roles, remove, and leave
 
 ## Summary
