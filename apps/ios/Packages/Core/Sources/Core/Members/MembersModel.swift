@@ -175,16 +175,17 @@ public final class MembersModel {
                 rows.removeAll { $0.id == removal.row.id }
                 cache.write(rows, householdId: householdId)
             }
-        case .failure(.lastOwner):
+        case .failure(let failure):
             pending = nil
-            alert = Self.lastOwnerMessage
-        case .failure(.forbidden):
-            pending = nil
-            alert = "You don't have permission to remove \(name)."
-        case .failure:
-            pending = nil
-            alert = removal.leaving
-                ? "Couldn't leave the household. Try again." : "Couldn't remove \(name). Try again."
+            switch failure {
+            case .lastOwner: alert = Self.lastOwnerMessage
+            case .forbidden: alert = "You don't have permission to remove \(name)."
+            default:
+                alert = removal.leaving
+                    ? "Couldn't leave the household. Try again." : "Couldn't remove \(name). Try again."
+            }
+            // The list the person acted on may be stale (roles changed elsewhere); show what the server has now.
+            await load()
         }
     }
 

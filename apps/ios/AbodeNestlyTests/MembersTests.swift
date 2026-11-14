@@ -284,6 +284,26 @@ struct MembersTests {
         #expect(h.left.count == 0)
     }
 
+    @Test("CORE-04: a failed removal refetches the list so a stale role is corrected")
+    func refetchAfterFailure() async {
+        let bea = makeRow(name: "Bea", role: .owner)
+        let h = MembersHarness(others: [bea])
+        await h.model.load()
+        // Elsewhere Bea was demoted, so the server now refuses my leave and returns the fresh list.
+        h.api.setRemoveResult(.failure(.lastOwner))
+        h.api.setMembersResult(.success([
+            makeRow(id: h.me, name: "Me", role: .owner, household: h.householdId),
+            makeRow(id: bea.id, name: "Bea", role: .member),
+        ]))
+        h.model.leave()
+        await h.sleeper.advance()
+        await waitFor { h.model.pending == nil && h.model.alert != nil }
+        await waitFor { h.api.calls.filter { $0 == .fetchMembers(householdId: h.householdId) }.count == 2 }
+        #expect(h.model.alert == MembersModel.lastOwnerMessage)
+        #expect(h.model.rows.first { $0.id == bea.id }?.member.role == .member)
+        #expect(MembersModel.isLastOwner(h.model.rows, meId: h.me))
+    }
+
     @Test("CORE-04: a failed leave stays on the screen with a message")
     func leaveFailure() async {
         let h = MembersHarness(others: [makeRow(name: "Bea", role: .owner)])
