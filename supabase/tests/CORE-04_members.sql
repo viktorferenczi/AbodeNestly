@@ -1,7 +1,7 @@
 -- CORE-04: the last active owner cannot leave or be demoted. Membership is core: no module flag applies.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(18);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'a1@example.com', 'authenticated', 'authenticated'),
@@ -32,12 +32,20 @@ select isnt((select left_at from public.member where household_id = current_sett
 select is((select left_at from public.member where household_id = current_setting('test.hid')::uuid
   and user_id = '00000000-0000-0000-0000-0000000000a1'), null, 'CORE-04: AC1 a1 still active owner');
 
--- Replay of the same leave is a no-op, not an error
+-- Replay: a1 (active owner) repeats the leave on already-left a2. The row matches, so the
+-- old.left_at-is-not-null early return runs; no error and left_at is unchanged.
+create temp table replay as select left_at from public.member
+  where household_id = current_setting('test.hid')::uuid and user_id = '00000000-0000-0000-0000-0000000000a2';
+grant select on replay to authenticated;
 set local role authenticated;
-select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}', true);
 select lives_ok($$update public.member set left_at = now()
   where household_id = current_setting('test.hid')::uuid and user_id = '00000000-0000-0000-0000-0000000000a2'$$,
-  'CORE-04: replayed leave does not error');
+  'CORE-04: replayed leave on an already-left owner does not error');
+reset role;
+select is((select left_at from public.member where household_id = current_setting('test.hid')::uuid
+  and user_id = '00000000-0000-0000-0000-0000000000a2'), (select left_at from replay), 'CORE-04: replay leaves left_at unchanged');
+set local role authenticated;
 
 -- AC2: a1 is now the sole owner
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}', true);
@@ -66,19 +74,19 @@ select isnt((select left_at from public.member where household_id = current_sett
 select is((select left_at from public.member where household_id = current_setting('test.hid2')::uuid
   and user_id = '00000000-0000-0000-0000-0000000000a4'), null, 'CORE-04: cross-household row unchanged');
 
--- AC4: a non-owner cannot change another member's row (0 rows affected)
-update public.member set left_at = null
-  where household_id = current_setting('test.hid')::uuid and user_id = '00000000-0000-0000-0000-0000000000a3';
+-- AC4: a non-owner cannot change another plain member's row (0 rows affected)
 insert into public.member (household_id, user_id, role) values
   (current_setting('test.hid')::uuid, '00000000-0000-0000-0000-0000000000a2', 'member')
   on conflict (household_id, user_id) do update set left_at = null, role = 'member';
+update public.member set left_at = null
+  where household_id = current_setting('test.hid')::uuid and user_id = '00000000-0000-0000-0000-0000000000a3';
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
 update public.member set left_at = now()
-  where household_id = current_setting('test.hid')::uuid and user_id = '00000000-0000-0000-0000-0000000000a1';
+  where household_id = current_setting('test.hid')::uuid and user_id = '00000000-0000-0000-0000-0000000000a3';
 reset role;
 select is((select left_at from public.member where household_id = current_setting('test.hid')::uuid
-  and user_id = '00000000-0000-0000-0000-0000000000a1'), null, 'CORE-04: AC4 non-owner cannot remove another member');
+  and user_id = '00000000-0000-0000-0000-0000000000a3'), null, 'CORE-04: AC4 non-owner cannot remove another member');
 
 -- Owner removes owner: allowed while another owner remains, then rejected for the last
 update public.member set role = 'owner'
@@ -94,6 +102,28 @@ reset role;
 select throws_ok($$update public.member set left_at = now()
   where household_id = current_setting('test.hid')::uuid and user_id = '00000000-0000-0000-0000-0000000000a1'$$,
   'P0001', 'last_owner', 'CORE-04: service role cannot remove the last owner either');
+
+-- Multi-row UPDATE across all owners must be rejected (earlier rows of the statement are visible
+-- to the trigger's query), for both leaving and demoting, and for the service role.
+insert into public.member (household_id, user_id, role) values
+  (current_setting('test.hid')::uuid, '00000000-0000-0000-0000-0000000000a3', 'owner')
+  on conflict (household_id, user_id) do update set left_at = null, role = 'owner';
+update public.member set left_at = null, role = 'owner'
+  where household_id = current_setting('test.hid')::uuid and user_id = '00000000-0000-0000-0000-0000000000a2';
+select throws_ok($$update public.member set left_at = now()
+  where household_id = current_setting('test.hid')::uuid and role = 'owner'$$,
+  'P0001', 'last_owner', 'CORE-04: multi-row leave of every owner rejected');
+select throws_ok($$update public.member set role = 'member'
+  where household_id = current_setting('test.hid')::uuid and role = 'owner'$$,
+  'P0001', 'last_owner', 'CORE-04: multi-row demotion of every owner rejected');
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}', true);
+select throws_ok($$update public.member set left_at = now()
+  where household_id = current_setting('test.hid')::uuid and role = 'owner'$$,
+  'P0001', 'last_owner', 'CORE-04: multi-row leave of every owner rejected for an authenticated owner');
+reset role;
+select is((select count(*)::int from public.member where household_id = current_setting('test.hid')::uuid
+  and role = 'owner' and left_at is null), 3, 'CORE-04: all three owners still active');
 
 select * from finish();
 rollback;
