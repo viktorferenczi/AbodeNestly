@@ -106,9 +106,9 @@ private struct SignedInView: View {
                     onSignOut: { Task { await session.signOut() } }
                 )
             case .household(_, let tab):
-                MainTabs(household: session.household, start: tab, environment: environment)
+                MainTabs(session: session, household: session.household, start: tab, environment: environment)
             case .home:
-                MainTabs(household: nil, start: .home, environment: environment)
+                MainTabs(session: session, household: nil, start: .home, environment: environment)
             }
         }
     }
@@ -116,11 +116,13 @@ private struct SignedInView: View {
 
 /// Bottom tabs filtered by the household's module flags (DESIGN A6). Content arrives with the module stories.
 private struct MainTabs: View {
+    let session: SessionModel
     let household: LandingHousehold?
     let environment: AppEnvironment
     @State private var selection: AppTab
 
-    init(household: LandingHousehold?, start: AppTab, environment: AppEnvironment) {
+    init(session: SessionModel, household: LandingHousehold?, start: AppTab, environment: AppEnvironment) {
+        self.session = session
         self.household = household
         self.environment = environment
         _selection = State(initialValue: start)
@@ -157,10 +159,7 @@ private struct MainTabs: View {
                         .accessibilityIdentifier("tab.home.content")
                     if let householdId {
                         NavigationLink("Members") {
-                            MembersView(
-                                householdId: householdId, api: environment.api,
-                                isOnline: environment.network.isOnline, webBaseURL: environment.config.webBaseURL
-                            )
+                            MembersScreen(householdId: householdId, session: session, environment: environment)
                         }
                         .accessibilityIdentifier("home.members")
                     }
@@ -192,5 +191,32 @@ private struct MainTabs: View {
         case .maintenance: "wrench.and.screwdriver"
         case .home: "house"
         }
+    }
+}
+
+/// Owns the `MembersModel` for the pushed screen, so a re-render of the tabs never resets it.
+private struct MembersScreen: View {
+    let environment: AppEnvironment
+    @State private var model: MembersModel
+
+    init(householdId: UUID, session: SessionModel, environment: AppEnvironment) {
+        self.environment = environment
+        let network = environment.network
+        _model = State(initialValue: MembersModel(
+            householdId: householdId,
+            // Members is only reachable signed in; the nil-UUID fallback never matches a row.
+            meId: session.userId ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+            api: environment.api,
+            cache: MembersCache(),
+            isOnline: { network.isOnline },
+            onLeft: { [session] in session.leftHousehold() }
+        ))
+    }
+
+    var body: some View {
+        MembersView(
+            model: model, api: environment.api, isOnline: environment.network.isOnline,
+            webBaseURL: environment.config.webBaseURL
+        )
     }
 }

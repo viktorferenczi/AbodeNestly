@@ -119,8 +119,8 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 - Route: `/household/members` · Purpose: CORE-03, CORE-04.
 - Layout: member rows (avatar, name, role, "you") with overflow menu (owner: make owner, remove) · "Invite" button → sheet: code (large, copyable), share link button, expiry, uses left, "New code".
 - States: `owner` · `member` (no actions) · `invite-sheet` · `offline`.
-- Interactions: remove → undo toast 5 s then DELETE; share → system share sheet.
-- Offline: read-only. · Gating: none.
+- Interactions: remove → undo toast 5 s then DELETE; make owner → immediate (online only); leave → undo toast 5 s then DELETE; last owner leave blocked with message; share → system share sheet.
+- Offline: read-only. · Gating: none. Web: until web sync exists, the offline list is a localStorage snapshot of the last fetch (`abodenestly:members:<household_id>`). iOS: a `UserDefaults` snapshot (`abodenestly.members.<household_id>`) until iOS sync exists.
 - Android (CORE-04): the overflow is a `DropdownMenu` labelled "More actions for <name>"; the 5 s undo toast is a Snackbar-styled surface (live region) timed by the view model; the offline list is a DataStore snapshot; avatars show initials only.
 
 ### B7. Profile

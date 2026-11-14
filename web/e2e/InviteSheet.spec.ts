@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { adminClient, createUser, deleteUser, signInWithMagicLink, type E2eUser } from './helpers/auth.ts';
 
-// E2E-CORE-1, invite half. "Both see each other" in the UI waits for CORE-04's member rows, so the
-// join is asserted on the `member` row through the admin client instead.
+// E2E-CORE-1, invite half. "Both see each other" in the UI is asserted in Members.spec.ts; here the
+// join is asserted on the `member` row through the admin client.
 test.describe('E2E-CORE-1: invite by link', () => {
   let userA: E2eUser;
   let userB: E2eUser;
