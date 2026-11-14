@@ -33,6 +33,14 @@ export async function removeMember(
     if (hasCode(e, '42501')) throw new ApiError(403, 'forbidden', 'Not allowed to remove this member');
     throw e;
   }
-  // RLS USING silently filters the row when a plain member targets someone else.
-  if (rows.length === 0) throw new ApiError(403, 'forbidden', 'Not allowed to remove this member');
+  if (rows.length === 0) {
+    // Zero rows is either RLS hiding the row from a plain member (still active: 403) or a
+    // concurrent exit that won the race between our SELECT and UPDATE (gone: 404).
+    const { rows: again } = await client.query(
+      'select 1 from member where household_id = $1 and user_id = $2 and left_at is null',
+      [householdId, userId],
+    );
+    if (again.length === 0) throw new ApiError(404, 'not_found', 'Member not found');
+    throw new ApiError(403, 'forbidden', 'Not allowed to remove this member');
+  }
 }

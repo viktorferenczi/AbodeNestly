@@ -20,8 +20,10 @@ export type Route = {
   public: boolean;
   requestBody?: { schemaName: string; schema: JsonSchema };
   // A `schemaName` that already exists in `componentSchemas` is referenced, not redefined.
-  // No `schemaName` means no body (204).
-  response: { status: number; schemaName?: string; schema?: JsonSchema };
+  // Only 204 may omit the body schema, so a 200/201 can never publish without one.
+  response:
+    | { status: 204; schemaName?: undefined; schema?: undefined }
+    | { status: number; schemaName: string; schema?: JsonSchema };
 };
 
 // Path parameter names, derived from the `{name}` segments of a route path.

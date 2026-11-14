@@ -39,34 +39,46 @@ function fakeClient(selectRows: unknown[], update: unknown[] | Error) {
 
 const pgError = (code: string, message: string) => Object.assign(new Error(message), { code });
 
-beforeEach(() => vi.mocked(withUser).mockReset());
+beforeEach(() => {
+  vi.mocked(withUser).mockReset();
+});
 
 describe('DELETE /households/{id}/members/{user_id} routing', () => {
-  it('maps success to 204 with no body', async () => {
-    vi.mocked(withUser).mockResolvedValue(undefined);
+  it('CORE-04: maps success to 204 with no body, passing claims and ids through in order', async () => {
+    const queries: unknown[][] = [];
+    const client: Queryable = {
+      async query(text, values) {
+        queries.push(values ?? []);
+        return { rows: text.startsWith('select') ? [{ role: 'member' }] : [{ user_id: UID }] };
+      },
+    };
+    vi.mocked(withUser).mockImplementation(((_claims: unknown, fn: (c: Queryable) => unknown) =>
+      Promise.resolve(fn(client))) as never);
     const res = await handler(del());
     expect(res.status).toBe(204);
     expect(await res.text()).toBe('');
+    expect(vi.mocked(withUser).mock.calls[0]![0]).toEqual({ sub: 'user-1' });
+    expect(queries).toEqual([[HID, UID], [HID, UID]]);
   });
 
   it.each([
     ['household', 'not-a-uuid', UID],
     ['user', HID, 'not-a-uuid'],
-  ])('rejects a non-UUID %s id with 400 validation before the DB', async (_n, hid, uid) => {
+  ])('CORE-04: rejects a non-UUID %s id with 400 validation before the DB', async (_n, hid, uid) => {
     const res = await handler(del(hid, uid));
     expect(res.status).toBe(400);
     expect(await errCode(res)).toBe('validation');
     expect(withUser).not.toHaveBeenCalled();
   });
 
-  it.each(['GET', 'POST', 'PATCH'])('rejects %s with 405', async (method) => {
+  it.each(['GET', 'POST', 'PATCH'])('CORE-04: rejects %s with 405', async (method) => {
     expect((await handler(del(HID, UID, method))).status).toBe(405);
     expect(withUser).not.toHaveBeenCalled();
   });
 });
 
 describe('removeMember', () => {
-  it('AC3: no visible row gives 404 not_found and never issues the UPDATE', async () => {
+  it('CORE-04: AC3: no visible row gives 404 not_found and never issues the UPDATE', async () => {
     const { client, calls } = fakeClient([], []);
     await expect(removeMember(client, HID, UID)).rejects.toMatchObject({
       status: 404,
@@ -76,13 +88,13 @@ describe('removeMember', () => {
     expect(calls.some((c) => c.startsWith('update'))).toBe(false);
   });
 
-  it('soft-exits the member on success', async () => {
+  it('CORE-04: soft-exits the member on success', async () => {
     const { client, calls } = fakeClient([{ role: 'member' }], [{ user_id: UID }]);
     await expect(removeMember(client, HID, UID)).resolves.toBeUndefined();
     expect(calls[1]).toMatch(/^update member set left_at = now\(\)/);
   });
 
-  it('AC4: P0001 last_owner from the UPDATE becomes 409 last_owner', async () => {
+  it('CORE-04: AC4: P0001 last_owner from the UPDATE becomes 409 last_owner', async () => {
     const { client } = fakeClient([{ role: 'owner' }], pgError('P0001', 'last_owner'));
     await expect(removeMember(client, HID, UID)).rejects.toMatchObject({
       status: 409,
@@ -90,12 +102,12 @@ describe('removeMember', () => {
     });
   });
 
-  it('does not map other P0001 errors to last_owner', async () => {
+  it('CORE-04: does not map other P0001 errors to last_owner', async () => {
     const { client } = fakeClient([{ role: 'owner' }], pgError('P0001', 'something_else'));
     await expect(removeMember(client, HID, UID)).rejects.not.toBeInstanceOf(ApiError);
   });
 
-  it('maps 42501 from the guard trigger to 403 forbidden', async () => {
+  it('CORE-04: maps 42501 from the guard trigger to 403 forbidden', async () => {
     const { client } = fakeClient([{ role: 'member' }], pgError('42501', 'denied'));
     await expect(removeMember(client, HID, UID)).rejects.toMatchObject({
       status: 403,
@@ -103,11 +115,25 @@ describe('removeMember', () => {
     });
   });
 
-  it('maps a zero-row UPDATE (RLS filtered) to 403 forbidden', async () => {
+  it('CORE-04: maps a zero-row UPDATE on a still-active member (RLS filtered) to 403 forbidden', async () => {
     const { client } = fakeClient([{ role: 'member' }], []);
     await expect(removeMember(client, HID, UID)).rejects.toMatchObject({
       status: 403,
       code: 'forbidden',
+    });
+  });
+
+  it('CORE-04: maps a zero-row UPDATE after a concurrent exit to 404 not_found', async () => {
+    let selects = 0;
+    const client: Queryable = {
+      async query(text) {
+        if (!text.startsWith('select')) return { rows: [] };
+        return { rows: selects++ === 0 ? [{ role: 'member' }] : [] };
+      },
+    };
+    await expect(removeMember(client, HID, UID)).rejects.toMatchObject({
+      status: 404,
+      code: 'not_found',
     });
   });
 });

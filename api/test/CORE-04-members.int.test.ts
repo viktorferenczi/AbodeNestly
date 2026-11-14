@@ -78,14 +78,14 @@ afterAll(async () => {
 });
 
 describe('DELETE /households/{id}/members/{user_id}', () => {
-  it('AC1: an owner removes a member: 204 and left_at is set', async () => {
+  it('CORE-04: AC1: an owner removes a member: 204 and left_at is set', async () => {
     const { owner, members, householdId } = await setup(1);
     const res = await remove(householdId, members[0]!.id, owner.token);
     expect(res.status).toBe(204);
     expect((await memberRow(householdId, members[0]!.id)).left_at).not.toBeNull();
   });
 
-  it('AC2: no or garbage token gives 401 unauthorized', async () => {
+  it('CORE-04: AC2: no or garbage token gives 401 unauthorized', async () => {
     for (const auth of [null, 'garbage']) {
       const res = await remove(crypto.randomUUID(), crypto.randomUUID(), auth);
       expect(res.status).toBe(401);
@@ -93,14 +93,14 @@ describe('DELETE /households/{id}/members/{user_id}', () => {
     }
   });
 
-  it('AC3: an unknown user id gives 404 not_found', async () => {
+  it('CORE-04: AC3: an unknown user id gives 404 not_found', async () => {
     const { owner, householdId } = await setup(0);
     const res = await remove(householdId, crypto.randomUUID(), owner.token);
     expect(res.status).toBe(404);
     expect(await errCode(res)).toBe('not_found');
   });
 
-  it('AC3: a household the caller is not in gives 404 not_found', async () => {
+  it('CORE-04: AC3: a household the caller is not in gives 404 not_found', async () => {
     const { members, householdId } = await setup(1);
     const outsider = await signUp();
     const res = await remove(householdId, members[0]!.id, outsider.token);
@@ -108,13 +108,13 @@ describe('DELETE /households/{id}/members/{user_id}', () => {
     expect((await memberRow(householdId, members[0]!.id)).left_at).toBeNull();
   });
 
-  it('AC3: removing an already-removed member gives 404', async () => {
+  it('CORE-04: AC3: removing an already-removed member gives 404', async () => {
     const { owner, members, householdId } = await setup(1);
     expect((await remove(householdId, members[0]!.id, owner.token)).status).toBe(204);
     expect((await remove(householdId, members[0]!.id, owner.token)).status).toBe(404);
   });
 
-  it('AC4: the sole owner cannot leave: 409 last_owner and the row is unchanged', async () => {
+  it('CORE-04: AC4: the sole owner cannot leave: 409 last_owner and the row is unchanged', async () => {
     const { owner, householdId } = await setup(0);
     const res = await remove(householdId, owner.id, owner.token);
     expect(res.status).toBe(409);
@@ -122,18 +122,27 @@ describe('DELETE /households/{id}/members/{user_id}', () => {
     expect(await memberRow(householdId, owner.id)).toEqual({ role: 'owner', left_at: null });
   });
 
-  it('a member can leave themselves: 204', async () => {
+  it('CORE-04: a member can leave themselves: 204', async () => {
     const { members, householdId } = await setup(1);
     const res = await remove(householdId, members[0]!.id, members[0]!.token);
     expect(res.status).toBe(204);
     expect((await memberRow(householdId, members[0]!.id)).left_at).not.toBeNull();
   });
 
-  it('a member cannot remove another member: 403 and nothing changes', async () => {
+  it('CORE-04: a member cannot remove another member: 403 and nothing changes', async () => {
     const { members, householdId } = await setup(2);
     const res = await remove(householdId, members[1]!.id, members[0]!.token);
     expect(res.status).toBe(403);
     expect(await errCode(res)).toBe('forbidden');
     expect((await memberRow(householdId, members[1]!.id)).left_at).toBeNull();
+  });
+
+  it('CORE-04: non-UUID household or user id gives 400 validation', async () => {
+    const { owner, householdId } = await setup(0);
+    for (const path of [`/households/nope/members/${owner.id}`, `/households/${householdId}/members/nope`]) {
+      const res = await call('DELETE', path, owner.token);
+      expect(res.status).toBe(400);
+      expect(await errCode(res)).toBe('validation');
+    }
   });
 });
