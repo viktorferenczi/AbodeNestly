@@ -18,6 +18,9 @@ class FakeApiService : ApiService {
         data class CreateInvite(val householdId: UUID) : Call
         data class FetchLiveInvite(val householdId: UUID) : Call
         data class RetireInvite(val id: UUID) : Call
+        data class FetchMembers(val householdId: UUID) : Call
+        data class RemoveMember(val householdId: UUID, val userId: UUID) : Call
+        data class MakeOwner(val householdId: UUID, val userId: UUID) : Call
     }
 
     private val recorded = CopyOnWriteArrayList<Call>()
@@ -32,6 +35,9 @@ class FakeApiService : ApiService {
     val createInviteResults = ConcurrentLinkedQueue<ApiResult<Invite>>()
     @Volatile var liveInviteResult: ApiResult<Invite?> = ApiResult.Success(null)
     @Volatile var retireResult: ApiResult<Unit> = ApiResult.Success(Unit)
+    @Volatile var membersResult: ApiResult<List<MemberRow>> = ApiResult.Success(emptyList())
+    @Volatile var removeResult: ApiResult<Unit> = ApiResult.Success(Unit)
+    @Volatile var makeOwnerResult: ApiResult<Unit> = ApiResult.Success(Unit)
 
     val calls: List<Call> get() = recorded.toList()
 
@@ -73,5 +79,25 @@ class FakeApiService : ApiService {
         recorded += Call.RetireInvite(id)
         gate?.await()
         return retireResult
+    }
+
+    override suspend fun fetchMembers(householdId: UUID): ApiResult<List<MemberRow>> {
+        recorded += Call.FetchMembers(householdId)
+        val result = membersResult
+        // The result is read before the gate, so a held fetch returns what the server had when it started.
+        gate?.await()
+        return result
+    }
+
+    override suspend fun removeMember(householdId: UUID, userId: UUID): ApiResult<Unit> {
+        recorded += Call.RemoveMember(householdId, userId)
+        gate?.await()
+        return removeResult
+    }
+
+    override suspend fun makeOwner(householdId: UUID, userId: UUID): ApiResult<Unit> {
+        recorded += Call.MakeOwner(householdId, userId)
+        gate?.await()
+        return makeOwnerResult
     }
 }

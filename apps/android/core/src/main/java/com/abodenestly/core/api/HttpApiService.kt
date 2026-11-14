@@ -3,6 +3,7 @@ package com.abodenestly.core.api
 import com.abodenestly.contract.infrastructure.Serializer
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
+import com.abodenestly.contract.models.Member
 import com.abodenestly.core.auth.AuthService
 import com.abodenestly.shared.AppConfig
 import kotlinx.coroutines.CancellationException
@@ -77,6 +78,7 @@ class HttpApiService(
 
     override suspend fun fetchLiveInvite(householdId: UUID): ApiResult<Invite?> = guarded {
         val url = restUrl(
+            "invite",
             "household_id" to "eq.$householdId",
             "deleted_at" to "is.null",
             "expires_at" to "gt.${timestamp()}",
@@ -96,11 +98,55 @@ class HttpApiService(
     override suspend fun retireInvite(id: UUID): ApiResult<Unit> = guarded {
         val body = buildJsonObject { put("deleted_at", timestamp()) }.toString()
         val headers = restHeaders() + ("Prefer" to "return=representation")
-        val reply = perform(restUrl("id" to "eq.$id"), "PATCH", headers, body)
+        val reply = perform(restUrl("invite", "id" to "eq.$id"), "PATCH", headers, body)
         // RLS hides rows silently, so an empty array means nothing was retired.
         val retired = reply.status in 200..299 &&
             (runCatching { lenient.parseToJsonElement(reply.body) }.getOrNull() as? JsonArray)?.isNotEmpty() == true
         if (retired) ApiResult.Success(Unit) else ApiResult.Failure(ApiFailure.Unknown)
+    }
+
+    override suspend fun fetchMembers(householdId: UUID): ApiResult<List<MemberRow>> = guarded {
+        val json = Serializer.kotlinxSerializationJson
+        val membersReply = perform(
+            restUrl("member", "household_id" to "eq.$householdId", "left_at" to "is.null", "select" to "*"),
+            "GET", restHeaders(),
+        )
+        if (membersReply.status != 200) return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        val members = runCatching { json.decodeFromString(ListSerializer(Member.serializer()), membersReply.body) }
+            .getOrNull() ?: return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        if (members.isEmpty()) return@guarded ApiResult.Success(emptyList())
+        // No FK embed from member to profile, so the profiles are a second read.
+        val ids = members.joinToString(",") { it.userId.toString() }
+        val profilesReply = perform(
+            restUrl("profile", "id" to "in.($ids)", "select" to "id,display_name,avatar_path"),
+            "GET", restHeaders(),
+        )
+        if (profilesReply.status != 200) return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        val profiles = runCatching { json.decodeFromString(ListSerializer(MemberProfile.serializer()), profilesReply.body) }
+            .getOrNull() ?: return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        val byId = profiles.associateBy { it.id }
+        ApiResult.Success(members.map { MemberRow(it, byId[it.userId]) })
+    }
+
+    override suspend fun removeMember(householdId: UUID, userId: UUID): ApiResult<Unit> = guarded {
+        val url = url {
+            addPathSegment("households"); addPathSegment(householdId.toString())
+            addPathSegment("members"); addPathSegment(userId.toString())
+        }
+        val reply = perform(url, "DELETE", emptyMap())
+        if (reply.status == 204) ApiResult.Success(Unit)
+        else ApiResult.Failure(removeFailure(reply.status, errorCode(reply.body)))
+    }
+
+    override suspend fun makeOwner(householdId: UUID, userId: UUID): ApiResult<Unit> = guarded {
+        val body = buildJsonObject { put("role", "owner") }.toString()
+        val headers = restHeaders() + ("Prefer" to "return=representation")
+        val url = restUrl("member", "household_id" to "eq.$householdId", "user_id" to "eq.$userId")
+        val reply = perform(url, "PATCH", headers, body)
+        // RLS hides rows silently, so an empty array means nobody was promoted.
+        val promoted = reply.status in 200..299 &&
+            (runCatching { lenient.parseToJsonElement(reply.body) }.getOrNull() as? JsonArray)?.isNotEmpty() == true
+        if (promoted) ApiResult.Success(Unit) else ApiResult.Failure(ApiFailure.Unknown)
     }
 
     // MARK: Transport
@@ -109,9 +155,9 @@ class HttpApiService(
 
     private fun url(build: HttpUrl.Builder.() -> Unit): HttpUrl = config.apiBaseUrl.toHttpUrl().newBuilder().apply(build).build()
 
-    /** `<supabaseUrl>/rest/v1/invite?…`; query values are percent-encoded by OkHttp. */
-    private fun restUrl(vararg query: Pair<String, String>): HttpUrl =
-        config.supabaseUrl.trimEnd('/').plus("/rest/v1/invite").toHttpUrl().newBuilder()
+    /** `<supabaseUrl>/rest/v1/<table>?…`; query values are percent-encoded by OkHttp. */
+    private fun restUrl(table: String, vararg query: Pair<String, String>): HttpUrl =
+        config.supabaseUrl.trimEnd('/').plus("/rest/v1/$table").toHttpUrl().newBuilder()
             .apply { query.forEach { (key, value) -> addQueryParameter(key, value) } }
             .build()
 
@@ -184,6 +230,20 @@ class HttpApiService(
             if (code != null) return if (code in INVALID_CODES) ApiFailure.InvalidCode else ApiFailure.Unknown
             // No parseable error body (e.g. a bare proxy 404): fall back to the status.
             return if (status == 404 || status == 410) ApiFailure.InvalidCode else ApiFailure.Unknown
+        }
+
+        /** The API's own error code wins; with no parseable body (a bare proxy response) the status decides. */
+        internal fun removeFailure(status: Int, code: String?): ApiFailure = when (code) {
+            "last_owner" -> ApiFailure.LastOwner
+            "forbidden" -> ApiFailure.Forbidden
+            "not_found" -> ApiFailure.NotFound
+            null -> when (status) {
+                409 -> ApiFailure.LastOwner
+                403 -> ApiFailure.Forbidden
+                404 -> ApiFailure.NotFound
+                else -> ApiFailure.Unknown
+            }
+            else -> ApiFailure.Unknown
         }
 
         private val INVALID_CODES = setOf("invalid_invite", "not_found", "gone")

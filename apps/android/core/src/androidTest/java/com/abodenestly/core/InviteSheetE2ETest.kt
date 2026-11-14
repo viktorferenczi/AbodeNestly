@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -30,6 +31,7 @@ import com.abodenestly.core.auth.InMemoryLastHouseholdStore
 import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.auth.SupabaseAuthService
+import com.abodenestly.core.members.InMemoryMembersCache
 import com.abodenestly.core.members.MembersScreen
 import com.abodenestly.core.signin.SignInScreen
 import com.abodenestly.core.signin.SignInViewModel
@@ -158,7 +160,10 @@ class InviteSheetE2ETest {
                     Column {
                         TextButton(onClick = session::signOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
                         if (members) {
-                            MembersScreen(destination.id, api, isOnline = true, webBaseUrl = webBaseUrl, modifier = Modifier.weight(1f))
+                            MembersScreen(
+                                destination.id, checkNotNull(session.userId), api, isOnline = true, webBaseUrl = webBaseUrl,
+                                cache = remember { InMemoryMembersCache() }, onLeft = session::leftHousehold, modifier = Modifier.weight(1f),
+                            )
                         } else {
                             Text("Home", modifier = Modifier.testTag("tab.home.content"))
                             TextButton(onClick = { members = true }, modifier = Modifier.testTag("home.members")) { Text("Members") }

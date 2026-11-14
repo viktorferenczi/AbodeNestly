@@ -2,7 +2,10 @@ package com.abodenestly.core
 
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
+import com.abodenestly.contract.models.Member
 import com.abodenestly.contract.models.Profile
+import com.abodenestly.core.api.MemberProfile
+import com.abodenestly.core.api.MemberRow
 import com.abodenestly.core.auth.AuthSession
 import com.abodenestly.core.auth.LandingHousehold
 import com.abodenestly.core.auth.Membership
@@ -44,5 +47,16 @@ object Fixtures {
     ) = Invite(
         id, householdId, code, role, userId, expiry, maxUses, uses,
         createdAt = OffsetDateTime.now(), updatedAt = OffsetDateTime.now(), deletedAt = null, syncSeq = 1,
+    )
+
+    /** An active member of [householdId]; `name = null` models a profile RLS hides. User ids are `id(n)`. */
+    fun member(
+        n: Int,
+        name: String? = "Member $n",
+        role: Member.Role = Member.Role.member,
+        householdId: UUID = id(1),
+    ) = MemberRow(
+        Member(householdId, id(n), role, OffsetDateTime.now(), null, OffsetDateTime.now(), syncSeq = 1),
+        name?.let { MemberProfile(id(n), it) },
     )
 }

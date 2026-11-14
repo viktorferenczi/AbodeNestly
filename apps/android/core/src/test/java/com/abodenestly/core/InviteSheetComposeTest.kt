@@ -21,6 +21,7 @@ import com.abodenestly.core.api.FakeApiService
 import com.abodenestly.core.api.FakeApiService.Call
 import com.abodenestly.core.invite.InviteSheetContent
 import com.abodenestly.core.invite.InviteSheetViewModel
+import com.abodenestly.core.members.InMemoryMembersCache
 import com.abodenestly.core.members.MembersScreen
 import com.abodenestly.ui.AbodeTheme
 import kotlinx.coroutines.CoroutineScope
@@ -208,7 +209,10 @@ class InviteSheetComposeTest {
     /** The sheet has no role branch (SPEC §4 CORE-03), so Members → Invite works the same whatever role the live invite has. */
     private fun membersOpensSheet(role: Invite.Role) {
         api.liveInviteResult = ApiResult.Success(invite("abc123def456", role = role))
-        rule.setContent { AbodeTheme { MembersScreen(id(1), api, isOnline = true, webBaseUrl = webBase) } }
+        rule.setContent { AbodeTheme { MembersScreen(
+                    id(1), Fixtures.userId, api, isOnline = true, webBaseUrl = webBase,
+                    cache = InMemoryMembersCache(), onLeft = {},
+                ) } }
         rule.onNodeWithTag("members.invite").assertExists()
         rule.onNodeWithTag("invite.sheet").assertDoesNotExist()
         rule.onNodeWithTag("members.invite").performClick()
