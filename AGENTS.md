@@ -2,6 +2,16 @@
 
 You are working on **AbodeNestly**, a shared household app (shopping, pantry, maintenance). Read this file fully before touching code.
 
+## 0. Agents and roles
+
+| Role | Agent | Does | Does not |
+|---|---|---|---|
+| Planning | **Claude Opus** | Writes stories (§6), proposes SPEC/DESIGN/TESTING changes, plans an implementation before code is written | Write feature code |
+| Implementing | **Claude Sonnet** | Implements a story (§3): code, tests, migrations, the PR, and the fixes for review findings | Review or approve its own PR; change scope without a story |
+| Reviewing | **Gemini Argon** (later Gemini Carbon) | Reviews pull requests by `docs/REVIEW.md` | Push to the PR branch, merge, write stories |
+
+No other agent works in this repo. Claude is the only agent that writes; Gemini is the only agent that reviews. A human merges.
+
 ## 1. Read these first, in order
 
 1. `docs/SPEC.md` — product, stack, features, endpoints, types, sync, triggers, schema. **It is the source of truth.** Never contradict it; propose a PR to `docs/SPEC.md` if it must change. Then `docs/DESIGN.md` (screen plans) and `docs/TESTING.md` (required tests) for any client or test work.
@@ -11,8 +21,8 @@ You are working on **AbodeNestly**, a shared household app (shopping, pantry, ma
    - `react-web` — anything under `web/`
    - `swift-ios` — anything under `apps/ios/`
    - `kotlin-android` — anything under `apps/android/`
-   - `pr-review` — when asked to review a pull request
 3. The `README.md` of the package you are editing, if present.
+4. Reviewer only: `docs/REVIEW.md`.
 
 ## 2. Non-negotiable rules
 
@@ -26,7 +36,7 @@ You are working on **AbodeNestly**, a shared household app (shopping, pantry, ma
 - **RLS always on.** Every new table gets `call setup_scoped('<table>')` or explicit policies. The API forwards the user's JWT to Postgres so RLS applies there too.
 - **No secrets in code.** Use environment variables; document new ones in `api/README.md`.
 
-## 3. How to work
+## 3. How to work (implementing agent)
 
 1. Restate the story's feature ID and acceptance criteria before coding.
 2. Check whether the change touches the schema. If yes, write a migration in `supabase/migrations/` **and** update `docs/schema.sql` and SPEC §14 in the same PR.
@@ -45,6 +55,7 @@ You are working on **AbodeNestly**, a shared household app (shopping, pantry, ma
    Offline tested: yes/no/n.a.
    Module-off tested: yes/no/n.a.
    ```
+8. Review: the Gemini reviewer posts one review per round (`docs/REVIEW.md`). Answer every finding: fix it, or reply in its thread with evidence (a test or a reproduction) for why it does not apply. Put the fixes for one round in one commit, `<ID>: address review (<what changed>)`, then say in a PR comment what was done per finding. Do not approve, dismiss or resolve the reviewer's findings yourself.
 
 ## 4. Coding conventions (all languages)
 
@@ -59,7 +70,7 @@ You are working on **AbodeNestly**, a shared household app (shopping, pantry, ma
 
 Ask one precise question in the PR or story thread rather than guessing. If you must proceed, state the assumption at the top of the PR description.
 
-## 6. For story-writing agents
+## 6. Writing stories (planning agent)
 
 Read `docs/SPEC.md`, `docs/DESIGN.md`, `docs/TESTING.md` and `docs/STORY-TEMPLATE.md` fully before writing a single story. Then:
 - One story per feature ID per layer: `-db` (migration/trigger/policy work, if any), `-api`, `-web`, `-ios`, `-android`. Skip a layer only if the feature has nothing in it; say so in the parent story.
