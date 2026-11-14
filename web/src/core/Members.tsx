@@ -50,10 +50,14 @@ function MembersScreen({ householdId }: { householdId: string }) {
   const [toast, setToast] = useState<{ message: string; undo: () => void } | null>(null);
   const [reload, setReload] = useState(0);
   const scheduler = useRef(createUndoScheduler());
+  const mounted = useRef(true);
+  // Bumped when a removal lands; a fetch that started earlier must not bring the member back.
+  const generation = useRef(0);
 
   // Live list when online; the last cached list when offline or the fetch fails (web has no sync DB yet).
   useEffect(() => {
     let active = true;
+    const started = generation.current;
     const fromCache = () => {
       const cached = readMembersCache(householdId);
       if (cached) dispatch({ type: 'loaded', rows: cached, source: 'cache' });
@@ -64,7 +68,7 @@ function MembersScreen({ householdId }: { householdId: string }) {
       return;
     }
     void api.fetchMembers(householdId).then((result) => {
-      if (!active) return;
+      if (!active || started !== generation.current) return;
       if (result.ok) dispatch({ type: 'loaded', rows: result.value, source: 'live' });
       else fromCache();
     });
@@ -75,13 +79,17 @@ function MembersScreen({ householdId }: { householdId: string }) {
 
   const { view } = state;
   useEffect(() => {
-    if (view.kind === 'ready' && view.source === 'live') writeMembersCache(householdId, view.rows);
+    if (view.kind === 'ready') writeMembersCache(householdId, view.rows);
   }, [householdId, view]);
 
-  // Unmounting drops a pending removal instead of firing it: safer than deleting on navigation.
+  // The toast said "Removed", so leaving the screen does not cancel it: Undo is the only cancel.
   useEffect(() => {
     const current = scheduler.current;
-    return () => current.cancelAll();
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      current.flushAll();
+    };
   }, []);
 
   const rows = visibleRows(state);
@@ -97,9 +105,11 @@ function MembersScreen({ householdId }: { householdId: string }) {
         const result = await api.removeMember(householdId, userId);
         // Already gone counts as done: the row should disappear either way.
         if (result.ok || result.error.code === 'not_found') {
+          generation.current += 1;
           if (leaving) {
             clearLastHousehold();
-            navigate('/', { replace: true });
+            // Already navigated away: do not pull the user back to the landing route.
+            if (mounted.current) navigate('/', { replace: true });
           } else dispatch({ type: 'removeDone', userId });
           return;
         }
@@ -124,6 +134,7 @@ function MembersScreen({ householdId }: { householdId: string }) {
   function onLeave() {
     if (view.kind !== 'ready') return;
     const decision = leaveDecision(view.rows, meId);
+    setMenuFor(null);
     if (!decision.ok) return dispatch({ type: 'messageShown', message: LAST_OWNER_MESSAGE });
     startRemoval(meId, 'Leaving household', true, 'yourself');
   }
@@ -131,7 +142,10 @@ function MembersScreen({ householdId }: { householdId: string }) {
   async function onMakeOwner(row: MemberRow) {
     setMenuFor(null);
     const result = await api.makeOwner(householdId, row.member.user_id);
-    if (result.ok) return setReload((n) => n + 1);
+    if (result.ok) {
+      dispatch({ type: 'messageCleared' });
+      return setReload((n) => n + 1);
+    }
     dispatch({ type: 'messageShown', message: `Couldn't make ${memberName(row)} an owner. Try again.` });
   }
 
@@ -174,12 +188,13 @@ function MembersScreen({ householdId }: { householdId: string }) {
               {rows.map((row) => {
                 const name = memberName(row);
                 const me = isMe(row, meId);
-                const menuOpen = menuFor === row.member.user_id;
+                // Items are not rendered offline or while a removal is pending, so a stale open menu cannot act.
+                const menuOpen = menuFor === row.member.user_id && online && !busy;
                 const showMenu = canRemove(role, row, meId);
                 return (
                   <li key={row.member.user_id} className={styles.row}>
                     <span className={styles.avatar} aria-hidden="true">
-                      {initials(row.profile?.display_name)}
+                      {initials(name)}
                     </span>
                     <span className={styles.who}>
                       <span className={styles.name}>{name}</span>
@@ -187,28 +202,34 @@ function MembersScreen({ householdId }: { householdId: string }) {
                     </span>
                     {me ? <span className={styles.badge}>You</span> : null}
                     {showMenu ? (
-                      <div className={styles.menuWrap}>
+                      <div
+                        className={styles.menuWrap}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') setMenuFor(null);
+                        }}
+                        onBlur={(e) => {
+                          if (!e.currentTarget.contains(e.relatedTarget)) setMenuFor(null);
+                        }}
+                      >
                         <button
                           type="button"
                           className={styles.more}
                           aria-label={`More actions for ${name}`}
+                          aria-haspopup="menu"
                           aria-expanded={menuOpen}
                           disabled={!online || busy}
                           onClick={() => setMenuFor(menuOpen ? null : row.member.user_id)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Escape') setMenuFor(null);
-                          }}
                         >
                           ⋯
                         </button>
                         {menuOpen ? (
-                          <div className={styles.menu}>
+                          <div className={styles.menu} role="menu">
                             {row.member.role !== 'owner' ? (
-                              <button type="button" className={styles.menuItem} onClick={() => void onMakeOwner(row)}>
+                              <button type="button" role="menuitem" className={styles.menuItem} onClick={() => void onMakeOwner(row)}>
                                 Make owner
                               </button>
                             ) : null}
-                            <button type="button" className={styles.menuItem} onClick={() => onRemove(row)}>
+                            <button type="button" role="menuitem" className={styles.menuItem} onClick={() => onRemove(row)}>
                               Remove
                             </button>
                           </div>

@@ -63,7 +63,7 @@ test.describe('E2E-CORE-1: members', () => {
     const { data: households } = await adminClient().from('household').select('id').eq('created_by', userA.id);
     const householdId = households![0]!.id;
     await page.getByRole('button', { name: /^More actions for / }).click();
-    await page.getByRole('button', { name: 'Remove' }).click();
+    await page.getByRole('menuitem', { name: 'Remove' }).click();
     await expect(page.getByRole('status')).toContainText('Removed');
     await expect(page.getByRole('listitem')).toHaveCount(1);
     const { data: before } = await adminClient()

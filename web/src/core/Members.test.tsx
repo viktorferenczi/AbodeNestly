@@ -108,6 +108,9 @@ describe('CORE-04: Members screen', () => {
     const hidden: MemberRow = { ...ANNA, profile: null };
     await renderMembers(apiWith([ME_OWNER, hidden]));
     expect(moreButton('Member')).toBeTruthy();
+    // The circle matches the "Member" fallback name.
+    expect(screen.getAllByRole('listitem')[1]!.textContent).toContain('M');
+    expect(screen.queryByText('?')).toBeNull();
   });
 
   it('CORE-04: AC2 remove shows the toast, calls DELETE only after 5 s, and the row stays gone', async () => {
@@ -115,7 +118,7 @@ describe('CORE-04: Members screen', () => {
     await renderMembers(api);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     fireEvent.click(moreButton('Anna Kovacs')!);
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
     const toast = screen.getByRole('status');
     expect(toast.textContent).toContain('Removed Anna Kovacs');
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
@@ -133,7 +136,7 @@ describe('CORE-04: Members screen', () => {
     await renderMembers(api);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     fireEvent.click(moreButton('Anna Kovacs')!);
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
     await advance(4999);
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     await advance(10_000);
@@ -148,7 +151,7 @@ describe('CORE-04: Members screen', () => {
     await renderMembers(api);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     fireEvent.click(moreButton('Anna Kovacs')!);
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
     await advance(5000);
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
     expect(screen.getByRole('alert').textContent).toBe("Couldn't remove Anna Kovacs. Try again.");
@@ -160,30 +163,95 @@ describe('CORE-04: Members screen', () => {
     await renderMembers(api);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     fireEvent.click(moreButton('Anna Kovacs')!);
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
     await advance(5000);
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('CORE-04: unmounting during the undo window drops the removal', async () => {
+  it('CORE-04: leaving the screen during the undo window still sends the DELETE', async () => {
     const api = apiWith([ME_OWNER, ANNA]);
     await renderMembers(api);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     fireEvent.click(moreButton('Anna Kovacs')!);
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
     cleanup();
+    expect(api.removeCalls).toEqual([{ householdId: 'h1', userId: 'anna' }]);
     await advance(10_000);
-    expect(api.removeCalls).toEqual([]);
+    expect(api.removeCalls).toHaveLength(1);
+  });
+
+  it('CORE-04: a fetch that started before the DELETE cannot bring the member back or re-cache them', async () => {
+    const api = apiWith([ME_OWNER, ANNA]);
+    await renderMembers(api);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    // Reconnect starts a refetch that stays in flight.
+    setOnline(false);
+    await act(async () => void window.dispatchEvent(new Event('offline')));
+    setOnline(true);
+    api.pending = true;
+    await act(async () => void window.dispatchEvent(new Event('online')));
+    api.pending = false;
+    fireEvent.click(moreButton('Anna Kovacs')!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+    await advance(5000);
+    expect(api.removeCalls).toHaveLength(1);
+    await act(async () => api.resolvePending());
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    expect(readMembersCache('h1')).toEqual([ME_OWNER]);
+  });
+
+  it('CORE-04: a successful make owner retry clears the earlier failure alert', async () => {
+    const api = apiWith([ME_OWNER, ANNA]);
+    api.makeOwnerResult = { ok: false, error: { code: 'unknown' } };
+    await renderMembers(api);
+    fireEvent.click(moreButton('Anna Kovacs')!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Make owner' }));
+    await flush();
+    expect(screen.getByRole('alert')).toBeTruthy();
+    api.makeOwnerResult = { ok: true, value: null };
+    fireEvent.click(moreButton('Anna Kovacs')!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Make owner' }));
+    await flush();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('CORE-04: an open menu closes and cannot act once offline or while Leave is pending; Escape closes it', async () => {
+    const api = apiWith([ME_OWNER, ANNA]);
+    await renderMembers(api);
+    fireEvent.click(moreButton('Anna Kovacs')!);
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Remove' }), { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    fireEvent.click(moreButton('Anna Kovacs')!);
+    setOnline(false);
+    await act(async () => void window.dispatchEvent(new Event('offline')));
+    expect(screen.queryByRole('menuitem')).toBeNull();
+    setOnline(true);
+    await act(async () => void window.dispatchEvent(new Event('online')));
+    await flush();
+
+    // A second owner exists, so Leave is allowed; it closes the menu and blocks other removals.
+    api.fetchMembersResult = { ok: true, value: [ME_OWNER, ANNA, BEN] };
+    setOnline(false);
+    await act(async () => void window.dispatchEvent(new Event('offline')));
+    setOnline(true);
+    await act(async () => void window.dispatchEvent(new Event('online')));
+    await flush();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fireEvent.click(moreButton('Anna Kovacs')!);
+    fireEvent.click(leaveButton());
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect((moreButton('Anna Kovacs') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('CORE-04: make owner is immediate, then the list is refetched; an owner target has no such action', async () => {
     const api = apiWith([ME_OWNER, ANNA, BEN]);
     await renderMembers(api);
     fireEvent.click(moreButton('Ben')!);
-    expect(screen.queryByRole('button', { name: 'Make owner' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Make owner' })).toBeNull();
     fireEvent.click(moreButton('Anna Kovacs')!);
-    fireEvent.click(screen.getByRole('button', { name: 'Make owner' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Make owner' }));
     await flush();
     expect(api.makeOwnerCalls).toEqual([{ householdId: 'h1', userId: 'anna' }]);
     expect(api.fetchMembersCalls).toEqual(['h1', 'h1']);
@@ -194,7 +262,7 @@ describe('CORE-04: Members screen', () => {
     api.makeOwnerResult = { ok: false, error: { code: 'unknown' } };
     await renderMembers(api);
     fireEvent.click(moreButton('Anna Kovacs')!);
-    fireEvent.click(screen.getByRole('button', { name: 'Make owner' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Make owner' }));
     await flush();
     expect(screen.getByRole('alert').textContent).toBe("Couldn't make Anna Kovacs an owner. Try again.");
   });

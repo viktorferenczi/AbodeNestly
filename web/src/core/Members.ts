@@ -52,8 +52,8 @@ export function leaveDecision(rows: MemberRow[], meId: string): LeaveDecision {
 export type UndoScheduler = {
   /** Runs `run` after the delay unless `undo()` is called first. A second schedule for the same key replaces the first. */
   schedule(key: string, run: () => void): { undo(): void };
-  /** Cancels everything still waiting (unmount: a pending removal is dropped, not fired). */
-  cancelAll(): void;
+  /** Runs everything still waiting now (unmount: Undo is the only cancel, leaving the screen is not). */
+  flushAll(): void;
 };
 
 export function createUndoScheduler(
@@ -66,10 +66,11 @@ export function createUndoScheduler(
   const { delayMs = 5000 } = options;
   const set = options.setTimeout ?? ((fn, ms) => globalThis.setTimeout(fn, ms));
   const clear = (options.clearTimeout ?? ((id) => globalThis.clearTimeout(id as never))) as (id: unknown) => void;
-  const timers = new Map<string, unknown>();
+  const timers = new Map<string, { id: unknown; run: () => void }>();
   const cancel = (key: string) => {
-    if (!timers.has(key)) return;
-    clear(timers.get(key));
+    const timer = timers.get(key);
+    if (!timer) return;
+    clear(timer.id);
     timers.delete(key);
   };
   return {
@@ -79,11 +80,14 @@ export function createUndoScheduler(
         timers.delete(key);
         run();
       }, delayMs);
-      timers.set(key, id);
+      timers.set(key, { id, run });
       return { undo: () => cancel(key) };
     },
-    cancelAll() {
-      [...timers.keys()].forEach(cancel);
+    flushAll() {
+      for (const [key, { run }] of [...timers]) {
+        cancel(key);
+        run();
+      }
     },
   };
 }
@@ -111,7 +115,8 @@ export type MembersAction =
   /** The DELETE succeeded or the member was already gone: drop the row. */
   | { type: 'removeDone'; userId: string }
   | { type: 'removeFailed'; message: string }
-  | { type: 'messageShown'; message: string };
+  | { type: 'messageShown'; message: string }
+  | { type: 'messageCleared' };
 
 export const initialMembersState: MembersState = { view: { kind: 'loading' }, pendingRemoval: null, message: null };
 
@@ -137,6 +142,8 @@ export function membersReducer(state: MembersState, action: MembersAction): Memb
       return { ...state, pendingRemoval: null, message: action.message };
     case 'messageShown':
       return { ...state, message: action.message };
+    case 'messageCleared':
+      return { ...state, message: null };
   }
 }
 

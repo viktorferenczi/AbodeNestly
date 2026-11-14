@@ -101,7 +101,7 @@ describe('CORE-04: undo scheduler (AC3)', () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
-  it('scheduling the same key again replaces the first; cancelAll drops the rest', () => {
+  it('scheduling the same key again replaces the first; flushAll runs what is left now', () => {
     const first = vi.fn();
     const second = vi.fn();
     const scheduler = createUndoScheduler();
@@ -112,9 +112,10 @@ describe('CORE-04: undo scheduler (AC3)', () => {
     expect(second).toHaveBeenCalledTimes(1);
     const third = vi.fn();
     scheduler.schedule('k', third);
-    scheduler.cancelAll();
+    scheduler.flushAll();
+    expect(third).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(5000);
-    expect(third).not.toHaveBeenCalled();
+    expect(third).toHaveBeenCalledTimes(1);
   });
 
   it('honours injected timers and delay', () => {
