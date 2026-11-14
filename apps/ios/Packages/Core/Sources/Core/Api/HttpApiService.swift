@@ -78,7 +78,7 @@ public final class HttpApiService: ApiService {
 
     public func fetchLiveInvite(householdId: UUID) async -> Result<Invite?, ApiFailure> {
         do {
-            let url = try restURL(query: [
+            let url = try restURL(table: "invite", query: [
                 ("household_id", "eq.\(householdId.uuidString.lowercased())"),
                 ("deleted_at", "is.null"),
                 ("expires_at", "gt.\(PostgrestJSON.format(Date()))"),
@@ -97,7 +97,7 @@ public final class HttpApiService: ApiService {
 
     public func retireInvite(id: UUID) async -> Result<Void, ApiFailure> {
         do {
-            let url = try restURL(query: [("id", "eq.\(id.uuidString.lowercased())")])
+            let url = try restURL(table: "invite", query: [("id", "eq.\(id.uuidString.lowercased())")])
             let body = try JSONSerialization.data(withJSONObject: ["deleted_at": PostgrestJSON.format(Date())])
             var headers = restHeaders()
             headers["Prefer"] = "return=representation"
@@ -112,9 +112,71 @@ public final class HttpApiService: ApiService {
         }
     }
 
-    private func restURL(query: [(String, String)]) throws -> URL {
+    public func fetchMembers(householdId: UUID) async -> Result<[MemberRow], ApiFailure> {
+        do {
+            let membersURL = try restURL(table: "member", query: [
+                ("household_id", "eq.\(householdId.uuidString.lowercased())"),
+                ("left_at", "is.null"),
+                ("select", "*"),
+            ])
+            let (memberData, memberStatus) = try await perform(url: membersURL, method: "GET", headers: restHeaders())
+            guard memberStatus == 200,
+                let members = try? PostgrestJSON.decoder.decode([Member].self, from: memberData)
+            else { return .failure(.unknown) }
+            if members.isEmpty { return .success([]) }
+            // No FK embed from member to profile, so the profiles are a second read.
+            let ids = members.map { $0.userId.uuidString.lowercased() }.joined(separator: ",")
+            let profilesURL = try restURL(table: "profile", query: [
+                ("id", "in.(\(ids))"),
+                ("select", "id,display_name,avatar_path"),
+            ])
+            let (profileData, profileStatus) = try await perform(url: profilesURL, method: "GET", headers: restHeaders())
+            guard profileStatus == 200,
+                let profiles = try? PostgrestJSON.decoder.decode([MemberProfile].self, from: profileData)
+            else { return .failure(.unknown) }
+            let byId = Dictionary(profiles.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            return .success(members.map { MemberRow(member: $0, profile: byId[$0.userId]) })
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
+    public func removeMember(householdId: UUID, userId: UUID) async -> Result<Void, ApiFailure> {
+        do {
+            let path = "households/\(householdId.uuidString.lowercased())/members/\(userId.uuidString.lowercased())"
+            let (data, status) = try await perform(
+                url: try apiURL(path), method: "DELETE", headers: ["Accept": "application/json"]
+            )
+            if status == 204 { return .success(()) }
+            return .failure(Self.removeFailure(status: status, code: Self.errorCode(in: data)))
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
+    public func makeOwner(householdId: UUID, userId: UUID) async -> Result<Void, ApiFailure> {
+        do {
+            let url = try restURL(table: "member", query: [
+                ("household_id", "eq.\(householdId.uuidString.lowercased())"),
+                ("user_id", "eq.\(userId.uuidString.lowercased())"),
+            ])
+            let body = try JSONSerialization.data(withJSONObject: ["role": "owner"])
+            var headers = restHeaders()
+            headers["Prefer"] = "return=representation"
+            let (data, status) = try await perform(url: url, method: "PATCH", headers: headers, body: body)
+            // RLS hides rows silently, so an empty array means nothing was promoted.
+            guard (200..<300).contains(status),
+                let rows = (try? JSONSerialization.jsonObject(with: data)) as? [Any], !rows.isEmpty
+            else { return .failure(.unknown) }
+            return .success(())
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
+    private func restURL(table: String, query: [(String, String)]) throws -> URL {
         var components = URLComponents(
-            url: supabaseURL.appendingPathComponent("rest/v1/invite"), resolvingAgainstBaseURL: false
+            url: supabaseURL.appendingPathComponent("rest/v1/\(table)"), resolvingAgainstBaseURL: false
         )
         components?.queryItems = query.map { URLQueryItem(name: $0.0, value: $0.1) }
         guard let url = components?.url else { throw URLError(.badURL) }
@@ -136,12 +198,34 @@ public final class HttpApiService: ApiService {
         return status == 404 || status == 410 ? .invalidCode : .unknown
     }
 
+    /// The API's own error code wins; with no parseable body (a bare proxy response) the status decides.
+    static func removeFailure(status: Int, code: String?) -> ApiFailure {
+        switch code {
+        case "last_owner": return .lastOwner
+        case "forbidden": return .forbidden
+        case "not_found": return .notFound
+        case .some: return .unknown
+        case nil:
+            switch status {
+            case 409: return .lastOwner
+            case 403: return .forbidden
+            case 404: return .notFound
+            default: return .unknown
+            }
+        }
+    }
+
     // MARK: Transport
 
-    private func post(_ path: String, body: Data) async throws -> (Data, Int) {
-        // `path` is already percent-encoded; `URL.appending(path:)` would encode the `%` again.
+    /// `path` is already percent-encoded; `URL.appending(path:)` would encode the `%` again.
+    private func apiURL(_ path: String) throws -> URL {
         let base = baseURL.absoluteString.hasSuffix("/") ? String(baseURL.absoluteString.dropLast()) : baseURL.absoluteString
         guard let url = URL(string: "\(base)/\(path)") else { throw URLError(.badURL) }
+        return url
+    }
+
+    private func post(_ path: String, body: Data) async throws -> (Data, Int) {
+        let url = try apiURL(path)
         return try await perform(
             url: url, method: "POST",
             headers: ["Content-Type": "application/json", "Accept": "application/json"], body: body

@@ -22,7 +22,8 @@ public final class SessionModel {
     @ObservationIgnored private let lastHousehold: LastHouseholdStore
     @ObservationIgnored private let profileCache: ProfileCache
     @ObservationIgnored private let isOnline: @MainActor () -> Bool
-    @ObservationIgnored private var userId: UUID?
+    /// The signed-in user; `nil` when signed out.
+    public private(set) var userId: UUID?
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     /// A household just joined: the next load lands on its Home tab instead of its first module (DESIGN B2).
     @ObservationIgnored private var landOnHome: UUID?
@@ -75,6 +76,13 @@ public final class SessionModel {
         guard let userId else { return }
         lastHousehold.write(householdId)
         landOnHome = householdId
+        load(for: userId)
+    }
+
+    /// The person left their household (CORE-04): forget it and re-resolve where to land (another household, or Welcome).
+    public func leftHousehold() {
+        lastHousehold.clear()
+        guard let userId else { return }
         load(for: userId)
     }
 
