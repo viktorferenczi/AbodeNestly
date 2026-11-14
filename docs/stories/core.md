@@ -856,8 +856,8 @@ Out: The invite sheet contents (CORE-03). Sign-in (CORE-01).
 - [ ] AC6 Given the device is offline, when I open Members, then the list is readable and remove, leave, and make-owner are disabled with the OfflineBanner.
 
 ## Design
-Screen: DESIGN B6 — States: owner, member, invite-sheet, offline. Interactions: remove → undo toast 5 s then DELETE; make owner.
-Deviations from the plan: none
+Screen: DESIGN B6 — States: owner, member, invite-sheet, offline. Interactions: remove → undo toast 5 s then DELETE; make owner → immediate (online only); leave → undo toast 5 s then DELETE; last owner leave blocked with message.
+Deviations from the plan: the offline list is a localStorage snapshot (`abodenestly:members:<household_id>`) until web sync exists; DESIGN B6 now lists leave and make owner.
 
 ## Offline behaviour
 The member list is readable offline (SPEC §6.5). Remove, leave, and role changes need a network. DESIGN B6's undo toast delays the DELETE by 5 seconds while online.
@@ -884,6 +884,8 @@ Blocked by: CORE-04-db, CORE-04-api  Blocks: MAINT-15-web
 
 ## Open questions
 DESIGN B6 includes make owner, and §4 names the roles but does not say an existing member's role can be changed. Proposed default: the overflow action promotes a member to owner, because the screen plan lists it and §4 already has both roles.
+
+**Resolved:** the overflow action promotes a member to owner, with a direct `member.role` update under RLS (no contract change).
 
 # CORE-04-ios — Members, roles, remove, and leave
 
