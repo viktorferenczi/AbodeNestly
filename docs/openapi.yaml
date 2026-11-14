@@ -75,6 +75,27 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/AcceptInviteResponse"
+  "/households/{id}/members/{user_id}":
+    delete:
+      summary: "Remove a member or leave"
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: "No Content"
 components:
   securitySchemes:
     bearerAuth:

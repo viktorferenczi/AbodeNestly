@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import health from '../health.ts';
 import households from '../households/index.ts';
 import householdInvites from '../households/[id]/invites.ts';
+import householdMember from '../households/[id]/members/[user_id].ts';
 import acceptInvite from '../invites/[code]/accept.ts';
 
 type Handler = (req: Request) => Promise<Response>;
@@ -17,6 +18,7 @@ const routes: Record<string, Handler> = {
 // Vercel's [param] routes, as path patterns.
 const patterns: Array<[RegExp, Handler]> = [
   [/^\/households\/[^/]+\/invites$/, householdInvites],
+  [/^\/households\/[^/]+\/members\/[^/]+$/, householdMember],
   [/^\/invites\/[^/]+\/accept$/, acceptInvite],
 ];
 
