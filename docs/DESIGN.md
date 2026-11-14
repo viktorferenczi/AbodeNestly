@@ -120,7 +120,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 - Layout: member rows (avatar, name, role, "you") with overflow menu (owner: make owner, remove) · "Invite" button → sheet: code (large, copyable), share link button, expiry, uses left, "New code".
 - States: `owner` · `member` (no actions) · `invite-sheet` · `offline`.
 - Interactions: remove → undo toast 5 s then DELETE; make owner → immediate (online only); leave → undo toast 5 s then DELETE; last owner leave blocked with message; share → system share sheet.
-- Offline: read-only. · Gating: none. Web: until web sync exists, the offline list is a localStorage snapshot of the last fetch (`abodenestly:members:<household_id>`).
+- Offline: read-only. · Gating: none. Web: until web sync exists, the offline list is a localStorage snapshot of the last fetch (`abodenestly:members:<household_id>`). iOS: a `UserDefaults` snapshot (`abodenestly.members.<household_id>`) until iOS sync exists.
 
 ### B7. Profile
 - Route: `/profile` · Purpose: CORE-06.

@@ -175,7 +175,9 @@ struct InviteSheetViewTests {
 
     @Test("CORE-03: owners and members get the same Invite button (MembersView has no role input)")
     func membersInvite() throws {
-        let view = MembersView(householdId: UUID(), api: FakeApiService(), isOnline: true, webBaseURL: webBase)
+        let api = FakeApiService()
+        let model = MembersModel(householdId: UUID(), meId: UUID(), api: api, onLeft: {})
+        let view = MembersView(model: model, api: api, isOnline: true, webBaseURL: webBase)
         let inspected = try view.inspect()
         _ = try inspected.find(text: "Members")
         let button = try inspected.find(viewWithAccessibilityIdentifier: "members.invite").button()
