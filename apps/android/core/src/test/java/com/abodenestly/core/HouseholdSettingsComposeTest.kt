@@ -162,6 +162,19 @@ class HouseholdSettingsComposeTest {
     }
 
     @Test
+    fun `tapping a switch with an uncommitted name saves both`() {
+        show()
+        api.updateHouseholdResult = ApiResult.Success(home.copy(name = "Casa"))
+        api.updateModulesResult = ApiResult.Success(home.copy(name = "Casa", modulePantry = false))
+        rule.onNodeWithTag("settings.name").performTextClearance()
+        rule.onNodeWithTag("settings.name").performTextInput("Casa")
+        rule.onNodeWithTag("settings.module.pantry").performClick()
+        rule.waitForIdle()
+        val writes = api.calls.filter { it is Call.UpdateHousehold || it is Call.UpdateModules }
+        assertEquals(listOf<Call>(Call.UpdateHousehold(home.id, "Casa", null), Call.UpdateModules(home.id, null, false, null)), writes)
+    }
+
+    @Test
     fun `picking a currency saves it`() {
         show()
         api.updateHouseholdResult = ApiResult.Success(home.copy(currency = "EUR"))

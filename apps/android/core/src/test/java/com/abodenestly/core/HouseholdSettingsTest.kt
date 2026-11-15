@@ -28,6 +28,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -163,6 +165,54 @@ class HouseholdSettingsTest {
         stale.await()
         assertFalse(vm.state.value.household!!.modulePantry)
         assertFalse(cache.read(me, hid)!!.household.modulePantry)
+    }
+
+    @Test
+    fun `a fetch that starts while the save is in flight does not bring the old row back`() = runTest {
+        val vm = loaded()
+        api.updateModulesResult = ApiResult.Success(home.copy(modulePantry = false))
+        api.hold()
+        vm.onEvent(HouseholdSettingsEvent.Toggle(ModuleKey.Pantry, false))
+        // Started after the save began, so it reads the pre-patch row and finishes after the save did.
+        val late = CoroutineScope(Dispatchers.Unconfined).async { vm.load() }
+        api.release()
+        late.await()
+        assertFalse(vm.state.value.household!!.modulePantry)
+        assertFalse(cache.read(me, hid)!!.household.modulePantry)
+    }
+
+    @Test
+    fun `a name typed but not committed is saved before the tap that blurred the field`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val vm = HouseholdSettingsViewModel(
+            hid, me, api, cache, { online }, { changed += it }, { left++ }, scope(), blurDispatcher = dispatcher,
+        )
+        api.fetchHouseholdResult = ApiResult.Success(HouseholdWithRole(home, Member.Role.owner))
+        vm.load()
+        api.updateHouseholdResult = ApiResult.Success(home.copy(name = "Casa"))
+        api.updateModulesResult = ApiResult.Success(home.copy(name = "Casa", modulePantry = false))
+        vm.onEvent(HouseholdSettingsEvent.NameChanged("Casa"))
+        // The blur and the tap arrive on the same turn: the blur commit is deferred, the tap is not.
+        vm.onEvent(HouseholdSettingsEvent.CommitNameOnBlur)
+        vm.onEvent(HouseholdSettingsEvent.Toggle(ModuleKey.Pantry, false))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(
+            listOf<Call>(Call.FetchHousehold(hid, me), Call.UpdateHousehold(hid, "Casa", null), Call.UpdateModules(hid, null, false, null)),
+            api.calls,
+        )
+        assertNull(vm.state.value.nameDraft)
+        assertFalse(vm.state.value.household!!.modulePantry)
+    }
+
+    @Test
+    fun `a failed name save stops the module change`() = runTest {
+        val vm = loaded()
+        api.updateHouseholdResult = ApiResult.Failure(ApiFailure.Network)
+        vm.onEvent(HouseholdSettingsEvent.NameChanged("Casa"))
+        vm.toggle(ModuleKey.Pantry, false)
+        assertTrue(modules.isEmpty())
+        assertEquals("Couldn't save. Check your connection and try again.", vm.state.value.saveError)
     }
 
     @Test

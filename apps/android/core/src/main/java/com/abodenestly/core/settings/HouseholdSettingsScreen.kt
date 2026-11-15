@@ -132,7 +132,7 @@ internal fun HouseholdSettingsContent(
             modifier = Modifier.fillMaxWidth().heightIn(min = Tokens.MinTouchTarget).testTag("settings.name")
                 .onFocusChanged {
                     // Losing focus commits like Done does; the first callback is the initial unfocused state.
-                    if (hadFocus && !it.isFocused) onEvent(HouseholdSettingsEvent.CommitName)
+                    if (hadFocus && !it.isFocused) onEvent(HouseholdSettingsEvent.CommitNameOnBlur)
                     hadFocus = it.isFocused
                 },
         )

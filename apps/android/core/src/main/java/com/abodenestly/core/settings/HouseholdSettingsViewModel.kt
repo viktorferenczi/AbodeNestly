@@ -7,6 +7,7 @@ import com.abodenestly.core.api.ApiFailure
 import com.abodenestly.core.api.ApiResult
 import com.abodenestly.core.api.ApiService
 import com.abodenestly.core.api.HouseholdWithRole
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -57,7 +58,11 @@ data class HouseholdSettingsUiState(
 sealed interface HouseholdSettingsEvent {
     data class Toggle(val key: ModuleKey, val on: Boolean) : HouseholdSettingsEvent
     data class NameChanged(val text: String) : HouseholdSettingsEvent
+    /** IME Done: commit now. */
     data object CommitName : HouseholdSettingsEvent
+
+    /** The name field lost focus: commit after the gesture that took the focus has been handled. */
+    data object CommitNameOnBlur : HouseholdSettingsEvent
     data class SetCurrency(val currency: String) : HouseholdSettingsEvent
     data object BeginLeave : HouseholdSettingsEvent
     data object CancelLeave : HouseholdSettingsEvent
@@ -78,6 +83,8 @@ class HouseholdSettingsViewModel(
     var onHouseholdChanged: (Household) -> Unit,
     var onLeft: () -> Unit,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    /** Runs the blur commit; never immediate, so the tap that took the focus is handled first. */
+    private val blurDispatcher: CoroutineDispatcher = Dispatchers.Main,
 ) : ViewModel(scope) {
     private val mutableState = MutableStateFlow(HouseholdSettingsUiState())
     val state: StateFlow<HouseholdSettingsUiState> = mutableState.asStateFlow()
@@ -92,6 +99,7 @@ class HouseholdSettingsViewModel(
                 if (canEdit(it)) it.copy(nameDraft = event.text) else it
             }
             HouseholdSettingsEvent.CommitName -> scope.launch { commitName() }
+            HouseholdSettingsEvent.CommitNameOnBlur -> scope.launch(blurDispatcher) { commitName() }
             is HouseholdSettingsEvent.SetCurrency -> scope.launch { setCurrency(event.currency) }
             HouseholdSettingsEvent.BeginLeave -> beginLeave()
             HouseholdSettingsEvent.CancelLeave -> cancelLeave()
@@ -136,7 +144,10 @@ class HouseholdSettingsViewModel(
         val s = mutableState.value
         val current = s.household ?: return
         if (!canEdit(s) || s.isBusy) return
-        save(display = withModule(current, key, on)) {
+        // A name typed but not committed goes first, so the tap that blurred the field is not lost.
+        if (!saveDirtyName()) return
+        val fresh = mutableState.value.household ?: return
+        save(display = withModule(fresh, key, on)) {
             api.updateModules(
                 householdId,
                 shopping = if (key == ModuleKey.Shopping) on else null,
@@ -164,7 +175,18 @@ class HouseholdSettingsViewModel(
         val s = mutableState.value
         val current = s.household ?: return
         if (!canEdit(s) || current.currency == currency || s.isBusy) return
-        save(display = current.copy(currency = currency)) { api.updateHousehold(householdId, currency = currency) }
+        if (!saveDirtyName()) return
+        val fresh = mutableState.value.household ?: return
+        save(display = fresh.copy(currency = currency)) { api.updateHousehold(householdId, currency = currency) }
+    }
+
+    /** Saves a pending name edit. `false` when that save failed, so the caller must not go on. */
+    private suspend fun saveDirtyName(): Boolean {
+        val s = mutableState.value
+        val trimmed = s.nameDraft?.trim().orEmpty()
+        if (trimmed.isEmpty() || trimmed == s.household?.name) return true
+        save(display = null) { api.updateHousehold(householdId, name = trimmed) }
+        return mutableState.value.status !is SettingsStatus.Error
     }
 
     private suspend fun save(display: Household?, run: suspend () -> ApiResult<Household>) {
@@ -172,6 +194,8 @@ class HouseholdSettingsViewModel(
         mutableState.update { it.copy(status = SettingsStatus.Saving, optimistic = display) }
         val result = run()
         mutableState.update { it.copy(optimistic = null) }
+        // A fetch that started during the request still holds the pre-patch row; it must not overwrite the result.
+        generation += 1
         when (result) {
             is ApiResult.Success -> {
                 val saved = result.value
