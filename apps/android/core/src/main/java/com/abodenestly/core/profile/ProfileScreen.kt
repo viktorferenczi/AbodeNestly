@@ -42,7 +42,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -73,7 +75,7 @@ class ProfileDeps(
 
 /** Opens the system photo picker; the picked image's bytes come back through [onPicked]. */
 @Composable
-fun rememberPhotoPicker(onPicked: (ByteArray) -> Unit): () -> Unit {
+fun rememberPhotoPicker(onPicked: (ByteArray?) -> Unit): () -> Unit {
     val resolver = LocalContext.current.contentResolver
     val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -82,7 +84,8 @@ fun rememberPhotoPicker(onPicked: (ByteArray) -> Unit): () -> Unit {
             val bytes = withContext(Dispatchers.IO) {
                 runCatching { resolver.openInputStream(uri)?.use { it.readCapped(MAX_PICK_BYTES) } }.getOrNull()
             }
-            if (bytes != null) onPicked(bytes)
+            // `null` is a photo that could not be read or is too big: the screen says so.
+            onPicked(bytes)
         }
     }
     return { launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
@@ -118,7 +121,7 @@ fun ProfileScreen(
     onProfileChanged: (Profile) -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
-    picker: @Composable (onPicked: (ByteArray) -> Unit) -> (() -> Unit) = { onPicked -> rememberPhotoPicker(onPicked) },
+    picker: @Composable (onPicked: (ByteArray?) -> Unit) -> (() -> Unit) = { onPicked -> rememberPhotoPicker(onPicked) },
 ) {
     val tokens = LocalTokens.current
     // Held by the activity's ViewModelStore, so a queued edit and the upload status survive rotation.
@@ -157,7 +160,7 @@ fun ProfileScreen(
             contentAlignment = Alignment.Center,
         ) {
             AvatarImage(
-                initials = com.abodenestly.core.members.MembersViewModel.initials(name),
+                initials = initialsOf(name),
                 avatarPath = state.profile?.avatarPath, localFile = state.avatarFile, loader = deps.avatars, size = 96.dp,
             )
             if (uploading) {
@@ -166,6 +169,12 @@ fun ProfileScreen(
                     color = tokens.accent,
                 )
             }
+        }
+        state.notice?.let {
+            Text(
+                it, style = MaterialTheme.typography.bodyMedium, color = tokens.danger,
+                modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }.testTag("profile.notice"),
+            )
         }
         if (state.offline) {
             Text(

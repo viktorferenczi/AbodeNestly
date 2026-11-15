@@ -10,6 +10,7 @@ import com.abodenestly.core.profile.DrainResult
 import com.abodenestly.core.profile.FakeProfileRemote
 import com.abodenestly.core.profile.FakeProfileRemote.Call
 import com.abodenestly.core.profile.InMemoryProfileOutbox
+import com.abodenestly.core.profile.PendingAvatar
 import com.abodenestly.core.profile.ProfileData
 import com.abodenestly.core.profile.ProfileMutation
 import com.abodenestly.core.profile.ProfileRemoteError
@@ -253,6 +254,88 @@ class ProfileTest {
         runCurrent()
         assertNull(outbox.pendingAvatar(userId))
         assertTrue(remote.calls.isEmpty())
+    }
+
+    // ---- Review fixes ----
+
+    @Test
+    fun `an upload finishing does not clear a newer pick`() = runTest {
+        val sync = sync()
+        val older = File(dir, "old.jpg").apply { writeBytes(byteArrayOf(1)) }
+        val newer = File(dir, "new.jpg").apply { writeBytes(byteArrayOf(2)) }
+        outbox.setPendingAvatar(userId, PendingAvatar(userId.toString(), older.path))
+        remote.onUpload = { outbox.setPendingAvatar(userId, PendingAvatar(userId.toString(), newer.path)) }
+        sync.drain()
+        // The newer photo is still queued (and was sent on the next round); the older file is not the marker.
+        assertTrue(remote.calls.filterIsInstance<Call.Upload>().size == 2)
+        assertEquals(listOf(1, 1), remote.calls.filterIsInstance<Call.Upload>().map { it.size })
+    }
+
+    @Test
+    fun `a rejected photo stays queued and is reported`() = runTest {
+        val sync = sync()
+        val vm = vm(sync = sync)
+        runCurrent()
+        vm.onAvatarPicked(byteArrayOf(1, 2, 3))
+        remote.failure = ProfileRemoteError.Rejected
+        runCurrent()
+        assertNotNull(outbox.pendingAvatar(userId))
+        assertTrue(sync.problem.value)
+        assertEquals("Some changes couldn't be saved.", vm.state.value.notice)
+    }
+
+    @Test
+    fun `a rejected name is reported`() = runTest {
+        outbox.append(userId, entry("one"))
+        remote.failure = ProfileRemoteError.Rejected
+        val sync = sync()
+        sync.drain()
+        assertTrue(sync.problem.value)
+    }
+
+    @Test
+    fun `a photo that cannot be used shows a message and keeps the current one`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val vm = ProfileViewModel(
+            userId, null, profile, cache, outbox, unkickedSync(), true, {}, dir,
+            prepareAvatar = { null }, scope = CoroutineScope(dispatcher + Job()), io = dispatcher,
+        )
+        runCurrent()
+        vm.onAvatarPicked(byteArrayOf(1))
+        runCurrent()
+        assertNotNull(vm.state.value.notice)
+        vm.onAvatarPicked(null)
+        runCurrent()
+        assertNull(outbox.pendingAvatar(userId))
+    }
+
+    @Test
+    fun `a queued name shows even when no profile row is cached`() = runTest {
+        val empty = InMemoryProfileCache()
+        val vm = ProfileViewModel(
+            userId, null, null, empty, outbox, unkickedSync(), true, {}, dir,
+            scope = CoroutineScope(StandardTestDispatcher(testScheduler) + Job()), io = StandardTestDispatcher(testScheduler),
+        )
+        runCurrent()
+        assertNull(vm.state.value.profile)
+    }
+
+    @Test
+    fun `a name committed while a photo uploads keeps the new avatar path`() = runTest {
+        val sync = sync()
+        val vm = vm(sync = sync)
+        runCurrent()
+        remote.hold()
+        vm.onAvatarPicked(byteArrayOf(1, 2, 3))
+        runCurrent()
+        vm.onNameChange("Ada L")
+        vm.onNameCommitted()
+        remote.release()
+        runCurrent()
+        val stored = cache.read(userId)
+        assertEquals("Ada L", stored?.displayName)
+        assertNotNull(stored?.avatarPath)
+        assertEquals("Ada L", vm.state.value.nameDraft)
     }
 
     // ---- The session overlay ----

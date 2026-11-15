@@ -34,6 +34,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** A failed drain is not retried while the device stays online, so each return to the foreground tries again. */
+    override fun onStart() {
+        super.onStart()
+        graph.profileSync.kick()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

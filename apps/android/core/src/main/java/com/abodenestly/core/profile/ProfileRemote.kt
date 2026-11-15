@@ -138,6 +138,9 @@ class FakeProfileRemote : ProfileRemote {
     @Volatile var failure: ProfileRemoteError? = null
     @Volatile private var gate: CompletableDeferred<Unit>? = null
 
+    /** Runs once, in the middle of the next upload: lets a test act while a photo is in flight. */
+    @Volatile var onUpload: (suspend () -> Unit)? = null
+
     /** Makes the next calls suspend until [release], so tests can observe the uploading state. */
     fun hold() {
         gate = CompletableDeferred()
@@ -156,6 +159,7 @@ class FakeProfileRemote : ProfileRemote {
 
     override suspend fun uploadAvatar(userId: UUID, fileName: String, bytes: ByteArray): String {
         recorded += Call.Upload(userId, fileName, bytes.size)
+        onUpload?.let { hook -> onUpload = null; hook() }
         gate?.await()
         failure?.let { throw ProfileRemoteFailure(it) }
         return "profiles/$userId/$fileName"

@@ -47,3 +47,11 @@ fun AvatarImage(
 
 private suspend fun loadPicture(loader: AvatarLoader, avatarPath: String?, localFile: String?): Bitmap? =
     localFile?.let { loader.loadFile(it) } ?: avatarPath?.let { loader.load(it) }
+
+/** "Anna Kovacs" → "AK"; a single name gives one letter; nothing gives "?". */
+fun initialsOf(displayName: String): String {
+    val words = displayName.split(Regex("\\s+")).filter { it.isNotEmpty() }
+    val first = words.firstOrNull()?.first() ?: return "?"
+    val last = if (words.size > 1) words.last().first().toString() else ""
+    return (first.toString() + last).uppercase()
+}

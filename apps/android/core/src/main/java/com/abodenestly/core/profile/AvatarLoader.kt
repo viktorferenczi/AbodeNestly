@@ -71,7 +71,8 @@ class HttpAvatarLoader(private val config: AppConfig, private val auth: AuthServ
             try {
                 http.newCall(request).execute().use { reply ->
                     val body = reply.body
-                    if (!reply.isSuccessful || body == null || body.contentLength() > MAX_BYTES) null else decode(body.bytes())
+                    if (!reply.isSuccessful || body == null || body.contentLength() > MAX_BYTES) null
+                    else readCapped(body.byteStream())?.let(::decode)
                 }
             } catch (e: IOException) {
                 null
@@ -86,6 +87,19 @@ class HttpAvatarLoader(private val config: AppConfig, private val auth: AuthServ
             .build()
 
     private fun String.toHttpUrlOrNull() = runCatching { toHttpUrl() }.getOrNull()
+
+    /** Counts bytes as they arrive, so a body without a Content-Length cannot exceed [MAX_BYTES] either. */
+    private fun readCapped(input: java.io.InputStream): ByteArray? {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(16 * 1024)
+        while (true) {
+            val n = input.read(buffer)
+            if (n < 0) break
+            if (out.size() + n > MAX_BYTES) return null
+            out.write(buffer, 0, n)
+        }
+        return out.toByteArray()
+    }
 
     private fun decode(bytes: ByteArray): Bitmap? = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
 

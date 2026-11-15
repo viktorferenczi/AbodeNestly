@@ -81,7 +81,7 @@ class ProfileComposeTest {
     )
 
     /** A stand-in for the system photo picker: counts taps and hands back a tiny "image". */
-    private val picker: @Composable (onPicked: (ByteArray) -> Unit) -> (() -> Unit) = { onPicked ->
+    private val picker: @Composable (onPicked: (ByteArray?) -> Unit) -> (() -> Unit) = { onPicked ->
         { picks++; onPicked(byteArrayOf(1, 2, 3)) }
     }
 

@@ -29,6 +29,8 @@ data class ProfileUiState(
     val avatarFile: String? = null,
     val status: ProfileStatus = ProfileStatus.Idle,
     val offline: Boolean = false,
+    /** A photo that was not stored, or edits the server refused; shown under the avatar. */
+    val notice: String? = null,
 )
 
 /**
@@ -83,10 +85,9 @@ class ProfileViewModel(
             return
         }
         committedName = name
-        val updated = mutableState.value.profile?.copy(displayName = name)
-        mutableState.update { it.copy(profile = updated ?: it.profile, nameDraft = name) }
+        mutableState.update { s -> s.copy(profile = s.profile?.copy(displayName = name), nameDraft = name) }
         scope.launch {
-            updated?.let { cache.write(userId, it) }
+            val updated = sync.updateCache(userId) { it.copy(displayName = name) }
             outbox.append(userId, ProfileMutation(uuid(), rowId = userId.toString(), data = ProfileData(displayName = name), clientTs = now()))
             updated?.let(onProfileChanged)
             sync.kick()
@@ -94,9 +95,15 @@ class ProfileViewModel(
     }
 
     /** Stores the picture locally and queues it. Online it uploads at once; offline it waits for connectivity. */
-    fun onAvatarPicked(bytes: ByteArray) {
+    fun onAvatarPicked(bytes: ByteArray?) {
         scope.launch {
-            val jpeg = withContext(io) { prepareAvatar(bytes) } ?: return@launch
+            val jpeg = bytes?.let { withContext(io) { prepareAvatar(it) } }
+            if (jpeg == null) {
+                // The current photo stays; the person is told nothing was stored.
+                mutableState.update { it.copy(notice = PHOTO_NOT_STORED) }
+                return@launch
+            }
+            mutableState.update { it.copy(notice = null) }
             val file = File(avatarDir, "pending-avatar-${uuid()}.jpg")
             withContext(io) {
                 avatarDir.mkdirs()
@@ -120,22 +127,25 @@ class ProfileViewModel(
     private suspend fun hasPending() = outbox.pending(userId).isNotEmpty() || outbox.pendingAvatar(userId) != null
 
     private suspend fun flush() {
+        sync.clearProblem()
         val uploading = outbox.pendingAvatar(userId) != null
         if (uploading) mutableState.update { it.copy(status = ProfileStatus.UploadingAvatar) }
         try {
             sync.drain()
         } finally {
-            mutableState.update { it.copy(status = ProfileStatus.Idle) }
+            mutableState.update { it.copy(status = ProfileStatus.Idle, notice = if (sync.problem.value) SAVE_PROBLEM else it.notice) }
             reload()
         }
     }
 
     /** Re-reads the local profile and the queued picture, keeping a name the person is still typing. */
     private suspend fun reload() {
-        val cached = cache.read(userId)
+        // The cache plus what is still queued is what the person last saw: a queued name survives a missing row.
+        val queued = outbox.pending(userId)
+        val cached = (cache.read(userId) ?: mutableState.value.profile)?.let { ProfileMutation.overlay(it, queued) }
         val pending = outbox.pendingAvatar(userId)
         val before = mutableState.value
-        val untouched = before.nameDraft == before.profile?.displayName.orEmpty()
+        val untouched = before.nameDraft == before.profile?.displayName.orEmpty() || before.nameDraft == committedName
         mutableState.update { s ->
             val profile = cached ?: s.profile
             s.copy(
@@ -146,5 +156,10 @@ class ProfileViewModel(
         }
         if (committedName == null) committedName = cached?.displayName
         if (cached != null && cached != before.profile) onProfileChanged(cached)
+    }
+
+    private companion object {
+        const val PHOTO_NOT_STORED = "That photo couldn't be used. Choose a JPG, PNG, WebP or GIF photo."
+        const val SAVE_PROBLEM = "Some changes couldn't be saved."
     }
 }

@@ -1,10 +1,14 @@
 package com.abodenestly.core.profile
 
+import com.abodenestly.contract.models.Profile
 import com.abodenestly.core.auth.ProfileCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -42,6 +46,23 @@ class ProfileSync(
 ) {
     private val mutex = Mutex()
 
+    /** Serialises read-modify-write on the cached profile row, which the screen and the drain both change. */
+    private val cacheLock = Mutex()
+
+    private val mutableProblem = MutableStateFlow(false)
+
+    /** True once the server refused an edit or a photo, so the screen can say "Some changes couldn't be saved." */
+    val problem: StateFlow<Boolean> = mutableProblem.asStateFlow()
+
+    fun clearProblem() {
+        mutableProblem.value = false
+    }
+
+    /** Changes one field set of the cached row under [cacheLock]; returns the stored row, or `null` if none is cached. */
+    suspend fun updateCache(userId: UUID, change: (Profile) -> Profile): Profile? = cacheLock.withLock {
+        cache.read(userId)?.let(change)?.also { cache.write(userId, it) }
+    }
+
     /** Fire and forget, for triggers (an enqueue, connectivity returning, a session appearing). */
     fun kick() {
         scope.launch { drain() }
@@ -70,13 +91,16 @@ class ProfileSync(
 
     private suspend fun send(userId: UUID, entry: ProfileMutation): Outcome = try {
         remote.patchProfile(userId, entry.data.displayName, entry.data.avatarPath)
-        entry.data.avatarPath?.let { path -> cache.read(userId)?.let { cache.write(userId, it.copy(avatarPath = path)) } }
+        entry.data.avatarPath?.let { path -> updateCache(userId) { it.copy(avatarPath = path) } }
         Outcome.Applied
     } catch (e: CancellationException) {
         throw e
     } catch (e: ProfileRemoteFailure) {
         // A rejected entry (RLS, validation) would block the queue forever, so it is dropped.
-        if (e.error == ProfileRemoteError.Rejected) Outcome.Dropped else Outcome.Stop
+        if (e.error == ProfileRemoteError.Rejected) {
+            mutableProblem.value = true
+            Outcome.Dropped
+        } else Outcome.Stop
     }
 
     /** Uploads the queued picture and turns it into an `avatar_path` upsert, which the loop drains next. */
@@ -84,23 +108,27 @@ class ProfileSync(
         val bytes = withContext(io) { readFile(avatar.filePath) }
         if (bytes == null) {
             // The file is gone (cleared cache, reinstall): nothing to upload.
-            outbox.setPendingAvatar(userId, null)
+            clearIfCurrent(userId, avatar)
             return true
         }
         return try {
             val path = remote.uploadAvatar(userId, "avatar-${uuid()}.jpg", bytes)
             outbox.append(userId, ProfileMutation(uuid(), rowId = userId.toString(), data = ProfileData(avatarPath = path), clientTs = now()))
-            outbox.setPendingAvatar(userId, null)
-            withContext(io) { deleteFile(avatar.filePath) }
+            clearIfCurrent(userId, avatar)
             true
         } catch (e: CancellationException) {
             throw e
         } catch (e: ProfileRemoteFailure) {
-            if (e.error == ProfileRemoteError.Rejected) {
-                outbox.setPendingAvatar(userId, null)
-                withContext(io) { deleteFile(avatar.filePath) }
-                true
-            } else false
+            // A refused photo stays queued (the person's only copy) and is reported; picking another replaces it.
+            if (e.error == ProfileRemoteError.Rejected) mutableProblem.value = true
+            false
         }
+    }
+
+    /** A newer pick may have replaced the slot while this upload ran; only the picture that was sent is cleared. */
+    private suspend fun clearIfCurrent(userId: UUID, avatar: PendingAvatar) {
+        if (outbox.pendingAvatar(userId)?.filePath != avatar.filePath) return
+        outbox.setPendingAvatar(userId, null)
+        withContext(io) { deleteFile(avatar.filePath) }
     }
 }
