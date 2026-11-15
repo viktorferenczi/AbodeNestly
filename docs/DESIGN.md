@@ -131,6 +131,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 - Layout: avatar (tap to change) · display name field · email (read-only) · notification preferences link (B9) · sign out.
 - States: `idle` · `uploading-avatar` · `offline` (avatar upload queued, name edit allowed).
 - Offline: name edit via outbox. · Gating: none.
+- _Web (CORE-06-web): until web sync exists, the outbox is a localStorage queue drained by a direct SDK update when online, and a queued avatar is held in memory only (lost if the tab reloads while offline)._
 
 ### B8. Search
 - Route: `/search` (TopBar magnifier) · Purpose: CORE-09.
