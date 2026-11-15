@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { clearHouseholds } from '../householdsCache.ts';
 import { useAuth } from './AuthProvider.tsx';
 
 export function SignOutButton() {
-  const { client } = useAuth();
+  const { client, session } = useAuth();
   const navigate = useNavigate();
   const [failed, setFailed] = useState(false);
 
@@ -16,6 +17,7 @@ export function SignOutButton() {
       setFailed(true);
       return;
     }
+    if (session) clearHouseholds(session.user.id);
     // Replaces the ?next=/profile that RequireAuth attaches when the session drops.
     void navigate('/signin', { replace: true });
   }

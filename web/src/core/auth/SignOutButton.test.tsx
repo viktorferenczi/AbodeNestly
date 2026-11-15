@@ -5,6 +5,7 @@ import { FakeAuthClient } from './FakeAuthClient.ts';
 import { AuthProvider } from './AuthProvider.tsx';
 import { RequireAuth } from './RequireAuth.tsx';
 import { SignIn } from './SignIn.tsx';
+import { readHouseholds, writeHouseholds } from '../householdsCache.ts';
 import { SignOutButton } from './SignOutButton.tsx';
 
 afterEach(cleanup);
@@ -54,5 +55,16 @@ describe('CORE-01: sign out', () => {
     });
     expect(router.state.location.pathname).toBe('/profile');
     expect(screen.getByRole('alert').textContent).toMatch(/Couldn't sign out/);
+  });
+
+  it('CORE-07: signing out clears the cached household list of that user', async () => {
+    const entry = { household: { id: 'h1', name: 'Home' }, role: 'owner' } as never;
+    writeHouseholds('u1', [entry]);
+    await setup(new FakeAuthClient({ user: { id: 'u1' } }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(readHouseholds('u1')).toEqual([]);
   });
 });

@@ -29,7 +29,7 @@ async function renderShell(client: FakeAuthClient, api = new FakeApiClient()) {
 describe('Shell', () => {
   it('INIT: shell renders the title, main region and routed child', async () => {
     await renderShell(new FakeAuthClient({ user: { id: 'u1' } }));
-    expect(screen.getByRole('heading', { name: 'AbodeNestly' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'AbodeNestly ▾' })).toBeTruthy();
     expect(screen.getByRole('main').textContent).toBe('child');
   });
 

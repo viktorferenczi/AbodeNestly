@@ -1,4 +1,4 @@
-// CORE-07 (household switcher) will write this key too.
+// Written by Welcome, Landing and the household switcher (CORE-07).
 const KEY = 'abodenestly:lastHousehold';
 
 export function readLastHousehold(): string | null {

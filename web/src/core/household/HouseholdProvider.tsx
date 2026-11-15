@@ -1,9 +1,12 @@
 import type { Household, Role } from '@abodenestly/contract';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useLocation } from 'react-router';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router';
+import { dbName, openHouseholdDb, type HouseholdDb } from '../../sync/db.ts';
 import { useApi } from '../api/ApiProvider.tsx';
 import { useAuth } from '../auth/AuthProvider.tsx';
-import { readLastHousehold } from '../auth/lastHousehold.ts';
+import { readLastHousehold, writeLastHousehold } from '../auth/lastHousehold.ts';
+import { readHouseholds } from '../householdsCache.ts';
+import { switchTargetPath } from '../Switcher.ts';
 
 export type Modules = { shopping: boolean; pantry: boolean; maintenance: boolean };
 type Cached = { household: Household; role: Role };
@@ -54,6 +57,11 @@ export type HouseholdState = {
   /** Swaps in a household the caller just saved, so tabs and settings update without a reload. */
   replace(household: Household): void;
   reload(): void;
+  /** The open local database of the current household (`null` while none is open or during a switch). */
+  db: HouseholdDb | null;
+  switching: boolean;
+  /** Closes the current database, opens the target's, and lands on the same tab. Needs no network (SPEC §6.1). */
+  switchTo(id: string): Promise<void>;
 };
 
 type Loaded = { id: string; status: 'ready' | 'none'; household: Household | null; role: Role | null };
@@ -71,6 +79,38 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const householdId = useMemo(() => readLastHousehold(), [location]);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const navigate = useNavigate();
+  const [db, setDb] = useState<HouseholdDb | null>(null);
+  const [switching, setSwitching] = useState(false);
+  const dbRef = useRef<HouseholdDb | null>(null);
+  const pathRef = useRef(location.pathname + location.search);
+  pathRef.current = location.pathname + location.search;
+
+  // Opens the household's database; switchTo may have opened it already, in which case it is adopted.
+  useEffect(() => {
+    if (!householdId) return;
+    let active = true;
+    let mine: HouseholdDb | null = null;
+    const existing = dbRef.current;
+    if (existing && existing.name === dbName(householdId) && existing.isOpen()) {
+      mine = existing;
+    } else {
+      openHouseholdDb(householdId)
+        .then((opened) => {
+          if (!active) return opened.close();
+          mine = opened;
+          dbRef.current = opened;
+          setDb(opened);
+        })
+        // IndexedDB blocked (private mode): the household still renders from its cached copy.
+        .catch(() => undefined);
+    }
+    return () => {
+      active = false;
+      mine?.close();
+      if (dbRef.current === mine) dbRef.current = null;
+    };
+  }, [householdId]);
 
   useEffect(() => {
     if (!householdId || !userId) return;
@@ -108,6 +148,41 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   );
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
+  const switchTo = useCallback(
+    async (id: string) => {
+      if (!userId || id === householdId) return;
+      setSwitching(true);
+      const previous = dbRef.current;
+      try {
+        previous?.close();
+        dbRef.current = null;
+        setDb(null);
+        const opened = await openHouseholdDb(id);
+        dbRef.current = opened;
+        setDb(opened);
+        writeLastHousehold(id);
+        // The cached copy, not the network: switching must work offline (AC5).
+        const entry = readHouseholds(userId).find((e) => e.household.id === id) ?? readCache(userId, id);
+        if (entry) {
+          writeCache(userId, id, entry);
+          setLoaded({ id, status: 'ready', household: entry.household, role: entry.role });
+        }
+        void navigate(entry ? switchTargetPath(pathRef.current, entry.household) : pathRef.current, { replace: true });
+      } catch (error) {
+        // Could not open the target: put the current household back so the app is not left without a database.
+        if (previous && householdId) {
+          const back = await openHouseholdDb(householdId).catch(() => null);
+          dbRef.current = back;
+          setDb(back);
+        }
+        throw error;
+      } finally {
+        setSwitching(false);
+      }
+    },
+    [userId, householdId, navigate],
+  );
+
   const value = useMemo<HouseholdState>(() => {
     const current = householdId && loaded?.id === householdId ? loaded : null;
     const status = !householdId ? 'none' : (current?.status ?? 'loading');
@@ -119,8 +194,11 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       modules: household ? modulesOf(household) : NO_MODULES,
       replace,
       reload,
+      db,
+      switching,
+      switchTo,
     };
-  }, [householdId, loaded, replace, reload]);
+  }, [householdId, loaded, replace, reload, db, switching, switchTo]);
 
   return <HouseholdContext.Provider value={value}>{children}</HouseholdContext.Provider>;
 }
