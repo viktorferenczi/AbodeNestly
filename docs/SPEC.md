@@ -73,6 +73,7 @@ Clients: iOS (Swift/SwiftUI), Android (Kotlin/Jetpack Compose), Web (React). Bac
 
 ### Storage
 - Supabase Storage, bucket `households`, path `households/{household_id}/{entity}/{entity_id}/{filename}`. Clients upload with signed URLs obtained from the API.
+- Avatars: `profiles/{user_id}/{filename}` in the same bucket. Clients upload directly with their JWT (no signed URL), and a CORE-06 upload stores that path in `profile.avatar_path`. The sign-in trigger may have stored the provider's avatar URL there first, so the column is unconstrained and clients must accept both shapes.
 
 ### Clients
 - **iOS**: Swift 6, SwiftUI, iOS 17+. Local DB: **SQLite via GRDB** (one dependency). Networking: `URLSession`. Supabase Swift SDK for Auth and Realtime only.
@@ -764,11 +765,11 @@ Module disabled matrix — what still works:
 - `invite`: only owners may create `role='owner'` invites; `members cannot change an invite's `role`, `uses`, `max_uses` or `expires_at` (only retire it); `accept_invite()` is a no-op for an already-active member.
 - `member` rows are created only by `create_household()` and `accept_invite()` (security definer).
 - A `member` update that would leave a household with no active owner (leave or demote the last owner) is rejected with `last_owner` (SQLSTATE P0001), for every role.
-- `profile` readable by anyone sharing a household with the user. Rows are created by the `on_auth_user_created` trigger (security definer) on `auth.users`; clients only update their own row.
+- `profile` readable by anyone sharing a household with the user. Rows are created by the `on_auth_user_created` trigger (security definer) on `auth.users`; clients only update their own row (a write to a peer's profile is rejected with 42501; clients cannot insert or delete profiles).
 - `product` readable by all authenticated users; written only by the API with the service role.
 - API runs with the **user's JWT** forwarded to Postgres (`set local role authenticated; set local request.jwt.claims`) so RLS applies to the sync layer too. The service role is used only for cron delivery and product cache writes.
 - Share links (`/shared/{token}`) are the one public read path and return only the list name and unchecked item names/quantities.
-- Storage policies mirror table RLS using the `households/{household_id}/…` path prefix.
+- Storage policies mirror table RLS using the `households/{household_id}/…` path prefix. Avatars under `profiles/{user_id}/…`: write your own folder only, read your own and your household peers'.
 
 ---
 
@@ -868,6 +869,16 @@ language sql stable security definer set search_path = public as $$
   );
 $$;
 
+-- Invoker, not definer: RLS on member already shows an active member their whole household.
+create or replace function shares_household(uid uuid) returns boolean
+language sql stable as $$
+  select exists (
+    select 1 from member a join member b on a.household_id = b.household_id
+    where a.user_id = auth.uid() and b.user_id = uid
+      and a.left_at is null and b.left_at is null
+  );
+$$;
+
 create or replace function name_key(p text) returns text
 language sql immutable as $$
   select lower(regexp_replace(trim(p), '\s+', ' ', 'g'));
@@ -900,13 +911,27 @@ create table profile (
   updated_at    timestamptz not null default now()
 );
 alter table profile enable row level security;
-create policy profile_self on profile for all using (id = auth.uid());
--- members of the same household can see each other's name/avatar
-create policy profile_household on profile for select using (
-  exists (select 1 from member a join member b on a.household_id = b.household_id
-          where a.user_id = auth.uid() and b.user_id = profile.id
-            and a.left_at is null and b.left_at is null)
-);
+-- No insert/delete policy: rows come from handle_new_user and cascade from auth.users.
+create policy profile_select on profile for select
+  using (id = auth.uid() or shares_household(id));
+-- USING widens to peers so a peer's update reaches the check and raises 42501; strangers match 0 rows.
+create policy profile_update on profile for update
+  using (id = auth.uid() or shares_household(id)) with check (id = auth.uid());
+
+-- Timestamps are server-owned: a queued offline edit must not forge them.
+-- The id is immutable too: WITH CHECK cannot see OLD, so a peer row could be retargeted to auth.uid().
+create or replace function profile_touch() returns trigger
+language plpgsql as $$
+begin
+  if current_user = 'authenticated' and new.id is distinct from old.id then
+    raise exception 'profile_id_immutable' using errcode = '42501';
+  end if;
+  new.updated_at := now();
+  new.created_at := old.created_at;
+  return new;
+end $$;
+create trigger profile_touch before update on profile
+  for each row execute function profile_touch();
 
 -- Create a profile row the first time a user signs in (any provider).
 create or replace function handle_new_user() returns trigger
@@ -1655,4 +1680,31 @@ alter publication supabase_realtime add table
   location, category, pantry_item, pantry_movement, recipe, recipe_ingredient,
   house, contractor, asset, maint_task, task_consumable, maint_log;
 
+-- ---------------------------------------------------------------------------
+-- Storage
+-- ---------------------------------------------------------------------------
+-- Storage: avatars at profiles/{user_id}/{filename} in the private households bucket.
+insert into storage.buckets (id, name, public) values ('households', 'households', false)
+  on conflict (id) do nothing;
+
+-- Folder 2 is compared as text; the uuid cast runs only behind the regex (CASE guarantees order).
+create policy avatar_select on storage.objects for select using (
+  bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
+  and case
+    when (storage.foldername(name))[2] = auth.uid()::text then true
+    when (storage.foldername(name))[2] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      then shares_household(((storage.foldername(name))[2])::uuid)
+    else false
+  end);
+create policy avatar_insert on storage.objects for insert with check (
+  bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
+  and (storage.foldername(name))[2] = auth.uid()::text and array_length(storage.foldername(name), 1) = 2);
+create policy avatar_update on storage.objects for update
+  using (bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
+    and (storage.foldername(name))[2] = auth.uid()::text and array_length(storage.foldername(name), 1) = 2)
+  with check (bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
+    and (storage.foldername(name))[2] = auth.uid()::text and array_length(storage.foldername(name), 1) = 2);
+create policy avatar_delete on storage.objects for delete using (
+  bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
+  and (storage.foldername(name))[2] = auth.uid()::text and array_length(storage.foldername(name), 1) = 2);
 ```
