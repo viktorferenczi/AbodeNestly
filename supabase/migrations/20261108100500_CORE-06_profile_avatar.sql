@@ -21,9 +21,13 @@ create policy profile_update on profile for update
   using (id = auth.uid() or shares_household(id)) with check (id = auth.uid());
 
 -- Timestamps are server-owned: a queued offline edit must not forge them.
+-- The id is immutable too: WITH CHECK cannot see OLD, so a peer row could be retargeted to auth.uid().
 create or replace function profile_touch() returns trigger
 language plpgsql as $$
 begin
+  if current_user = 'authenticated' and new.id is distinct from old.id then
+    raise exception 'profile_id_immutable' using errcode = '42501';
+  end if;
   new.updated_at := now();
   new.created_at := old.created_at;
   return new;
@@ -40,7 +44,7 @@ create policy avatar_select on storage.objects for select using (
   bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
   and case
     when (storage.foldername(name))[2] = auth.uid()::text then true
-    when (storage.foldername(name))[2] ~ '^[0-9a-f-]{36}$'
+    when (storage.foldername(name))[2] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       then shares_household(((storage.foldername(name))[2])::uuid)
     else false
   end);

@@ -1,7 +1,7 @@
 -- CORE-06: profile self-update, peer read, avatar Storage policies.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(18);
+select plan(24);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'a1@example.com', 'authenticated', 'authenticated'),
@@ -50,6 +50,8 @@ select throws_ok($$update public.profile set display_name = 'Hax' where id = '00
   '42501', null, 'CORE-06: AC2 peer update rejected');
 select throws_ok($$update public.profile set id = '00000000-0000-0000-0000-0000000000a2'
   where id = '00000000-0000-0000-0000-0000000000a1'$$, '42501', null, 'CORE-06: AC2 changing id rejected');
+select throws_ok($$update public.profile set id = '00000000-0000-0000-0000-0000000000a1'
+  where id = '00000000-0000-0000-0000-0000000000a2'$$, '42501', null, 'CORE-06: AC2 peer id retarget rejected');
 select throws_ok($$insert into public.profile (id, display_name) values (gen_random_uuid(), 'X')$$,
   '42501', null, 'CORE-06: AC2 insert rejected');
 delete from public.profile where id = '00000000-0000-0000-0000-0000000000a1';
@@ -58,6 +60,8 @@ update public.profile set display_name = 'Hax' where id = '00000000-0000-0000-00
 reset role;
 select is((select display_name from public.profile where id = '00000000-0000-0000-0000-0000000000a2'), 'Two',
   'CORE-06: AC2 peer name unchanged');
+select is((select count(*)::int from public.profile where id = '00000000-0000-0000-0000-0000000000a2'), 1,
+  'CORE-06: AC2 peer id unchanged');
 select is((select display_name from public.profile where id = '00000000-0000-0000-0000-0000000000a1'), 'New',
   'CORE-06: AC2 stranger update and own delete changed nothing');
 
@@ -89,6 +93,24 @@ select set_config('storage.allow_delete_query', 'true', true);
 delete from storage.objects where name = 'profiles/00000000-0000-0000-0000-0000000000a1/me.png';
 select lives_ok($$select count(*) from storage.objects where name = 'profiles/not-a-uuid/x'$$,
   'CORE-06: malformed folder does not raise');
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a3","role":"authenticated"}', true);
+select is((select count(*)::int from storage.objects where name = 'profiles/00000000-0000-0000-0000-0000000000a1/me.png'), 0,
+  'CORE-06: stranger cannot read avatar');
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a4","role":"authenticated"}', true);
+select is((select count(*)::int from storage.objects where name = 'profiles/00000000-0000-0000-0000-0000000000a1/me.png'), 0,
+  'CORE-06: former member cannot read avatar');
+reset role;
+-- 36 hex digits pass a loose guard but are not a uuid; the policy must hide them, not raise
+insert into storage.objects (bucket_id, name) values
+  ('households', 'profiles/abcdefabcdefabcdefabcdefabcdefabcdef/x.png'),
+  ('households', 'profiles/not-a-uuid/x');
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+select lives_ok($$select count(*) from storage.objects where name like 'profiles/%'$$,
+  'CORE-06: stored malformed keys do not raise');
+select is((select count(*)::int from storage.objects where name in
+  ('profiles/abcdefabcdefabcdefabcdefabcdefabcdef/x.png', 'profiles/not-a-uuid/x')), 0,
+  'CORE-06: malformed keys are hidden');
 reset role;
 select is((select count(*)::int from storage.objects where name = 'profiles/00000000-0000-0000-0000-0000000000a1/me.png'), 1,
   'CORE-06: peer delete removed nothing');

@@ -73,7 +73,7 @@ Clients: iOS (Swift/SwiftUI), Android (Kotlin/Jetpack Compose), Web (React). Bac
 
 ### Storage
 - Supabase Storage, bucket `households`, path `households/{household_id}/{entity}/{entity_id}/{filename}`. Clients upload with signed URLs obtained from the API.
-- Avatars: `profiles/{user_id}/{filename}` in the same bucket. Clients upload directly with their JWT (no signed URL), and `profile.avatar_path` stores that path.
+- Avatars: `profiles/{user_id}/{filename}` in the same bucket. Clients upload directly with their JWT (no signed URL), and a CORE-06 upload stores that path in `profile.avatar_path`. The sign-in trigger may have stored the provider's avatar URL there first, so the column is unconstrained and clients must accept both shapes.
 
 ### Clients
 - **iOS**: Swift 6, SwiftUI, iOS 17+. Local DB: **SQLite via GRDB** (one dependency). Networking: `URLSession`. Supabase Swift SDK for Auth and Realtime only.
@@ -919,9 +919,13 @@ create policy profile_update on profile for update
   using (id = auth.uid() or shares_household(id)) with check (id = auth.uid());
 
 -- Timestamps are server-owned: a queued offline edit must not forge them.
+-- The id is immutable too: WITH CHECK cannot see OLD, so a peer row could be retargeted to auth.uid().
 create or replace function profile_touch() returns trigger
 language plpgsql as $$
 begin
+  if current_user = 'authenticated' and new.id is distinct from old.id then
+    raise exception 'profile_id_immutable' using errcode = '42501';
+  end if;
   new.updated_at := now();
   new.created_at := old.created_at;
   return new;
@@ -1688,7 +1692,7 @@ create policy avatar_select on storage.objects for select using (
   bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
   and case
     when (storage.foldername(name))[2] = auth.uid()::text then true
-    when (storage.foldername(name))[2] ~ '^[0-9a-f-]{36}$'
+    when (storage.foldername(name))[2] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       then shares_household(((storage.foldername(name))[2])::uuid)
     else false
   end);
