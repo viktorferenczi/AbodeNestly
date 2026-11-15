@@ -145,6 +145,10 @@ private struct MainTabs: View {
             }
         }
         .tint(Tokens.accent)
+        // A module switched off while its tab is selected: fall back to Home (Settings lives there, so defensive only).
+        .onChange(of: tabs) { _, tabs in
+            if !tabs.contains(selection) { selection = .home }
+        }
     }
 
     @ViewBuilder
@@ -162,6 +166,10 @@ private struct MainTabs: View {
                             MembersScreen(householdId: householdId, session: session, environment: environment)
                         }
                         .accessibilityIdentifier("home.members")
+                        NavigationLink("Settings") {
+                            HouseholdSettingsScreen(householdId: householdId, session: session, environment: environment)
+                        }
+                        .accessibilityIdentifier("home.settings")
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -218,5 +226,30 @@ private struct MembersScreen: View {
             model: model, api: environment.api, isOnline: environment.network.isOnline,
             webBaseURL: environment.config.webBaseURL
         )
+    }
+}
+
+/// Owns the `HouseholdSettingsModel` for the pushed screen, so a re-render of the tabs never resets it.
+private struct HouseholdSettingsScreen: View {
+    let environment: AppEnvironment
+    @State private var model: HouseholdSettingsModel
+
+    init(householdId: UUID, session: SessionModel, environment: AppEnvironment) {
+        self.environment = environment
+        let network = environment.network
+        _model = State(initialValue: HouseholdSettingsModel(
+            householdId: householdId,
+            // Settings is only reachable signed in; the nil-UUID fallback never matches a row.
+            userId: session.userId ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+            api: environment.api,
+            cache: HouseholdCache(),
+            isOnline: { network.isOnline },
+            onHouseholdChanged: { [session] in session.updateHousehold($0) },
+            onLeft: { [session] in session.leftHousehold() }
+        ))
+    }
+
+    var body: some View {
+        HouseholdSettingsView(model: model, isOnline: environment.network.isOnline)
     }
 }

@@ -13,6 +13,9 @@ public final class FakeApiService: ApiService {
         case fetchMembers(householdId: UUID)
         case removeMember(householdId: UUID, userId: UUID)
         case makeOwner(householdId: UUID, userId: UUID)
+        case fetchHousehold(householdId: UUID, userId: UUID)
+        case updateModules(householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?)
+        case updateHousehold(householdId: UUID, name: String?, currency: String?)
     }
 
     private struct State {
@@ -26,6 +29,9 @@ public final class FakeApiService: ApiService {
         var membersResult: Result<[MemberRow], ApiFailure> = .success([])
         var removeResult: Result<Void, ApiFailure> = .success(())
         var makeOwnerResult: Result<Void, ApiFailure> = .success(())
+        var householdResult: Result<HouseholdWithRole?, ApiFailure> = .success(nil)
+        var updateModulesResult: Result<Household, ApiFailure> = .failure(.unknown)
+        var updateHouseholdResult: Result<Household, ApiFailure> = .failure(.unknown)
         var held: [CheckedContinuation<Void, Never>] = []
         var hold = false
     }
@@ -55,6 +61,10 @@ public final class FakeApiService: ApiService {
     public func setMembersResult(_ result: Result<[MemberRow], ApiFailure>) { state.withLock { $0.membersResult = result } }
     public func setRemoveResult(_ result: Result<Void, ApiFailure>) { state.withLock { $0.removeResult = result } }
     public func setMakeOwnerResult(_ result: Result<Void, ApiFailure>) { state.withLock { $0.makeOwnerResult = result } }
+
+    public func setHouseholdResult(_ result: Result<HouseholdWithRole?, ApiFailure>) { state.withLock { $0.householdResult = result } }
+    public func setUpdateModulesResult(_ result: Result<Household, ApiFailure>) { state.withLock { $0.updateModulesResult = result } }
+    public func setUpdateHouseholdResult(_ result: Result<Household, ApiFailure>) { state.withLock { $0.updateHouseholdResult = result } }
 
     /// Makes calls suspend until `release()`, so tests can observe `creating` / `joining`.
     public func hold() { state.withLock { $0.hold = true } }
@@ -127,5 +137,27 @@ public final class FakeApiService: ApiService {
         state.withLock { $0.calls.append(.makeOwner(householdId: householdId, userId: userId)) }
         await suspendIfHeld()
         return state.withLock { $0.makeOwnerResult }
+    }
+
+    public func fetchHousehold(householdId: UUID, userId: UUID) async -> Result<HouseholdWithRole?, ApiFailure> {
+        state.withLock { $0.calls.append(.fetchHousehold(householdId: householdId, userId: userId)) }
+        await suspendIfHeld()
+        return state.withLock { $0.householdResult }
+    }
+
+    public func updateModules(
+        householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?
+    ) async -> Result<Household, ApiFailure> {
+        state.withLock {
+            $0.calls.append(.updateModules(householdId: householdId, shopping: shopping, pantry: pantry, maintenance: maintenance))
+        }
+        await suspendIfHeld()
+        return state.withLock { $0.updateModulesResult }
+    }
+
+    public func updateHousehold(householdId: UUID, name: String?, currency: String?) async -> Result<Household, ApiFailure> {
+        state.withLock { $0.calls.append(.updateHousehold(householdId: householdId, name: name, currency: currency)) }
+        await suspendIfHeld()
+        return state.withLock { $0.updateHouseholdResult }
     }
 }

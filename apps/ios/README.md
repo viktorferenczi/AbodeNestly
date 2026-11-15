@@ -46,10 +46,13 @@ relaunch), `WelcomeUITests` (create a household, land on Home, check the seeded 
 (both users see each other, the last owner cannot leave, the owner removes the other after the 5 s undo window). Each test creates its
 own user through the admin API, reads the magic link from Mailpit (`127.0.0.1:54324`), follows the verify URL without
 redirects and opens the resulting `abodenestly-dev://auth/callback?code=…` in the app for a real PKCE exchange, then
-deletes the user (and its household). `WelcomeUITests` also needs the API on :3000
+deletes the user (and its household). `HouseholdSettingsUITests` (E2E-CORE-3: an owner switches Pantry off in Settings, the Pantry tab disappears without a
+relaunch and `household.module_pantry` is false; it needs the API on :3000 too). `WelcomeUITests` also needs the API on :3000
 (`pnpm --filter @abodenestly/api dev`) and reads `shopping_list` / `location` with the service role.
 Without the key both skip. The app launches with `-reset-session` (Debug builds only) to start signed out.
 Core has no test target of its own, so its unit and component tests live in `AbodeNestlyTests`.
+Until iOS sync exists, Settings keeps its offline snapshot of the household and the viewer's role in `UserDefaults`
+under `abodenestly.household.<user_id>.<household_id>` (Members: `abodenestly.members.<household_id>`).
 If a name-based destination fails because a paired watch is attached, use `id=<simulator udid>` from `xcrun simctl list devices`.
 
 ## Generated models
