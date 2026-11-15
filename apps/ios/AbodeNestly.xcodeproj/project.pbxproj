@@ -282,7 +282,6 @@
 				A10000000000000000000C02 /* XCLocalSwiftPackageReference "Packages/NestlyUI" */,
 				A10000000000000000000C03 /* XCLocalSwiftPackageReference "Packages/Shared" */,
 				A10000000000000000000C04 /* XCLocalSwiftPackageReference "Packages/Contract" */,
-				A10000000000000000000C05 /* XCLocalSwiftPackageReference "Packages/Sync" */,
 				A10000000000000000000E01 /* XCRemoteSwiftPackageReference "ViewInspector" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -589,10 +588,6 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Contract;
 		};
-		A10000000000000000000C05 /* XCLocalSwiftPackageReference "Packages/Sync" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/Sync;
-		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -684,12 +679,12 @@
 		};
 		A10000000000000000000C15 /* Sync */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10000000000000000000C05 /* XCLocalSwiftPackageReference "Packages/Sync" */;
+			package = A10000000000000000000C01 /* XCLocalSwiftPackageReference "Packages/Core" */;
 			productName = Sync;
 		};
 		A10000000000000000000E23 /* Sync */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10000000000000000000C05 /* XCLocalSwiftPackageReference "Packages/Sync" */;
+			package = A10000000000000000000C01 /* XCLocalSwiftPackageReference "Packages/Core" */;
 			productName = Sync;
 		};
 /* End XCSwiftPackageProductDependency section */
