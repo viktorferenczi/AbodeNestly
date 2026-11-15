@@ -12,6 +12,7 @@ import {
 import { useOnline } from '../../ui/useOnline.ts';
 import {
   avatarStoragePath,
+  isAvatarType,
   defaultDeps,
   drainProfileOutbox,
   editDisplayName,
@@ -46,6 +47,8 @@ export type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+const RETRY_MS = 30_000;
+
 const makeObjectUrl = (file: File) => (typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null);
 
 export function AuthProvider({ client, children }: { client: AuthClient; children: ReactNode }) {
@@ -62,6 +65,8 @@ export function AuthProvider({ client, children }: { client: AuthClient; childre
   const pendingFile = useRef<File | null>(null);
   const draining = useRef(false);
   const dirty = useRef(false);
+  const activeUser = useRef<string | undefined>(undefined);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const setLocalProfile = useCallback((next: Profile | null) => {
     profileRef.current = next;
@@ -86,6 +91,7 @@ export function AuthProvider({ client, children }: { client: AuthClient; childre
   }, [client, setLocalProfile]);
 
   const userId = session?.user.id;
+  const hasProfile = profile !== null;
 
   const loadProfile = useCallback(
     async (uid: string, isActive: () => boolean) => {
@@ -114,10 +120,13 @@ export function AuthProvider({ client, children }: { client: AuthClient; childre
     };
   }, [userId, loadProfile]);
 
-  // A queued photo belongs to the signed-in user only.
+  // A queued photo belongs to the signed-in user only; async drain work checks `activeUser` after each await.
   useEffect(() => {
+    activeUser.current = userId;
     if (!userId) return;
     return () => {
+      activeUser.current = undefined;
+      clearTimeout(retryTimer.current);
       pendingFile.current = null;
       setAvatar((a) => {
         if (a.preview) URL.revokeObjectURL?.(a.preview);
@@ -127,59 +136,100 @@ export function AuthProvider({ client, children }: { client: AuthClient; childre
     };
   }, [userId]);
 
-  // Interim drain (until SHOP-08): upload the queued photo, queue its path, then apply queued edits.
+  // Coming back to the tab is the retry trigger while the browser still reports online (SPEC §6.4).
+  useEffect(() => {
+    if (!userId) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') setTick((t) => t + 1);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [userId]);
+
+  // Interim drain (until SHOP-08): apply queued edits, upload the queued photo, queue its path, apply again.
   useEffect(() => {
     if (!userId || !online || draining.current) return;
-    if (!pendingFile.current && readOutbox(userId).length === 0) return;
+    const file = pendingFile.current;
+    if (!file && readOutbox(userId).length === 0) return;
+    // A photo waits for the profile row: its path can only be saved onto an existing row.
+    if (file && !hasProfile && readOutbox(userId).length === 0) return;
     draining.current = true;
     dirty.current = false;
+    const live = () => activeUser.current === userId;
     void (async () => {
       let settled = true;
       let problem = false;
-      try {
-        const file = pendingFile.current;
-        if (file) {
-          const path = avatarStoragePath(userId, file, defaultDeps.uuid());
-          setAvatar((a) => ({ ...a, status: 'uploading' }));
-          const uploaded = path ? await client.uploadAvatar(path, file) : null;
-          if (!path || (uploaded && !uploaded.ok && uploaded.error.code !== 'network')) {
-            problem = true;
-            if (pendingFile.current === file) pendingFile.current = null;
-          } else if (uploaded?.ok) {
-            if (pendingFile.current === file) pendingFile.current = null;
-            if (profileRef.current) {
-              setLocalProfile(queueProfileEdit(userId, profileRef.current, { avatar_path: path }, defaultDeps));
-            }
-          } else {
-            settled = false; // offline mid-upload: keep the file queued
-          }
-          setAvatar((a) => ({ ...a, status: pendingFile.current ? 'queued' : 'idle' }));
-          if (!settled) return;
-        }
+      // Returns false when the run must stop: signed out, or the network failed (entries stay queued).
+      const drain = async () => {
         const drained = await drainProfileOutbox(userId, client);
-        if (drained.status === 'network') settled = false;
+        if (!live()) return false;
         if (drained.rejected.length > 0) {
           problem = true;
           // Show the server's truth again instead of the edit that was refused.
-          await loadProfile(userId, () => true);
+          await loadProfile(userId, live);
+        }
+        if (drained.status === 'network') settled = false;
+        return live() && drained.status === 'done';
+      };
+      try {
+        if (!(await drain())) return;
+        const next = pendingFile.current;
+        if (!next || !profileRef.current) return;
+        const path = avatarStoragePath(userId, next, defaultDeps.uuid());
+        if (!path) {
+          problem = true;
+          pendingFile.current = null;
+          return;
+        }
+        setAvatar((a) => ({ ...a, status: 'uploading' }));
+        const uploaded = await client.uploadAvatar(path, next);
+        if (!live()) return;
+        if (uploaded.ok) {
+          const current = profileRef.current;
+          if (current) {
+            setLocalProfile(queueProfileEdit(userId, current, { avatar_path: path }, defaultDeps));
+            if (pendingFile.current === next) pendingFile.current = null;
+            await drain();
+          } else {
+            problem = true; // no row to save the path on; keep the file rather than lose it silently
+          }
+        } else if (uploaded.error.code === 'network') {
+          settled = false;
+        } else {
+          problem = true;
+          if (pendingFile.current === next) pendingFile.current = null;
         }
       } finally {
         draining.current = false;
-        if (problem) setSyncProblem(true);
-        // Something was queued while this run was in flight; run again.
-        if (settled && (dirty.current || pendingFile.current)) setTick((t) => t + 1);
+        if (live()) {
+          const waiting = pendingFile.current ? (navigator.onLine && settled && !problem ? 'uploading' : 'queued') : 'idle';
+          setAvatar((a) => ({ ...a, status: waiting }));
+          if (problem) setSyncProblem(true);
+          clearTimeout(retryTimer.current);
+          if (dirty.current) {
+            // The user queued something while this run was in flight; it has not been tried yet.
+            setTick((t) => t + 1);
+          } else if (!settled) {
+            // The browser says online but a request failed: try again later without waiting for an event.
+            retryTimer.current = setTimeout(() => setTick((t) => t + 1), RETRY_MS);
+          } else if (!problem && pendingFile.current && profileRef.current) {
+            setTick((t) => t + 1);
+          }
+        }
       }
     })();
-  }, [client, userId, online, tick, loadProfile, setLocalProfile]);
+  }, [client, userId, online, tick, hasProfile, loadProfile, setLocalProfile]);
 
   const changeAvatar = useCallback((file: File) => {
-    if (!avatarStoragePath('', file, '')) return false;
+    if (!isAvatarType(file.type)) return false;
     pendingFile.current = file;
     dirty.current = true;
     setSyncProblem(false);
     setAvatar((a) => {
       if (a.preview) URL.revokeObjectURL?.(a.preview);
-      return { status: a.status === 'uploading' ? 'uploading' : 'queued', preview: makeObjectUrl(file) };
+      // Online picks go straight to uploading so "will upload when you're online" is never announced.
+      const next = a.status === 'uploading' || (navigator.onLine && profileRef.current) ? 'uploading' : 'queued';
+      return { status: next, preview: makeObjectUrl(file) };
     });
     setTick((t) => t + 1);
     return true;

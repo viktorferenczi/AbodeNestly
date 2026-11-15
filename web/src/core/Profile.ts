@@ -134,6 +134,8 @@ const EXTENSIONS: Record<string, string> = {
   'image/gif': 'gif',
 };
 
+export const isAvatarType = (type: string): boolean => Object.hasOwn(EXTENSIONS, type);
+
 /** `profiles/<uid>/<uuid>.<ext>`: exactly two folders, as the Storage policy requires. `null` for other types. */
 export function avatarStoragePath(uid: string, file: { type: string }, uuid: string): string | null {
   const ext = EXTENSIONS[file.type];

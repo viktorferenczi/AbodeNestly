@@ -199,4 +199,65 @@ describe('CORE-06: Profile', () => {
     expect(auth.signOutCalls).toBe(1);
     expect(router.state.location.pathname).toBe('/signin');
   });
+
+  it('CORE-06: an online pick announces uploading, never the offline message', async () => {
+    const auth = makeClient();
+    let release!: () => void;
+    auth.uploadGate = new Promise<void>((r) => (release = r));
+    await renderProfile(auth);
+    pick(png());
+    expect(screen.queryByText("Photo will upload when you're online")).toBeNull();
+    expect(screen.getByText('Uploading photo…')).toBeTruthy();
+    release();
+    await flush();
+  });
+
+  it('CORE-06: a photo network failure still sends queued name edits, then retries the photo on return to the tab', async () => {
+    const auth = makeClient();
+    auth.uploadError = { code: 'network' };
+    await renderProfile(auth);
+    fireEvent.change(nameInput(), { target: { value: 'Grace' } });
+    pick(png());
+    fireEvent.blur(nameInput());
+    await flush();
+    expect(auth.updateCalls.map((c) => c.data)).toEqual([{ display_name: 'Grace' }]);
+    expect(auth.uploadCalls.length).toBeGreaterThan(0);
+    expect(screen.getByText("Photo will upload when you're online")).toBeTruthy();
+
+    auth.uploadError = null;
+    const failedUploads = auth.uploadCalls.length;
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await flush();
+    expect(auth.uploadCalls).toHaveLength(failedUploads + 1);
+    expect(auth.updateCalls.at(-1)?.data).toEqual({ avatar_path: auth.uploadCalls.at(-1)!.path });
+  });
+
+  it('CORE-06: with no profile row the photo is not uploaded and the name field is disabled', async () => {
+    const auth = makeClient();
+    auth.profile = null;
+    await renderProfile(auth);
+    expect(nameInput().disabled).toBe(true);
+    pick(png());
+    await flush();
+    expect(auth.uploadCalls).toEqual([]);
+    expect(auth.updateCalls).toEqual([]);
+  });
+
+  it('CORE-06: signing out mid-drain does not write a profile back', async () => {
+    const auth = makeClient();
+    let release!: () => void;
+    auth.uploadGate = new Promise<void>((r) => (release = r));
+    await renderProfile(auth);
+    pick(png());
+    await flush();
+    await act(async () => {
+      await auth.signOut();
+    });
+    release();
+    await flush();
+    expect(auth.updateCalls).toEqual([]);
+    expect(readOutbox('u1')).toEqual([]);
+  });
 });

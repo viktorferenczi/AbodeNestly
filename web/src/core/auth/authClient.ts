@@ -101,8 +101,10 @@ export function createSupabaseAuthClient(sb: SupabaseClient): AuthClient {
       return { ok: true, value: memberships };
     },
     async updateProfile(userId, data) {
-      const { error } = await sb.from('profile').update(data).eq('id', userId);
-      return error ? { ok: false, error: toWriteError(error) } : { ok: true, value: undefined };
+      const { data: rows, error } = await sb.from('profile').update(data).eq('id', userId).select('id');
+      if (error) return { ok: false, error: toWriteError(error) };
+      // PostgREST reports zero matched rows as success; a missing own row must not drop the queued edit silently.
+      return rows.length > 0 ? { ok: true, value: undefined } : { ok: false, error: { code: 'unknown' } };
     },
     async uploadAvatar(path, file) {
       try {
