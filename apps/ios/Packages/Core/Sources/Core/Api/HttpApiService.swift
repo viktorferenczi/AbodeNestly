@@ -174,6 +174,74 @@ public final class HttpApiService: ApiService {
         }
     }
 
+    public func fetchHousehold(householdId: UUID, userId: UUID) async -> Result<HouseholdWithRole?, ApiFailure> {
+        do {
+            let url = try restURL(table: "member", query: [
+                ("select", "role,household:household!inner(*)"),
+                ("household_id", "eq.\(householdId.uuidString.lowercased())"),
+                ("user_id", "eq.\(userId.uuidString.lowercased())"),
+                ("left_at", "is.null"),
+                ("household.deleted_at", "is.null"),
+            ])
+            let (data, status) = try await perform(url: url, method: "GET", headers: restHeaders())
+            guard status == 200, let rows = try? PostgrestJSON.decoder.decode([HouseholdWithRole].self, from: data) else {
+                return .failure(.unknown)
+            }
+            return .success(rows.first)
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
+    public func updateModules(
+        householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?
+    ) async -> Result<Household, ApiFailure> {
+        do {
+            // Like `createHousehold`, the request schema is not in the generated models; send only the flags given.
+            var fields: [String: Bool] = [:]
+            if let shopping { fields["shopping"] = shopping }
+            if let pantry { fields["pantry"] = pantry }
+            if let maintenance { fields["maintenance"] = maintenance }
+            let body = try JSONSerialization.data(withJSONObject: fields)
+            let (data, status) = try await perform(
+                url: try apiURL("households/\(householdId.uuidString.lowercased())/modules"), method: "PATCH",
+                headers: ["Content-Type": "application/json", "Accept": "application/json"], body: body
+            )
+            if status == 200 {
+                guard let household = try? PostgrestJSON.decoder.decode(Household.self, from: data) else {
+                    return .failure(.unknown)
+                }
+                return .success(household)
+            }
+            return .failure(Self.modulesFailure(status: status))
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
+    public func updateHousehold(householdId: UUID, name: String?, currency: String?) async -> Result<Household, ApiFailure> {
+        do {
+            let url = try restURL(table: "household", query: [("id", "eq.\(householdId.uuidString.lowercased())")])
+            var fields: [String: String] = [:]
+            if let name { fields["name"] = name }
+            if let currency { fields["currency"] = currency }
+            let body = try JSONSerialization.data(withJSONObject: fields)
+            var headers = restHeaders()
+            headers["Prefer"] = "return=representation"
+            let (data, status) = try await perform(url: url, method: "PATCH", headers: headers, body: body)
+            guard (200..<300).contains(status) else {
+                return .failure(Self.updateHouseholdFailure(status: status, sqlState: Self.sqlState(in: data)))
+            }
+            // RLS hides rows silently, so an empty array means nothing changed.
+            guard let rows = try? PostgrestJSON.decoder.decode([Household].self, from: data), let household = rows.first else {
+                return .failure(.unknown)
+            }
+            return .success(household)
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
     private func restURL(table: String, query: [(String, String)]) throws -> URL {
         var components = URLComponents(
             url: supabaseURL.appendingPathComponent("rest/v1/\(table)"), resolvingAgainstBaseURL: false
@@ -213,6 +281,25 @@ public final class HttpApiService: ApiService {
             default: return .unknown
             }
         }
+    }
+
+    static func modulesFailure(status: Int) -> ApiFailure {
+        switch status {
+        case 403: .forbidden
+        case 400: .validation
+        default: .unknown
+        }
+    }
+
+    /// SQLSTATE 42501 (insufficient privilege) is what RLS raises for a non-owner.
+    static func updateHouseholdFailure(status: Int, sqlState: String?) -> ApiFailure {
+        sqlState == "42501" || status == 403 ? .forbidden : .unknown
+    }
+
+    /// PostgREST error bodies carry the SQLSTATE as `{ "code": "42501", … }`.
+    private static func sqlState(in data: Data) -> String? {
+        struct Body: Decodable { let code: String? }
+        return (try? JSONDecoder().decode(Body.self, from: data))?.code
     }
 
     // MARK: Transport

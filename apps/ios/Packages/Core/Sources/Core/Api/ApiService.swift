@@ -46,6 +46,18 @@ public struct MemberRow: Sendable, Codable, Hashable, Identifiable {
     }
 }
 
+/// The viewer's household and role in it. Decodes a PostgREST `member` row (`role`, embedded `household`) and
+/// doubles as the offline snapshot shape.
+public struct HouseholdWithRole: Sendable, Codable, Equatable {
+    public var household: Household
+    public var role: Member.Role
+
+    public init(household: Household, role: Member.Role) {
+        self.household = household
+        self.role = role
+    }
+}
+
 /// The API calls the app makes; mirrors web `ApiClient`. Tests use `FakeApiService`.
 public protocol ApiService: Sendable {
     /// `POST /households` (201). The server seeds the Groceries list and Fridge/Freezer/Pantry locations.
@@ -64,4 +76,10 @@ public protocol ApiService: Sendable {
     func removeMember(householdId: UUID, userId: UUID) async -> Result<Void, ApiFailure>
     /// Promotes a member to owner: a direct `member.role` update under RLS (SPEC §7, network-only core settings).
     func makeOwner(householdId: UUID, userId: UUID) async -> Result<Void, ApiFailure>
+    /// The viewer's active membership with its (not deleted) household, or `nil` when there is none. Read under RLS.
+    func fetchHousehold(householdId: UUID, userId: UUID) async -> Result<HouseholdWithRole?, ApiFailure>
+    /// `PATCH /households/{id}/modules` (owner only). Pass only the flags to change. 403 → `.forbidden`, 400 → `.validation`.
+    func updateModules(householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?) async -> Result<Household, ApiFailure>
+    /// Name and/or currency: a direct `household` update under RLS (SPEC §7); a non-owner gets `.forbidden`.
+    func updateHousehold(householdId: UUID, name: String?, currency: String?) async -> Result<Household, ApiFailure>
 }

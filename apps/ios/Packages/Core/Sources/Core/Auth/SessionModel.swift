@@ -70,6 +70,12 @@ public final class SessionModel {
         loadFailed = false
     }
 
+    /// Settings changed the module flags of the current household: the tab bar follows on the next render.
+    public func updateHousehold(_ updated: LandingHousehold) {
+        guard household?.id == updated.id else { return }
+        household = updated
+    }
+
     /// A household was just joined: reload memberships (the module flags are not in the accept response)
     /// and land on that household's Home tab.
     public func enterJoined(householdId: UUID) {

@@ -116,7 +116,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 - States: `owner` · `member` (read-only fields) · `offline` (banner, switches disabled) · `saving`.
 - Interactions: toggle module → PATCH → tabs update immediately; leave → confirm sheet → B2 or switcher.
 - Deferred: "Delete household" (owner) waits until SPEC defines an endpoint and what "deleted" hides.
-- Offline: read-only. · Gating: none.
+- Offline: read-only. · Gating: none. iOS: a `UserDefaults` snapshot (`abodenestly.household.<user_id>.<household_id>`) until iOS sync exists.
 
 ### B6. Members & invites
 - Route: `/household/members` · Purpose: CORE-03, CORE-04.
