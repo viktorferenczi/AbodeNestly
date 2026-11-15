@@ -71,12 +71,12 @@ final class UUIDQueue {
 }
 
 /// A real, tiny PNG so `downscaledJPEG` has something to decode.
-func makeImageData(side: Int = 1200) -> Data {
+func makeImageData(side: Int = 1200, red: CGFloat = 0.2) -> Data {
     let context = CGContext(
         data: nil, width: side, height: side / 2, bitsPerComponent: 8, bytesPerRow: 0,
         space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     )!
-    context.setFillColor(red: 0.2, green: 0.5, blue: 0.4, alpha: 1)
+    context.setFillColor(red: red, green: 0.5, blue: 0.4, alpha: 1)
     context.fill(CGRect(x: 0, y: 0, width: side, height: side / 2))
     let output = NSMutableData()
     let destination = CGImageDestinationCreateWithData(output, "public.png" as CFString, 1, nil)!
@@ -206,16 +206,66 @@ struct ProfileTests {
         #expect(h.outbox.read(userId: h.user).count == 1)
     }
 
-    @Test("CORE-06: a rejected entry is dropped and reported, and later entries still go through")
+    @Test("CORE-06: a rejected entry is dropped and reported, and the next entry still goes through")
     func drainRejected() async {
         let h = await ProfileHarness(online: false)
         h.model.commitName("Bad")
         h.model.commitName("Good")
-        h.auth.setUpdateProfileResult(.failure(.unknown))
+        h.auth.queueUpdateProfileResults([.failure(.unknown), .success(())])
         let result = await ProfileEditing.drain(userId: h.user, outbox: h.outbox, auth: h.auth)
         #expect(result.status == .done)
-        #expect(result.rejected.map(\.data.displayName) == ["Bad", "Good"])
+        #expect(result.rejected.map(\.data.displayName) == ["Bad"])
+        #expect(h.updateCalls.count == 2)
         #expect(h.outbox.read(userId: h.user).isEmpty)
+    }
+
+    @Test("CORE-06: a server error keeps the entry queued instead of dropping it")
+    func drainServerError() async {
+        let h = await ProfileHarness()
+        h.auth.setUpdateProfileResult(.failure(.server))
+        h.model.commitName("Ada L")
+        await h.model.settled()
+        #expect(h.outbox.read(userId: h.user).count == 1)
+        #expect(h.model.syncProblem == nil)
+    }
+
+    @Test("CORE-06: a cancelled drain (sign-out) sends nothing and keeps every entry")
+    func drainCancelled() async {
+        let h = await ProfileHarness(online: false)
+        h.model.commitName("Ada L")
+        let task = Task { await ProfileEditing.drain(userId: h.user, outbox: h.outbox, auth: h.auth) }
+        task.cancel()
+        let result = await task.value
+        #expect(result.status == .cancelled)
+        #expect(h.updateCalls.isEmpty)
+        #expect(h.outbox.read(userId: h.user).count == 1)
+    }
+
+    @Test("CORE-06: a rejected name rolls the profile, cache and field back to the server row")
+    func rejectionRestores() async {
+        let h = await ProfileHarness()
+        h.auth.setUpdateProfileResult(.failure(.unknown))
+        h.model.commitName("Refused")
+        await h.model.settled()
+        #expect(h.session.profile?.displayName == "Ada")
+        #expect(h.cache.read(userId: h.user)?.displayName == "Ada")
+        #expect(h.model.nameDraft == "Ada")
+        #expect(h.outbox.read(userId: h.user).isEmpty)
+        #expect(h.model.syncProblem == ProfileModel.rejectedMessage)
+    }
+
+    @Test("CORE-06: a blank or unchanged draft falls back to the saved name")
+    func draftFallsBack() async {
+        let h = await ProfileHarness(online: false)
+        h.model.nameDraft = "   "
+        h.model.commitName(h.model.nameDraft)
+        #expect(h.model.nameDraft == "Ada")
+        h.model.nameDraft = "Ada"
+        h.model.commitName(h.model.nameDraft)
+        #expect(h.model.nameDraft == "Ada")
+        h.model.nameDraft = "  Bea  "
+        h.model.commitName(h.model.nameDraft)
+        #expect(h.model.nameDraft == "Bea")
     }
 
     // MARK: Story acceptance
@@ -288,6 +338,48 @@ struct ProfileTests {
         #expect(h.outbox.read(userId: h.user).isEmpty)
         #expect(h.model.avatar == .idle)
         #expect(h.updateCalls.count == 1)
+    }
+
+    @Test("CORE-06: a name committed during an upload survives the avatar_path update")
+    func nameDuringUpload() async {
+        let file = UUID()
+        let h = await ProfileHarness(uuids: [file])
+        h.auth.holdUpload()
+        h.model.pickAvatar(makeImageData())
+        while h.uploadCalls.isEmpty { await Task.yield() }
+        h.model.commitName("Ada L")
+        h.auth.releaseUpload()
+        await h.model.settled()
+        #expect(h.session.profile?.displayName == "Ada L")
+        #expect(h.cache.read(userId: h.user)?.displayName == "Ada L")
+        #expect(h.session.profile?.avatarPath == ProfileEditing.avatarStoragePath(userId: h.user, uuid: file))
+        #expect(h.outbox.read(userId: h.user).isEmpty)
+    }
+
+    @Test("CORE-06: a photo picked during an upload is kept and uploaded next")
+    func secondPickDuringUpload() async {
+        let h = await ProfileHarness()
+        h.auth.holdUpload()
+        h.model.pickAvatar(makeImageData(side: 1200))
+        while h.uploadCalls.isEmpty { await Task.yield() }
+        h.model.pickAvatar(makeImageData(side: 1200, red: 0.9))
+        h.auth.releaseUpload()
+        await h.model.settled()
+        #expect(h.uploadCalls.count == 2)
+        #expect(h.pending.read(userId: h.user) == nil)
+        #expect(h.model.avatar == .idle)
+    }
+
+    @Test("CORE-06: going offline during the avatar_path update leaves the photo queued, not stuck uploading")
+    func pathDrainOffline() async {
+        let h = await ProfileHarness()
+        h.auth.setUpdateProfileResult(.failure(.network))
+        h.model.pickAvatar(makeImageData())
+        await h.model.settled()
+        #expect(h.model.avatar == .queued)
+        #expect(h.model.pickedPreview != nil)
+        #expect(h.outbox.read(userId: h.user).count == 1)
+        #expect(h.pending.read(userId: h.user) == nil)
     }
 
     @Test("CORE-06: a network failure during upload keeps the photo queued")

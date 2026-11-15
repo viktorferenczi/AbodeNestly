@@ -20,7 +20,7 @@ public struct SignInView: View {
         case .invalidEmail: "Enter a valid email address."
         case .rateLimited: "Too many attempts. Wait a minute and try again."
         case .network: "Couldn't reach the server. Check your connection and try again."
-        case .cancelled, .unknown: "Something went wrong. Try again."
+        case .server, .cancelled, .unknown: "Something went wrong. Try again."
         }
     }
 

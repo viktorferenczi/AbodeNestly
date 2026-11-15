@@ -16,6 +16,8 @@ public enum AuthError: Error, Sendable, Equatable {
     case invalidEmail
     case rateLimited
     case network
+    /// A 5xx or timeout from the server: the request may succeed later, so queued work stays queued.
+    case server
     /// The person dismissed the Apple sheet or the Google web view. Not shown as an error.
     case cancelled
     case unknown

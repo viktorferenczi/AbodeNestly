@@ -29,6 +29,7 @@ public final class FakeAuthService: AuthService {
         var token: String? = "fake-token"
         var tokenRequests: [Bool] = []
         var updateProfileResult: Result<Void, AuthError> = .success(())
+        var updateProfileQueue: [Result<Void, AuthError>] = []
         var uploadResult: Result<Void, AuthError> = .success(())
         var holdUpload = false
         var heldUploads: [CheckedContinuation<Void, Never>] = []
@@ -53,6 +54,8 @@ public final class FakeAuthService: AuthService {
     public func setMemberships(_ result: Result<[Membership], AuthError>) { state.withLock { $0.memberships = result } }
 
     public func setUpdateProfileResult(_ result: Result<Void, AuthError>) { state.withLock { $0.updateProfileResult = result } }
+    /// Results for the next `updateProfile` calls, in order; the settable default applies after they run out.
+    public func queueUpdateProfileResults(_ results: [Result<Void, AuthError>]) { state.withLock { $0.updateProfileQueue = results } }
     public func setUploadResult(_ result: Result<Void, AuthError>) { state.withLock { $0.uploadResult = result } }
     public func setAvatarURL(_ url: URL?) { state.withLock { $0.avatarURL = url } }
 
@@ -150,7 +153,9 @@ public final class FakeAuthService: AuthService {
 
     public func updateProfile(userId: UUID, edit: ProfileEdit) async -> Result<Void, AuthError> {
         record(.updateProfile(userId: userId, edit: edit))
-        return state.withLock { $0.updateProfileResult }
+        return state.withLock { state in
+            state.updateProfileQueue.isEmpty ? state.updateProfileResult : state.updateProfileQueue.removeFirst()
+        }
     }
 
     public func uploadAvatar(path: String, data: Data) async -> Result<Void, AuthError> {

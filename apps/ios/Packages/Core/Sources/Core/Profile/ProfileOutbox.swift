@@ -64,7 +64,8 @@ public struct ProfileOutboxEntry: Sendable, Codable, Equatable {
 }
 
 public struct DrainResult: Sendable, Equatable {
-    public enum Status: Sendable, Equatable { case done, network }
+    /// `retry`: offline or a server error, so the entry stays queued. `cancelled`: sign-out; the entry stays queued.
+    public enum Status: Sendable, Equatable { case done, retry, cancelled }
     public var status: Status
     public var rejected: [ProfileOutboxEntry]
 }
@@ -157,10 +158,15 @@ public enum ProfileEditing {
         var rejected: [ProfileOutboxEntry] = []
         while true {
             // Re-read each round: an edit queued while a request was in flight must not be lost or skipped.
+            guard !Task.isCancelled else { return DrainResult(status: .cancelled, rejected: rejected) }
             guard let entry = outbox.read(userId: userId).first else { return DrainResult(status: .done, rejected: rejected) }
             let result = await auth.updateProfile(userId: userId, edit: entry.data)
-            if case .failure(.network) = result { return DrainResult(status: .network, rejected: rejected) }
-            // A rejected entry (RLS, validation) would block the queue forever, so it is dropped and reported.
+            // A request that ended after sign-out says nothing about the entry: keep it for the next sign-in.
+            guard !Task.isCancelled else { return DrainResult(status: .cancelled, rejected: rejected) }
+            if case .failure(let error) = result, error == .network || error == .server || error == .rateLimited {
+                return DrainResult(status: .retry, rejected: rejected)
+            }
+            // Only a real rejection (4xx, zero rows) is dropped: it would block the queue forever. It is reported.
             if case .failure = result { rejected.append(entry) }
             outbox.remove(id: entry.id, userId: userId)
         }

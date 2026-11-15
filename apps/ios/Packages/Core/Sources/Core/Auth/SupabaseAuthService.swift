@@ -225,9 +225,8 @@ public final class SupabaseAuthService: AuthService {
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         let (data, response) = try await urlSession.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard (200..<300).contains(http.statusCode) else { throw HTTPStatusError(status: http.statusCode) }
         return (data, http)
     }
 
@@ -255,6 +254,10 @@ public final class SupabaseAuthService: AuthService {
     /// Mirrors web `toAuthError`.
     static func map(_ error: Error) -> AuthError {
         if let error = error as? AuthError { return error }
+        if let error = error as? HTTPStatusError {
+            if error.status == 429 { return .rateLimited }
+            return error.status >= 500 || error.status == 408 ? .server : .unknown
+        }
         if error is CancellationError { return .cancelled }
         if let error = error as? URLError {
             switch error.code {
@@ -282,6 +285,9 @@ public final class SupabaseAuthService: AuthService {
         return .unknown
     }
 }
+
+/// A non-2xx answer from PostgREST or Storage. 5xx is retryable; 4xx is a real rejection.
+struct HTTPStatusError: Error { let status: Int }
 
 /// PostgREST timestamps carry microseconds ("2026-11-09T20:31:12.123456+00:00").
 enum PostgrestJSON {

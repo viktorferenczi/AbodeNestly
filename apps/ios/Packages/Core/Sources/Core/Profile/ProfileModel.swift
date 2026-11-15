@@ -102,15 +102,25 @@ public final class ProfileModel {
     // MARK: Edits (local first, no network)
 
     public func commitName(_ draft: String) {
-        guard let profile = session.profile,
-            let edit = ProfileEditing.editDisplayName(profile, draft: draft, now: now(), uuid: uuid())
-        else { return }
+        guard let profile = session.profile else { return }
+        guard let edit = ProfileEditing.editDisplayName(profile, draft: draft, now: now(), uuid: uuid()) else {
+            // Blank or unchanged: the field falls back to the saved name instead of showing what was not saved.
+            nameDraft = profile.displayName
+            return
+        }
         syncProblem = nil
+        nameDraft = edit.profile.displayName
         apply(edit.profile, entry: edit.entry)
         kickDrain()
     }
 
     /// Downscales to at most 512 px, keeps the JPEG on disk and uploads when online.
+    /// The picker could not load the chosen item (e.g. an unsupported format).
+    public func photoLoadFailed() { syncProblem = Self.photoMessage }
+
+    /// The field shows the saved name; run on appear, when the profile may have loaded after this model was made.
+    public func resetNameDraft() { nameDraft = profile?.displayName ?? nameDraft }
+
     public func pickAvatar(_ data: Data) {
         guard let jpeg = Self.downscaledJPEG(data), pendingAvatar.save(jpeg, userId: userId) else {
             syncProblem = Self.photoMessage
@@ -161,16 +171,29 @@ public final class ProfileModel {
     private func drainEdits() async -> Bool {
         let result = await ProfileEditing.drain(userId: userId, outbox: outbox, auth: auth)
         guard active else { return false }
-        if !result.rejected.isEmpty { syncProblem = Self.rejectedMessage }
-        if result.status == .network {
+        if !result.rejected.isEmpty {
+            syncProblem = Self.rejectedMessage
+            await restoreServerRow()
+            guard active else { return false }
+        }
+        if result.status == .retry {
             if pendingAvatar.read(userId: userId) != nil { avatar = .queued }
             return false
         }
         return true
     }
 
+    /// A rejected edit must not linger in the field or the cache: show the server row plus what is still queued.
+    private func restoreServerRow() async {
+        guard case .success(let row?) = await auth.fetchProfile(userId: userId), active else { return }
+        let restored = ProfileEditing.withPending(row, outbox.read(userId: userId))
+        session.setLocalProfile(restored)
+        cache.write(restored, userId: userId)
+        nameDraft = restored.displayName
+    }
+
     private func uploadPendingPhoto() async {
-        guard let photo = pendingAvatar.read(userId: userId), let profile = session.profile else {
+        guard let photo = pendingAvatar.read(userId: userId), session.profile != nil else {
             avatar = .idle
             return
         }
@@ -179,7 +202,7 @@ public final class ProfileModel {
         let uploaded = await auth.uploadAvatar(path: path, data: photo)
         guard active else { return }
         switch uploaded {
-        case .failure(.network):
+        case .failure(.network), .failure(.server), .failure(.rateLimited):
             avatar = .queued
         case .failure:
             // A photo the server refuses would block every later drain, so it is dropped and reported.
@@ -188,13 +211,24 @@ public final class ProfileModel {
             avatar = .idle
             syncProblem = Self.rejectedMessage
         case .success:
+            // Build on the profile as it is now: a name committed during the upload must survive.
+            guard let current = session.profile else { return }
             let edit = ProfileEditing.buildEdit(
-                profile, ProfileEdit(avatarPath: .some(path)), now: now(), uuid: uuid()
+                current, ProfileEdit(avatarPath: .some(path)), now: now(), uuid: uuid()
             )
             apply(edit.profile, entry: edit.entry)
-            pendingAvatar.clear(userId: userId)
+            // A photo picked during the upload replaced the file; it stays and goes around again.
+            let replaced = pendingAvatar.read(userId: userId) != photo
+            if !replaced { pendingAvatar.clear(userId: userId) }
             // Queue-then-drain: the `avatar_path` update goes through the same path as a name edit.
-            if await drainEdits(), active {
+            guard await drainEdits(), active else {
+                // Offline again or sign-out: the path update is still queued, so the photo counts as waiting.
+                if active { avatar = .queued }
+                return
+            }
+            if replaced {
+                rerun = true
+            } else {
                 avatar = .idle
                 await loadAvatarURL()
                 pickedPreview = nil

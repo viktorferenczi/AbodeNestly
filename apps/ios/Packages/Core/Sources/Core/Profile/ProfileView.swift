@@ -2,6 +2,7 @@ import Contract
 import PhotosUI
 import SwiftUI
 import UI
+import UniformTypeIdentifiers
 
 /// DESIGN B7: avatar (tap to change), display name, read-only email, notification preferences link, sign out.
 /// Name edits and photos are saved locally first, so everything but the signed avatar image works offline.
@@ -59,14 +60,29 @@ public struct ProfileView: View {
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
         // Drains whatever was queued earlier and resolves the avatar image.
-        .task { await model.start() }
-        .onChange(of: isOnline) { _, online in model.connectivityChanged(online) }
+        .task {
+            model.resetNameDraft()
+            await model.start()
+        }
         .task(id: model.profile?.avatarPath) { await model.loadAvatarURL() }
         .onChange(of: pickerItem) { _, item in
             guard let item else { return }
             Task {
-                if let data = try? await item.loadTransferable(type: Data.self) { model.pickAvatar(data) }
+                // `PickedImage` imports any image type, including the HEIC the camera produces.
+                if let picked = try? await item.loadTransferable(type: PickedImage.self) {
+                    model.pickAvatar(picked.data)
+                } else {
+                    model.photoLoadFailed()
+                }
                 pickerItem = nil
+            }
+        }
+        .onChange(of: model.avatar) { _, status in
+            // The status lines are the only feedback for the uploading and offline states, so VoiceOver hears them.
+            switch status {
+            case .idle: break
+            case .uploading: AccessibilityNotification.Announcement("Uploading photo…").post()
+            case .queued: AccessibilityNotification.Announcement("Photo will upload when you're online").post()
             }
         }
         .onChange(of: name) { _, latest in
@@ -149,6 +165,15 @@ public struct ProfileView: View {
     }
 
     static func initials(_ displayName: String) -> String { MembersModel.initials(displayName) }
+}
+
+/// Raw bytes of whatever image the picker hands over; `downscaledJPEG` decodes and converts them.
+struct PickedImage: Transferable {
+    let data: Data
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(importedContentType: .image) { PickedImage(data: $0) }
+    }
 }
 
 /// B9 arrives with CORE-12; the link exists now so B7 matches its plan.
