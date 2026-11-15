@@ -32,6 +32,8 @@ test.describe('E2E-CORE-2: household switcher', () => {
     await expect(page).toHaveURL(/\/(shopping|home)$/);
     await page.goto('/shopping');
     const title = page.getByRole('heading', { level: 1 });
+    // The heading reads "AbodeNestly" until the household has loaded.
+    await expect(title).toHaveText(/Switch (Alpha|Beta) ▾/);
     const current = (await title.textContent())!.replace(' ▾', '');
     const [here, other] = current === 'Switch Alpha' ? ['Switch Alpha', 'Switch Beta'] : ['Switch Beta', 'Switch Alpha'];
     const idOf = (name: string) => ids[name === 'Switch Alpha' ? 0 : 1]!;

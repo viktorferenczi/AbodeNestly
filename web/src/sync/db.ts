@@ -40,8 +40,12 @@ export async function writeCursor(db: HouseholdDb, value: number): Promise<void>
   await db.meta.put({ key: 'cursor', value });
 }
 
-/** Queued writes of a household that is not open; uses its own short-lived connection. */
-export async function pendingCount(householdId: string): Promise<number> {
+/**
+ * Queued writes of a household. Counts on `open` when that is the household's own open database; otherwise
+ * uses a short-lived connection, which callers must not run while the same name is being opened.
+ */
+export async function pendingCount(householdId: string, open?: HouseholdDb | null): Promise<number> {
+  if (open && open.name === dbName(householdId) && open.isOpen()) return open.outbox.count();
   const db = new HouseholdDb(householdId);
   try {
     await db.open();

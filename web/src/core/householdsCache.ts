@@ -38,3 +38,16 @@ export function clearHouseholds(userId: string): void {
     // Storage blocked: nothing was stored.
   }
 }
+
+/** Adds or replaces one household, keeping the other rows; offline the switcher only knows what was cached. */
+export function upsertHousehold(userId: string, entry: HouseholdEntry): void {
+  const rest = readHouseholds(userId).filter((e) => e.household.id !== entry.household.id);
+  writeHouseholds(userId, [...rest, entry]);
+}
+
+export function removeHousehold(userId: string, householdId: string): void {
+  writeHouseholds(
+    userId,
+    readHouseholds(userId).filter((e) => e.household.id !== householdId),
+  );
+}

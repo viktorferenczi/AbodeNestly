@@ -5,7 +5,7 @@ import { dbName, openHouseholdDb, type HouseholdDb } from '../../sync/db.ts';
 import { useApi } from '../api/ApiProvider.tsx';
 import { useAuth } from '../auth/AuthProvider.tsx';
 import { readLastHousehold, writeLastHousehold } from '../auth/lastHousehold.ts';
-import { readHouseholds } from '../householdsCache.ts';
+import { readHouseholds, removeHousehold, upsertHousehold } from '../householdsCache.ts';
 import { switchTargetPath } from '../Switcher.ts';
 
 export type Modules = { shopping: boolean; pantry: boolean; maintenance: boolean };
@@ -24,6 +24,8 @@ function readCache(userId: string, id: string): Cached | null {
 }
 
 function writeCache(userId: string, id: string, value: Cached): void {
+  // Also feeds the switcher's list, so a created, joined or renamed household stays switchable offline.
+  upsertHousehold(userId, value);
   try {
     localStorage.setItem(cacheKey(userId, id), JSON.stringify(value));
   } catch {
@@ -37,6 +39,7 @@ export function clearCachedHousehold(userId: string, id: string): void {
   } catch {
     // Storage blocked: nothing was stored.
   }
+  removeHousehold(userId, id);
 }
 
 export function modulesOf(household: Pick<Household, 'module_shopping' | 'module_pantry' | 'module_maintenance'>): Modules {
@@ -46,6 +49,8 @@ export function modulesOf(household: Pick<Household, 'module_shopping' | 'module
     maintenance: household.module_maintenance,
   };
 }
+
+const DB_RETRY_MS = 5_000;
 
 const NO_MODULES: Modules = { shopping: false, pantry: false, maintenance: false };
 
@@ -86,31 +91,44 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const pathRef = useRef(location.pathname + location.search);
   pathRef.current = location.pathname + location.search;
 
+  const generation = useRef(0);
+  const switchingRef = useRef(false);
+  const [dbAttempt, setDbAttempt] = useState(0);
+
   // Opens the household's database; switchTo may have opened it already, in which case it is adopted.
   useEffect(() => {
     if (!householdId) return;
     let active = true;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     let mine: HouseholdDb | null = null;
+    const gen = generation.current;
     const existing = dbRef.current;
     if (existing && existing.name === dbName(householdId) && existing.isOpen()) {
       mine = existing;
     } else {
       openHouseholdDb(householdId)
         .then((opened) => {
-          if (!active) return opened.close();
+          // A switch that started after this open began owns the database now; this result is stale.
+          if (!active || gen !== generation.current || dbRef.current) return opened.close();
           mine = opened;
           dbRef.current = opened;
           setDb(opened);
         })
-        // IndexedDB blocked (private mode): the household still renders from its cached copy.
-        .catch(() => undefined);
+        // IndexedDB failed to open: retry, the household still renders from its cached copy meanwhile.
+        .catch(() => {
+          if (active) retry = setTimeout(() => setDbAttempt((n) => n + 1), DB_RETRY_MS);
+        });
     }
     return () => {
       active = false;
+      clearTimeout(retry);
       mine?.close();
-      if (dbRef.current === mine) dbRef.current = null;
+      if (mine && dbRef.current === mine) {
+        dbRef.current = null;
+        setDb(null);
+      }
     };
-  }, [householdId]);
+  }, [householdId, dbAttempt]);
 
   useEffect(() => {
     if (!householdId || !userId) return;
@@ -150,7 +168,10 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
 
   const switchTo = useCallback(
     async (id: string) => {
-      if (!userId || id === householdId) return;
+      // A long-press can fire both a timer and a contextmenu event; only the first switch runs.
+      if (!userId || id === householdId || switchingRef.current) return;
+      switchingRef.current = true;
+      generation.current += 1;
       setSwitching(true);
       const previous = dbRef.current;
       try {
@@ -177,6 +198,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         }
         throw error;
       } finally {
+        switchingRef.current = false;
         setSwitching(false);
       }
     },

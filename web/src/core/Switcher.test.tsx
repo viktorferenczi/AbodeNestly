@@ -9,7 +9,7 @@ import { FakeApiClient } from './api/FakeApiClient.ts';
 import { AuthProvider } from './auth/AuthProvider.tsx';
 import { FakeAuthClient } from './auth/FakeAuthClient.ts';
 import { readLastHousehold, writeLastHousehold } from './auth/lastHousehold.ts';
-import { writeHouseholds } from './householdsCache.ts';
+import { readHouseholds, writeHouseholds } from './householdsCache.ts';
 
 // Lets a test hold the target database "opening" to observe the switching state (AC3).
 const gate = vi.hoisted(() => ({ hold: null as Promise<void> | null }));
@@ -180,8 +180,8 @@ describe('CORE-07: switcher sheet', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     await renderApp();
     const row = within(await openSheet()).getByRole('button', { name: /Home Two/ });
-    fireEvent.pointerDown(row);
-    fireEvent.pointerMove(row);
+    fireEvent.pointerDown(row, { clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(row, { clientX: 10, clientY: 40 });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
@@ -193,6 +193,50 @@ describe('CORE-07: switcher sheet', () => {
     });
     expect(readLastHousehold()).toBe('h2');
     expect(where()).toBe('/shopping');
+  });
+
+  it('CORE-07: a pixel of drift during the hold still counts as a long-press', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await renderApp();
+    const row = within(await openSheet()).getByRole('button', { name: /Home Two/ });
+    fireEvent.pointerDown(row, { clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(row, { clientX: 12, clientY: 11 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(where()).toBe('/household');
+  });
+
+  it('CORE-07: a touch hold that raises both the timer and contextmenu switches once', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { router } = await renderApp();
+    const visited: string[] = [];
+    router.subscribe((st) => visited.push(st.location.pathname));
+    const row = within(await openSheet()).getByRole('button', { name: /Home Two/ });
+    fireEvent.pointerDown(row);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    fireEvent.contextMenu(row);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(visited.filter((p) => p === '/shopping')).toHaveLength(1);
+    expect(where()).toBe('/household');
+  });
+
+  it('CORE-07: the title button announces the dialog and its open state', async () => {
+    await renderApp();
+    const button = screen.getByRole('button', { name: /▾/ });
+    expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    await openSheet();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('CORE-07: a household that was loaded stays in the offline list after the sheet was never online', async () => {
+    await renderApp({ list: [{ household: H1, role: 'owner' }], fetchFails: true });
+    expect(readHouseholds('u1').map((e) => e.household.id)).toEqual(['h1']);
   });
 
   it('CORE-07: the context-menu key does the same as a long-press', async () => {

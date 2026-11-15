@@ -56,6 +56,13 @@ describe('CORE-07: local databases', () => {
     expect(await pendingCount('h1')).toBe(2);
     expect(await pendingCount('h-none')).toBe(0);
   });
+
+  it('CORE-07: pendingCount reads an already open database without closing it', async () => {
+    const h1 = await track('h-open');
+    await h1.outbox.add({ table: 'shopping_list', op: 'upsert', payload: {} });
+    expect(await pendingCount('h-open', h1)).toBe(1);
+    expect(h1.isOpen()).toBe(true);
+  });
 });
 
 describe('CORE-07: switchTargetPath', () => {

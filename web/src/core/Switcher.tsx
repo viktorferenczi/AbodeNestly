@@ -11,6 +11,8 @@ import { switcherState } from './Switcher.ts';
 import styles from './Switcher.module.css';
 
 const LONG_PRESS_MS = 500;
+// A held finger or mouse drifts a few pixels; only a real drag (a scroll) cancels the press.
+const MOVE_TOLERANCE_PX = 10;
 
 // DESIGN B3. Rows come from the cached list so the sheet works offline; the network only refreshes it.
 export function Switcher({ onClose }: { onClose: () => void }) {
@@ -18,7 +20,7 @@ export function Switcher({ onClose }: { onClose: () => void }) {
   const online = useOnline();
   const navigate = useNavigate();
   const { session } = useAuth();
-  const { household: current, role, switching, switchTo } = useHousehold();
+  const { household: current, role, db, switching, switchTo } = useHousehold();
   const userId = session?.user.id;
 
   const [fetched, setFetched] = useState<HouseholdEntry[]>(() => (userId ? readHouseholds(userId) : []));
@@ -45,21 +47,30 @@ export function Switcher({ onClose }: { onClose: () => void }) {
     };
   }, [api, online, userId]);
 
+  // A tap waits for these: closing a count's short-lived connection mid-switch can fail the target's open.
+  const counting = useRef<Promise<void>>(Promise.resolve());
   const ids = entries.map((e) => e.household.id).join(',');
   useEffect(() => {
     let active = true;
-    void Promise.all(
+    const run = Promise.all(
       ids
         .split(',')
         .filter(Boolean)
-        .map(async (id) => [id, await pendingCount(id).catch(() => 0)] as const),
-    ).then((pairs) => active && setPending(Object.fromEntries(pairs)));
+        .map(async (id) => [id, await pendingCount(id, db).catch(() => 0)] as const),
+    ).then((pairs) => {
+      if (active) setPending(Object.fromEntries(pairs));
+    });
+    counting.current = run;
     return () => {
       active = false;
     };
-  }, [ids]);
+  }, [ids, db]);
 
-  const longPress = useRef<{ timer?: ReturnType<typeof setTimeout>; fired: boolean }>({ fired: false });
+  const longPress = useRef<{ timer?: ReturnType<typeof setTimeout>; fired: boolean; x: number; y: number }>({
+    fired: false,
+    x: 0,
+    y: 0,
+  });
   useEffect(() => () => clearTimeout(longPress.current.timer), []);
 
   const state = switcherState(entries, switching);
@@ -70,6 +81,7 @@ export function Switcher({ onClose }: { onClose: () => void }) {
     if (id !== current?.id) {
       setTarget(id);
       try {
+        await counting.current;
         await switchTo(id);
       } catch {
         setFailed(true);
@@ -106,20 +118,29 @@ export function Switcher({ onClose }: { onClose: () => void }) {
                 className={styles.row}
                 disabled={state === 'switching'}
                 aria-current={isCurrent ? 'true' : undefined}
-                onPointerDown={() => {
+                onPointerDown={(e) => {
                   longPress.current.fired = false;
+                  longPress.current.x = e.clientX;
+                  longPress.current.y = e.clientY;
                   longPress.current.timer = setTimeout(() => {
+                    // On touch the same hold also raises contextmenu; the flag lets only one of them act.
+                    if (longPress.current.fired) return;
                     longPress.current.fired = true;
                     openSettings(household.id);
                   }, LONG_PRESS_MS);
                 }}
                 onPointerUp={cancelPress}
                 onPointerLeave={cancelPress}
-                onPointerMove={cancelPress}
+                onPointerMove={(e) => {
+                  const { x, y } = longPress.current;
+                  if (Math.hypot(e.clientX - x, e.clientY - y) > MOVE_TOLERANCE_PX) cancelPress();
+                }}
                 onPointerCancel={cancelPress}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   cancelPress();
+                  if (longPress.current.fired) return;
+                  longPress.current.fired = true;
                   openSettings(household.id);
                 }}
                 onClick={() => {

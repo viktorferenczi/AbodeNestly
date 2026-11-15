@@ -18,7 +18,7 @@ function Bar() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <TopBar title={household?.name ?? 'AbodeNestly'} trailing={profile?.display_name} onTitleClick={() => setOpen(true)} />
+      <TopBar title={household?.name ?? 'AbodeNestly'} trailing={profile?.display_name} onTitleClick={() => setOpen(true)} titleExpanded={open} />
       {open ? <Switcher onClose={() => setOpen(false)} /> : null}
     </>
   );
