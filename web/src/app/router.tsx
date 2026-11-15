@@ -1,5 +1,6 @@
 import { createBrowserRouter, Link, Navigate, useParams } from 'react-router';
 import { joinPath } from '../core/InviteSheet.ts';
+import { HouseholdSettings } from '../core/HouseholdSettings.tsx';
 import { Members } from '../core/Members.tsx';
 import { Welcome } from '../core/Welcome.tsx';
 import { Landing } from '../core/auth/Landing.tsx';
@@ -33,10 +34,11 @@ export function createAppRouter() {
               path: '/home',
               element: (
                 <Placeholder>
-                  <Link to="/household/members">Members</Link>
+                  <Link to="/household/members">Members</Link> <Link to="/household">Settings</Link>
                 </Placeholder>
               ),
             },
+            { path: '/household', element: <HouseholdSettings /> },
             { path: '/household/members', element: <Members /> },
             { path: '/shopping', element: <Placeholder /> },
             { path: '/pantry', element: <Placeholder /> },

@@ -6,6 +6,8 @@ import type {
   Invite,
   Member,
   Profile,
+  Role,
+  UpdateModulesRequest,
 } from '@abodenestly/contract';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -28,6 +30,12 @@ export interface ApiClient {
   fetchLiveInvite(householdId: string): Promise<ApiResult<Invite | null>>;
   /** Sets `deleted_at`; the only change a client may make to an invite (SPEC §14). */
   retireInvite(id: string): Promise<ApiResult<null>>;
+  /** My active membership of the household with the household row, or `null` (left, deleted or not a member). */
+  fetchHousehold(householdId: string, userId: string): Promise<ApiResult<{ household: Household; role: Role } | null>>;
+  /** CORE-05 endpoint, owner only. 403 → `forbidden`. */
+  updateModules(householdId: string, body: UpdateModulesRequest): Promise<ApiResult<Household>>;
+  /** Plain CRUD straight to Supabase under RLS (SPEC §7); a non-owner gets SQLSTATE 42501 → `forbidden`. */
+  updateHousehold(householdId: string, patch: { name?: string; currency?: string }): Promise<ApiResult<Household>>;
   /** Active members of the household with their profiles. Read under RLS, no API route. */
   fetchMembers(householdId: string): Promise<ApiResult<MemberRow[]>>;
   /** DELETE /households/{id}/members/{user_id}: remove someone, or leave when `userId` is the caller. */
@@ -77,7 +85,7 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
     return data.session?.access_token ?? null;
   }
 
-  async function send(method: 'POST' | 'DELETE', path: string, body?: unknown): Promise<Response> {
+  async function send(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<Response> {
     const request = async (token: string | null) =>
       fetch(`${baseUrl}${path}`, {
         method,
@@ -95,7 +103,7 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
   }
 
   async function call<T>(
-    method: 'POST' | 'DELETE',
+    method: 'POST' | 'PATCH' | 'DELETE',
     path: string,
     body: unknown,
     okStatus: (status: number) => boolean,
@@ -218,6 +226,44 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
         // RLS hides rows silently, so an empty result means nothing was promoted.
         if (error || !data || data.length === 0) return { ok: false, error: { code: 'unknown' } };
         return { ok: true, value: null };
+      } catch {
+        return { ok: false, error: { code: 'network' } };
+      }
+    },
+    async fetchHousehold(householdId, userId) {
+      try {
+        const { data, error } = await supabase
+          .from('member')
+          .select('role, household:household!inner(*)')
+          .eq('household_id', householdId)
+          .eq('user_id', userId)
+          .is('left_at', null)
+          .is('household.deleted_at', null)
+          .maybeSingle();
+        if (error) return { ok: false, error: { code: 'unknown' } };
+        if (!data) return { ok: true, value: null };
+        const row = data as unknown as { role: Role; household: Household };
+        return { ok: true, value: { household: row.household, role: row.role } };
+      } catch {
+        return { ok: false, error: { code: 'network' } };
+      }
+    },
+    updateModules(householdId, body) {
+      return call<Household>(
+        'PATCH',
+        `/households/${encodeURIComponent(householdId)}/modules`,
+        body,
+        (s) => s === 200,
+        (status) => ({ code: status === 403 ? 'forbidden' : status === 400 ? 'validation' : 'unknown' }),
+      );
+    },
+    async updateHousehold(householdId, patch) {
+      try {
+        const { data, error } = await supabase.from('household').update(patch).eq('id', householdId).select('*').single();
+        if (error) return { ok: false, error: { code: error.code === '42501' ? 'forbidden' : 'unknown' } };
+        // RLS hides rows silently, so no row back means nothing changed.
+        if (!data) return { ok: false, error: { code: 'unknown' } };
+        return { ok: true, value: data as Household };
       } catch {
         return { ok: false, error: { code: 'network' } };
       }

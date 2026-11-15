@@ -81,6 +81,25 @@ export const routes: Route[] = [
     response: { status: 201, schemaName: 'Invite' },
   },
   {
+    method: 'patch',
+    path: '/households/{id}/modules',
+    summary: 'Toggle modules (owner)',
+    public: false,
+    requestBody: {
+      schemaName: 'UpdateModulesRequest',
+      schema: {
+        type: 'object',
+        properties: {
+          shopping: { type: 'boolean' },
+          pantry: { type: 'boolean' },
+          maintenance: { type: 'boolean' },
+        },
+        required: [],
+      },
+    },
+    response: { status: 200, schemaName: 'Household' },
+  },
+  {
     method: 'post',
     path: '/invites/{code}/accept',
     summary: 'Join a household with an invite code',

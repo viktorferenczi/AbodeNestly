@@ -447,7 +447,7 @@ Out: The settings switches (CORE-05). The server rejection (X7-api). Skipped lay
 ## Acceptance criteria
 - [ ] AC1 Given pantry is off, when the shell renders, then there is no Pantry tab and opening a pantry route shows Home instead of an error.
 - [ ] AC2 Given only shopping is on, when the shell renders, then Shopping is the start tab.
-- [ ] AC3 Given all three modules are off, when the shell renders, then the only tab is Home.
+- [ ] AC3 Given all three modules are off, when the shell renders, then the only tabs are Home and Profile (web; Profile is always shown, see DESIGN A6 web deviation).
 - [ ] AC4 Given I turn a module back on, when the flag arrives, then its tab returns without restarting the app.
 
 ## Design

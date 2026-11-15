@@ -1,0 +1,24 @@
+.bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-line);
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-2);
+  color: var(--color-text-2);
+  font-size: var(--font-secondary);
+  text-decoration: none;
+}
+
+.active {
+  color: var(--color-accent);
+  font-weight: 600;
+}

@@ -1,4 +1,4 @@
-import type { Household, Invite } from '@abodenestly/contract';
+import type { Household, Invite, Role, UpdateModulesRequest } from '@abodenestly/contract';
 import type { ApiClient, ApiResult, MemberRow } from './apiClient.ts';
 
 // Hand-written fake (TESTING §2 forbids mocking libraries). Records calls, returns what the test sets.
@@ -13,6 +13,12 @@ export class FakeApiClient implements ApiClient {
   createInviteResult: ApiResult<Invite> = { ok: false, error: { code: 'unknown' } };
   fetchInviteResult: ApiResult<Invite | null> = { ok: true, value: null };
   retireResult: ApiResult<null> = { ok: true, value: null };
+  fetchHouseholdCalls: Array<{ householdId: string; userId: string }> = [];
+  updateModulesCalls: Array<{ householdId: string; body: UpdateModulesRequest }> = [];
+  updateHouseholdCalls: Array<{ householdId: string; patch: { name?: string; currency?: string } }> = [];
+  fetchHouseholdResult: ApiResult<{ household: Household; role: Role } | null> = { ok: true, value: null };
+  updateModulesResult: ApiResult<Household> = { ok: false, error: { code: 'unknown' } };
+  updateHouseholdResult: ApiResult<Household> = { ok: false, error: { code: 'unknown' } };
   fetchMembersCalls: string[] = [];
   removeCalls: Array<{ householdId: string; userId: string }> = [];
   makeOwnerCalls: Array<{ householdId: string; userId: string }> = [];
@@ -46,6 +52,21 @@ export class FakeApiClient implements ApiClient {
   retireInvite(id: string) {
     this.retireCalls.push(id);
     return this.respond(() => this.retireResult);
+  }
+
+  fetchHousehold(householdId: string, userId: string) {
+    this.fetchHouseholdCalls.push({ householdId, userId });
+    return this.respond(() => this.fetchHouseholdResult);
+  }
+
+  updateModules(householdId: string, body: UpdateModulesRequest) {
+    this.updateModulesCalls.push({ householdId, body });
+    return this.respond(() => this.updateModulesResult);
+  }
+
+  updateHousehold(householdId: string, patch: { name?: string; currency?: string }) {
+    this.updateHouseholdCalls.push({ householdId, patch });
+    return this.respond(() => this.updateHouseholdResult);
   }
 
   fetchMembers(householdId: string) {
