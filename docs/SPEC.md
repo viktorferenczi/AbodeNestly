@@ -954,7 +954,21 @@ create index member_user_idx on member(user_id);
 alter table household enable row level security;
 create policy household_select on household for select using (is_member(id));
 create policy household_insert on household for insert with check (created_by = auth.uid());
-create policy household_update on household for update using (is_owner(id));
+-- CORE-05: household writes are owner-only, and a non-owner's write raises instead of matching 0 rows.
+-- USING widens to members so the row reaches the guard; non-members still see nothing (0 rows).
+create policy household_update on household for update
+  using (is_member(id)) with check (is_member(id));
+
+create or replace function guard_household_update() returns trigger
+language plpgsql as $$
+begin
+  if current_user <> 'authenticated' then return new; end if;   -- service role / security-definer paths
+  if is_owner(old.id) then return new; end if;
+  raise exception 'household_owner_only' using errcode = '42501';
+end $$;
+-- Name sorts before household_sync, so the permission error wins.
+create trigger household_guard before update on household
+  for each row execute function guard_household_update();
 create trigger household_sync before insert or update on household for each row execute function set_sync_fields();
 
 alter table member enable row level security;
