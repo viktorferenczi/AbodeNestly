@@ -68,14 +68,15 @@ fun WelcomeScreen(
 fun createMessage(failure: ApiFailure): String = when (failure) {
     ApiFailure.Validation -> "Enter a name for your household."
     ApiFailure.Network -> "Couldn't reach the server. Check your connection and try again."
-    ApiFailure.InvalidCode, ApiFailure.Unknown -> "Something went wrong. Try again."
+    ApiFailure.InvalidCode, ApiFailure.Unknown, ApiFailure.LastOwner, ApiFailure.Forbidden, ApiFailure.NotFound ->
+        "Something went wrong. Try again."
 }
 
 fun joinMessage(failure: ApiFailure): String = when (failure) {
     ApiFailure.Validation -> "Enter your invite code."
     ApiFailure.InvalidCode -> "That code isn't valid or has expired. Check it and try again."
     ApiFailure.Network -> "Couldn't reach the server. Check your connection and try again."
-    ApiFailure.Unknown -> "Something went wrong. Try again."
+    ApiFailure.Unknown, ApiFailure.LastOwner, ApiFailure.Forbidden, ApiFailure.NotFound -> "Something went wrong. Try again."
 }
 
 @Composable

@@ -2,6 +2,10 @@ package com.abodenestly.core.api
 
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
+import com.abodenestly.contract.models.Member
+import kotlinx.serialization.Contextual
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import java.util.UUID
 
 /** Why an API call failed, as the Welcome screen needs to tell the person (mirrors iOS `ApiFailure`). */
@@ -12,6 +16,28 @@ sealed class ApiFailure {
     data object InvalidCode : ApiFailure()
     data object Network : ApiFailure()
     data object Unknown : ApiFailure()
+
+    /** Remove/leave: the caller is the only owner left (409 `last_owner`). */
+    data object LastOwner : ApiFailure()
+    data object Forbidden : ApiFailure()
+    data object NotFound : ApiFailure()
+}
+
+/**
+ * The `profile` columns the Members screen shows. Hand-written because the read selects only these, so the
+ * generated `Profile` (which also needs `created_at` / `updated_at`) cannot decode it; iOS has the same type.
+ */
+@Serializable
+data class MemberProfile(
+    @Contextual val id: UUID,
+    @SerialName("display_name") val displayName: String,
+    @SerialName("avatar_path") val avatarPath: String? = null,
+)
+
+/** An active member with the profile shown beside them (`null` when RLS hides it). */
+@Serializable
+data class MemberRow(val member: Member, val profile: MemberProfile?) {
+    val id: UUID get() = member.userId
 }
 
 sealed interface ApiResult<out T> {
@@ -35,4 +61,13 @@ interface ApiService {
 
     /** Soft-deletes an invite through PostgREST. A row RLS hides counts as a failure. */
     suspend fun retireInvite(id: UUID): ApiResult<Unit>
+
+    /** Active members (`left_at` null) with their profiles. Two PostgREST reads under RLS. */
+    suspend fun fetchMembers(householdId: UUID): ApiResult<List<MemberRow>>
+
+    /** `DELETE /households/{id}/members/{user_id}` (204): an owner removes someone, or a person leaves. */
+    suspend fun removeMember(householdId: UUID, userId: UUID): ApiResult<Unit>
+
+    /** Promotes a member through PostgREST (`PATCH member`). A row RLS hides counts as a failure. */
+    suspend fun makeOwner(householdId: UUID, userId: UUID): ApiResult<Unit>
 }

@@ -36,6 +36,7 @@ import com.abodenestly.core.auth.LastHouseholdStore
 import com.abodenestly.core.auth.SessionState
 import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
+import com.abodenestly.core.members.MembersCache
 import com.abodenestly.core.members.MembersScreen
 import com.abodenestly.core.signin.SignInScreen
 import com.abodenestly.core.signin.SignInViewModel
@@ -56,6 +57,7 @@ fun AppRoot(
     network: NetworkMonitor,
     api: ApiService,
     lastHousehold: LastHouseholdStore,
+    membersCache: MembersCache,
     webBaseUrl: String,
 ) {
     val state by session.state.collectAsState()
@@ -66,8 +68,9 @@ fun AppRoot(
             SessionStatus.Loading -> Box(Modifier.fillMaxSize().testTag("session.loading"))
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = online)
             SessionStatus.SignedIn -> SignedInShell(
-                state, welcome, api, lastHousehold, webBaseUrl,
-                isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
+                state, welcome, api, lastHousehold, membersCache, webBaseUrl,
+                meId = session.userId, isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
+                onLeft = session::leftHousehold,
             )
         }
     }
@@ -79,10 +82,13 @@ private fun SignedInShell(
     welcome: WelcomeViewModel,
     api: ApiService,
     lastHousehold: LastHouseholdStore,
+    membersCache: MembersCache,
     webBaseUrl: String,
+    meId: UUID?,
     isOnline: Boolean,
     onRetry: () -> Unit,
     onSignOut: () -> Unit,
+    onLeft: () -> Unit,
 ) {
     // AC8: the TopBar shows the person's display name once the profile row is in.
     Scaffold(topBar = { TopBar("AbodeNestly", state.profile?.displayName) }, containerColor = LocalTokens.current.bg) { padding ->
@@ -95,7 +101,7 @@ private fun SignedInShell(
                 state.destination == null -> Centered { CircularProgressIndicator(Modifier.testTag("session.loading")) }
                 state.destination == Destination.Welcome ->
                     WelcomeScreen(welcome, displayName = state.profile?.displayName, isOnline = isOnline, onSignOut = onSignOut)
-                else -> Tabs(state.destination, state.household, api, lastHousehold, webBaseUrl, isOnline, onSignOut)
+                else -> Tabs(state.destination, state.household, api, lastHousehold, membersCache, webBaseUrl, meId, isOnline, onSignOut, onLeft)
             }
         }
     }
@@ -108,9 +114,12 @@ private fun Tabs(
     household: LandingHousehold?,
     api: ApiService,
     lastHousehold: LastHouseholdStore,
+    membersCache: MembersCache,
     webBaseUrl: String,
+    meId: UUID?,
     isOnline: Boolean,
     onSignOut: () -> Unit,
+    onLeft: () -> Unit,
 ) {
     val start = (destination as? Destination.Household)?.tab ?: AppTab.Home
     val tabs = buildList {
@@ -125,11 +134,15 @@ private fun Tabs(
     var householdId by remember { mutableStateOf<UUID?>(household?.id) }
     LaunchedEffect(household) { householdId = household?.id ?: lastHousehold.read() }
     val members = householdId
-    if (showMembers && members != null) {
+    if (showMembers && members != null && meId != null) {
         BackHandler { showMembers = false }
         Column(Modifier.fillMaxSize()) {
             TextButton(onClick = { showMembers = false }, modifier = Modifier.testTag("members.back")) { Text("Back") }
-            MembersScreen(members, api, isOnline, webBaseUrl, Modifier.weight(1f))
+            MembersScreen(
+                members, meId, api, isOnline, webBaseUrl, membersCache,
+                onLeft = { showMembers = false; onLeft() },
+                modifier = Modifier.weight(1f),
+            )
         }
         return
     }
@@ -138,7 +151,7 @@ private fun Tabs(
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(selected.key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.headlineMedium)
                 if (selected == AppTab.Home) {
-                    if (members != null) TextButton(onClick = { showMembers = true }, modifier = Modifier.testTag("home.members")) { Text("Members") }
+                    if (members != null && meId != null) TextButton(onClick = { showMembers = true }, modifier = Modifier.testTag("home.members")) { Text("Members") }
                     TextButton(onClick = onSignOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
                 }
             }

@@ -21,7 +21,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            AbodeTheme { AppRoot(session, signIn, welcome, graph.network, graph.api, graph.lastHousehold, graph.config.webBaseUrl) }
+            AbodeTheme { AppRoot(
+                    session, signIn, welcome, graph.network, graph.api, graph.lastHousehold, graph.membersCache, graph.config.webBaseUrl,
+                ) }
         }
         lifecycleScope.launch {
             // E2E starts signed out; the session is cleared before it is read.

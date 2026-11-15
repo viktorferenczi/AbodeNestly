@@ -961,7 +961,7 @@ Out: The invite sheet contents (CORE-03). Sign-in (CORE-01).
 
 ## Design
 Screen: DESIGN B6 — States: owner, member, invite-sheet, offline. Interactions: remove → undo toast 5 s then DELETE; make owner.
-Deviations from the plan: none
+Deviations from the plan: the offline list is a DataStore JSON snapshot (`abodenestly.members.<household_id>`) because Android has no Room yet, like the iOS UserDefaults snapshot; avatars show initials only (`avatar_path` image loading is out of scope, and Coil is not an allowed dependency); the undo toast is a Snackbar-styled surface timed by the view model rather than a `SnackbarHostState`, so tests are deterministic.
 
 ## Offline behaviour
 The member list is readable offline (SPEC §6.5). Remove, leave, and role changes need a network. DESIGN B6's undo toast delays the DELETE by 5 seconds while online.
@@ -974,10 +974,10 @@ Tables: member, profile  Endpoints: DELETE /households/{id}/members/{user_id}  T
 Schema change: no  Contract change: no
 
 ## Tests required
-Unit: apps/android/core/src/test/java/app/abodenestly/core/MembersTest.kt → AC3 undo within 5 s does not call DELETE; AC4 last owner is blocked in the view model before the call
-Component: apps/android/core/src/test/java/app/abodenestly/core/MembersComposeTest.kt → AC1 owner populated, AC2 remove starts the toast, AC5 member has no remove, AC6 offline; overflow remove and leave
+Unit: apps/android/core/src/test/java/com/abodenestly/core/MembersTest.kt → AC3 undo within 5 s does not call DELETE; AC4 last owner is blocked in the view model before the call
+Component: apps/android/core/src/test/java/com/abodenestly/core/MembersComposeTest.kt → AC1 owner populated, AC2 remove starts the toast, AC5 member has no remove, AC6 offline; overflow remove and leave
 Integration: n/a (no API handler in this story)
-E2E: E2E-CORE-1 apps/android/core/src/androidTest/java/app/abodenestly/core/MembersE2ETest.kt
+E2E: E2E-CORE-1 apps/android/core/src/androidTest/java/com/abodenestly/core/MembersE2ETest.kt
 Offline test: n/a (core)
 
 ## Dependencies
@@ -988,6 +988,8 @@ Blocked by: CORE-04-db, CORE-04-api  Blocks: MAINT-15-android
 
 ## Open questions
 DESIGN B6 includes make owner, and §4 names the roles but does not say an existing member's role can be changed. Proposed default: the overflow action promotes a member to owner, because the screen plan lists it and §4 already has both roles.
+
+**Resolved:** the overflow action promotes a member to owner, with a direct `member.role` update under RLS (`PATCH member` with `{"role":"owner"}`, no contract change), as on web and iOS.
 
 # CORE-05-db — Module flags are owner-writable
 

@@ -86,6 +86,7 @@ class WelcomeTest {
         val slow = object : LastHouseholdStore {
             override suspend fun read(): UUID? = null
             override suspend fun write(id: UUID) = gate.await()
+            override suspend fun clear() = Unit
         }
         val session = SessionViewModel(FakeAuthService(Fixtures.session), slow, isOnline = { true }, scope = scope())
         session.enter(LandingHousehold(id(1), true, true, true))
@@ -99,6 +100,7 @@ class WelcomeTest {
         val slow = object : LastHouseholdStore {
             override suspend fun read(): UUID? = null
             override suspend fun write(id: UUID) = gate.await()
+            override suspend fun clear() = Unit
         }
         val auth = FakeAuthService(Fixtures.session)
         val session = SessionViewModel(auth, slow, isOnline = { true }, scope = scope())
