@@ -6,6 +6,7 @@ import health from '../health.ts';
 import households from '../households/index.ts';
 import householdModules from '../households/[id]/modules.ts';
 import householdInvites from '../households/[id]/invites.ts';
+import householdMember from '../households/[id]/members/[user_id].ts';
 import acceptInvite from '../invites/[code]/accept.ts';
 
 type Handler = (req: Request) => Promise<Response>;
@@ -19,6 +20,7 @@ const routes: Record<string, Handler> = {
 const patterns: Array<[RegExp, Handler]> = [
   [/^\/households\/[^/]+\/invites$/, householdInvites],
   [/^\/households\/[^/]+\/modules$/, householdModules],
+  [/^\/households\/[^/]+\/members\/[^/]+$/, householdMember],
   [/^\/invites\/[^/]+\/accept$/, acceptInvite],
 ];
 

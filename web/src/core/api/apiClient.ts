@@ -4,15 +4,20 @@ import type {
   CreateInviteRequest,
   Household,
   Invite,
+  Member,
+  Profile,
   Role,
   UpdateModulesRequest,
 } from '@abodenestly/contract';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type ApiFailure = {
-  code: 'validation' | 'invalid_code' | 'forbidden' | 'last_owner' | 'network' | 'unknown';
+  code: 'validation' | 'invalid_code' | 'network' | 'unknown' | 'last_owner' | 'forbidden' | 'not_found';
 };
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: ApiFailure };
+
+/** An active member with the profile fields the Members screen shows (`null` when RLS hides the profile). */
+export type MemberRow = { member: Member; profile: Pick<Profile, 'display_name' | 'avatar_path'> | null };
 
 /** The API calls the app makes; tests use a hand-written fake. */
 export interface ApiClient {
@@ -31,8 +36,12 @@ export interface ApiClient {
   updateModules(householdId: string, body: UpdateModulesRequest): Promise<ApiResult<Household>>;
   /** Plain CRUD straight to Supabase under RLS (SPEC §7); a non-owner gets SQLSTATE 42501 → `forbidden`. */
   updateHousehold(householdId: string, patch: { name?: string; currency?: string }): Promise<ApiResult<Household>>;
-  /** Sets my own `member.left_at`. The last owner is refused by a DB trigger → `last_owner`. */
-  leaveHousehold(householdId: string, userId: string): Promise<ApiResult<null>>;
+  /** Active members of the household with their profiles. Read under RLS, no API route. */
+  fetchMembers(householdId: string): Promise<ApiResult<MemberRow[]>>;
+  /** DELETE /households/{id}/members/{user_id}: remove someone, or leave when `userId` is the caller. */
+  removeMember(householdId: string, userId: string): Promise<ApiResult<null>>;
+  /** Promotes a member to owner. Direct write under RLS (SPEC §7: network-only core settings). */
+  makeOwner(householdId: string, userId: string): Promise<ApiResult<null>>;
 }
 
 // CORE-03-api has not fixed its error code yet; the SQL raises `invalid_invite`. `not_found` and
@@ -46,6 +55,20 @@ export function toAcceptFailure(status: number, body: ApiError | null): ApiFailu
   if (code) return { code: INVALID_CODE_CODES.has(code) ? 'invalid_code' : 'unknown' };
   // No parseable error body (e.g. a bare proxy 404): fall back to the status.
   return { code: status === 404 || status === 410 ? 'invalid_code' : 'unknown' };
+}
+
+const REMOVE_CODES = new Set(['last_owner', 'forbidden', 'not_found']);
+
+/** Maps a remove/leave error response to a failure; exported for the table test. */
+export function toRemoveFailure(status: number, body: ApiError | null): ApiFailure {
+  const code = body?.error?.code;
+  if (code && REMOVE_CODES.has(code)) return { code: code as 'last_owner' | 'forbidden' | 'not_found' };
+  if (code) return { code: 'unknown' };
+  // No parseable error body: fall back to the status.
+  if (status === 403) return { code: 'forbidden' };
+  if (status === 404) return { code: 'not_found' };
+  if (status === 409) return { code: 'last_owner' };
+  return { code: 'unknown' };
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -62,15 +85,15 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
     return data.session?.access_token ?? null;
   }
 
-  async function send(path: string, body: unknown, method: 'POST' | 'PATCH' = 'POST'): Promise<Response> {
+  async function send(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<Response> {
     const request = async (token: string | null) =>
       fetch(`${baseUrl}${path}`, {
         method,
         headers: {
-          'content-type': 'application/json',
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(body),
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
     const first = await request(await accessToken());
     if (first.status !== 401) return first;
@@ -80,15 +103,15 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
   }
 
   async function call<T>(
+    method: 'POST' | 'PATCH' | 'DELETE',
     path: string,
     body: unknown,
     okStatus: (status: number) => boolean,
     mapError: (status: number, body: ApiError | null) => ApiFailure,
-    method: 'POST' | 'PATCH' = 'POST',
   ): Promise<ApiResult<T>> {
     let response: Response;
     try {
-      response = await send(path, body, method);
+      response = await send(method, path, body);
     } catch {
       return { ok: false, error: { code: 'network' } };
     }
@@ -101,6 +124,7 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
     createHousehold(name) {
       const body: CreateHouseholdRequest = { name };
       return call<Household>(
+        'POST',
         '/households',
         body,
         (s) => s === 201,
@@ -113,6 +137,7 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
     createInvite(householdId) {
       const body: CreateInviteRequest = {};
       return call<Invite>(
+        'POST',
         `/households/${encodeURIComponent(householdId)}/invites`,
         body,
         (s) => s === 201,
@@ -150,6 +175,61 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
         return { ok: false, error: { code: 'network' } };
       }
     },
+    async fetchMembers(householdId) {
+      try {
+        const { data: members, error } = await supabase
+          .from('member')
+          .select('*')
+          .eq('household_id', householdId)
+          .is('left_at', null);
+        if (error) return { ok: false, error: { code: 'unknown' } };
+        const list = (members ?? []) as Member[];
+        if (list.length === 0) return { ok: true, value: [] };
+        // No FK embed from member to profile, so the profiles are a second read.
+        const { data: profiles, error: profileError } = await supabase
+          .from('profile')
+          .select('id, display_name, avatar_path')
+          .in('id', list.map((m) => m.user_id));
+        if (profileError) return { ok: false, error: { code: 'unknown' } };
+        const byId = new Map(
+          ((profiles ?? []) as Array<Pick<Profile, 'id' | 'display_name' | 'avatar_path'>>).map((p) => [p.id, p]),
+        );
+        return {
+          ok: true,
+          value: list.map((member) => {
+            const p = byId.get(member.user_id);
+            return { member, profile: p ? { display_name: p.display_name, avatar_path: p.avatar_path } : null };
+          }),
+        };
+      } catch {
+        return { ok: false, error: { code: 'network' } };
+      }
+    },
+    async removeMember(householdId, userId) {
+      const result = await call<null>(
+        'DELETE',
+        `/households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(userId)}`,
+        undefined,
+        (s) => s === 204,
+        toRemoveFailure,
+      );
+      return result.ok ? { ok: true, value: null } : result;
+    },
+    async makeOwner(householdId, userId) {
+      try {
+        const { data, error } = await supabase
+          .from('member')
+          .update({ role: 'owner' })
+          .eq('household_id', householdId)
+          .eq('user_id', userId)
+          .select('user_id');
+        // RLS hides rows silently, so an empty result means nothing was promoted.
+        if (error || !data || data.length === 0) return { ok: false, error: { code: 'unknown' } };
+        return { ok: true, value: null };
+      } catch {
+        return { ok: false, error: { code: 'network' } };
+      }
+    },
     async fetchHousehold(householdId, userId) {
       try {
         const { data, error } = await supabase
@@ -170,11 +250,11 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
     },
     updateModules(householdId, body) {
       return call<Household>(
+        'PATCH',
         `/households/${encodeURIComponent(householdId)}/modules`,
         body,
         (s) => s === 200,
         (status) => ({ code: status === 403 ? 'forbidden' : status === 400 ? 'validation' : 'unknown' }),
-        'PATCH',
       );
     },
     async updateHousehold(householdId, patch) {
@@ -188,26 +268,9 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
         return { ok: false, error: { code: 'network' } };
       }
     },
-    async leaveHousehold(householdId, userId) {
-      try {
-        const { data, error } = await supabase
-          .from('member')
-          .update({ left_at: new Date().toISOString() })
-          .eq('household_id', householdId)
-          .eq('user_id', userId)
-          .select('user_id');
-        if (error) {
-          const lastOwner = error.code === 'P0001' || /last_owner/.test(error.message ?? '');
-          return { ok: false, error: { code: lastOwner ? 'last_owner' : 'unknown' } };
-        }
-        if (!data || data.length === 0) return { ok: false, error: { code: 'unknown' } };
-        return { ok: true, value: null };
-      } catch {
-        return { ok: false, error: { code: 'network' } };
-      }
-    },
     acceptInvite(code) {
       return call<{ household_id: string }>(
+        'POST',
         `/invites/${encodeURIComponent(code)}/accept`,
         {},
         (s) => s >= 200 && s < 300,

@@ -21,4 +21,9 @@ public struct LastHouseholdStore: Sendable {
     public func write(_ id: UUID) {
         defaults.set(id.uuidString, forKey: Self.key)
     }
+
+    /// After leaving the household, so the next launch does not reopen it.
+    public func clear() {
+        defaults.removeObject(forKey: Self.key)
+    }
 }

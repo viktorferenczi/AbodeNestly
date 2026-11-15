@@ -1,5 +1,5 @@
 import type { Household, Invite, Role, UpdateModulesRequest } from '@abodenestly/contract';
-import type { ApiClient, ApiResult } from './apiClient.ts';
+import type { ApiClient, ApiResult, MemberRow } from './apiClient.ts';
 
 // Hand-written fake (TESTING §2 forbids mocking libraries). Records calls, returns what the test sets.
 export class FakeApiClient implements ApiClient {
@@ -16,11 +16,15 @@ export class FakeApiClient implements ApiClient {
   fetchHouseholdCalls: Array<{ householdId: string; userId: string }> = [];
   updateModulesCalls: Array<{ householdId: string; body: UpdateModulesRequest }> = [];
   updateHouseholdCalls: Array<{ householdId: string; patch: { name?: string; currency?: string } }> = [];
-  leaveCalls: Array<{ householdId: string; userId: string }> = [];
   fetchHouseholdResult: ApiResult<{ household: Household; role: Role } | null> = { ok: true, value: null };
   updateModulesResult: ApiResult<Household> = { ok: false, error: { code: 'unknown' } };
   updateHouseholdResult: ApiResult<Household> = { ok: false, error: { code: 'unknown' } };
-  leaveResult: ApiResult<null> = { ok: true, value: null };
+  fetchMembersCalls: string[] = [];
+  removeCalls: Array<{ householdId: string; userId: string }> = [];
+  makeOwnerCalls: Array<{ householdId: string; userId: string }> = [];
+  fetchMembersResult: ApiResult<MemberRow[]> = { ok: true, value: [] };
+  removeResult: ApiResult<null> = { ok: true, value: null };
+  makeOwnerResult: ApiResult<null> = { ok: true, value: null };
   /** When true, calls return a promise that only settles via `resolvePending`. */
   pending = false;
   private waiting: Array<() => void> = [];
@@ -65,9 +69,19 @@ export class FakeApiClient implements ApiClient {
     return this.respond(() => this.updateHouseholdResult);
   }
 
-  leaveHousehold(householdId: string, userId: string) {
-    this.leaveCalls.push({ householdId, userId });
-    return this.respond(() => this.leaveResult);
+  fetchMembers(householdId: string) {
+    this.fetchMembersCalls.push(householdId);
+    return this.respond(() => this.fetchMembersResult);
+  }
+
+  removeMember(householdId: string, userId: string) {
+    this.removeCalls.push({ householdId, userId });
+    return this.respond(() => this.removeResult);
+  }
+
+  makeOwner(householdId: string, userId: string) {
+    this.makeOwnerCalls.push({ householdId, userId });
+    return this.respond(() => this.makeOwnerResult);
   }
 
   resolvePending() {

@@ -21,6 +21,6 @@ export function clearLastHousehold(): void {
   try {
     localStorage.removeItem(KEY);
   } catch {
-    // Storage blocked: nothing was stored.
+    // Storage blocked (private mode): nothing was stored to clear.
   }
 }

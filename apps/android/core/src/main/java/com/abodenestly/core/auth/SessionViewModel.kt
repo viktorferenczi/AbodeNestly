@@ -45,7 +45,9 @@ class SessionViewModel(
     private val mutableState = MutableStateFlow(SessionState())
     val state: StateFlow<SessionState> = mutableState.asStateFlow()
 
-    private var userId: UUID? = null
+    /** The signed-in user, or `null` when signed out. */
+    var userId: UUID? = null
+        private set
     private var startJob: Job? = null
     private var loadJob: Job? = null
     private var writeJob: Job? = null
@@ -95,6 +97,17 @@ class SessionViewModel(
         mutableState.update { it.copy(destination = null, household = null, loadFailed = false) }
         loadJob = scope.launch {
             lastHousehold.write(householdId)
+            runLoad(user)
+        }
+    }
+
+    /** The person left their household: forget it as the last one used and land again (Welcome or another household). */
+    fun leftHousehold() {
+        val user = userId ?: return
+        loadJob?.cancel()
+        mutableState.update { it.copy(destination = null, household = null, loadFailed = false) }
+        loadJob = scope.launch {
+            lastHousehold.clear()
             runLoad(user)
         }
     }

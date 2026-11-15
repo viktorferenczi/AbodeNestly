@@ -10,6 +10,9 @@ public final class FakeApiService: ApiService {
         case createInvite(householdId: UUID)
         case fetchLiveInvite(householdId: UUID)
         case retireInvite(id: UUID)
+        case fetchMembers(householdId: UUID)
+        case removeMember(householdId: UUID, userId: UUID)
+        case makeOwner(householdId: UUID, userId: UUID)
     }
 
     private struct State {
@@ -20,6 +23,9 @@ public final class FakeApiService: ApiService {
         var createInviteResult: Result<Invite, ApiFailure> = .failure(.unknown)
         var liveInviteResult: Result<Invite?, ApiFailure> = .success(nil)
         var retireResult: Result<Void, ApiFailure> = .success(())
+        var membersResult: Result<[MemberRow], ApiFailure> = .success([])
+        var removeResult: Result<Void, ApiFailure> = .success(())
+        var makeOwnerResult: Result<Void, ApiFailure> = .success(())
         var held: [CheckedContinuation<Void, Never>] = []
         var hold = false
     }
@@ -45,6 +51,10 @@ public final class FakeApiService: ApiService {
         state.withLock { $0.liveInviteResult = result }
     }
     public func setRetireResult(_ result: Result<Void, ApiFailure>) { state.withLock { $0.retireResult = result } }
+
+    public func setMembersResult(_ result: Result<[MemberRow], ApiFailure>) { state.withLock { $0.membersResult = result } }
+    public func setRemoveResult(_ result: Result<Void, ApiFailure>) { state.withLock { $0.removeResult = result } }
+    public func setMakeOwnerResult(_ result: Result<Void, ApiFailure>) { state.withLock { $0.makeOwnerResult = result } }
 
     /// Makes calls suspend until `release()`, so tests can observe `creating` / `joining`.
     public func hold() { state.withLock { $0.hold = true } }
@@ -99,5 +109,23 @@ public final class FakeApiService: ApiService {
         state.withLock { $0.calls.append(.retireInvite(id: id)) }
         await suspendIfHeld()
         return state.withLock { $0.retireResult }
+    }
+
+    public func fetchMembers(householdId: UUID) async -> Result<[MemberRow], ApiFailure> {
+        state.withLock { $0.calls.append(.fetchMembers(householdId: householdId)) }
+        await suspendIfHeld()
+        return state.withLock { $0.membersResult }
+    }
+
+    public func removeMember(householdId: UUID, userId: UUID) async -> Result<Void, ApiFailure> {
+        state.withLock { $0.calls.append(.removeMember(householdId: householdId, userId: userId)) }
+        await suspendIfHeld()
+        return state.withLock { $0.removeResult }
+    }
+
+    public func makeOwner(householdId: UUID, userId: UUID) async -> Result<Void, ApiFailure> {
+        state.withLock { $0.calls.append(.makeOwner(householdId: householdId, userId: userId)) }
+        await suspendIfHeld()
+        return state.withLock { $0.makeOwnerResult }
     }
 }

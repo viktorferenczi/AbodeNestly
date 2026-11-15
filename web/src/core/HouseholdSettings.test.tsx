@@ -197,14 +197,14 @@ describe('CORE-05: HouseholdSettings', () => {
     expect(currency().value).toBe('USD');
   });
 
-  it('AC5 leave: Leave opens the sheet, confirming calls leaveHousehold and goes to /', async () => {
+  it('AC5 leave: Leave opens the sheet, confirming calls removeMember and goes to /', async () => {
     const { api, router } = await renderSettings('member');
     fireEvent.click(screen.getByRole('button', { name: 'Leave household' }));
     const dialog = screen.getByRole('dialog', { name: 'Leave Test Home?' });
-    expect(api.leaveCalls).toEqual([]);
+    expect(api.removeCalls).toEqual([]);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Leave' }));
     await flush();
-    expect(api.leaveCalls).toEqual([{ householdId: 'h1', userId: 'u1' }]);
+    expect(api.removeCalls).toEqual([{ householdId: 'h1', userId: 'u1' }]);
     expect(router.state.location.pathname).toBe('/');
     expect(readLastHousehold()).toBeNull();
     expect(localStorage.getItem('abodenestly:household:u1:h1')).toBeNull();
@@ -253,12 +253,12 @@ describe('CORE-05: HouseholdSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Leave household' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(api.leaveCalls).toEqual([]);
+    expect(api.removeCalls).toEqual([]);
   });
 
   it('last_owner leave shows an inline message and stays', async () => {
     const api = new FakeApiClient();
-    api.leaveResult = { ok: false, error: { code: 'last_owner' } };
+    api.removeResult = { ok: false, error: { code: 'last_owner' } };
     const { router } = await renderSettings('owner', api);
     fireEvent.click(screen.getByRole('button', { name: 'Leave household' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Leave' }));

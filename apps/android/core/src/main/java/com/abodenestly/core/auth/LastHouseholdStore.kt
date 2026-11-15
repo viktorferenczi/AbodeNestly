@@ -15,6 +15,7 @@ import java.util.UUID
 interface LastHouseholdStore {
     suspend fun read(): UUID?
     suspend fun write(id: UUID)
+    suspend fun clear()
 }
 
 class DataStoreLastHouseholdStore(private val store: DataStore<Preferences>) : LastHouseholdStore {
@@ -23,6 +24,10 @@ class DataStoreLastHouseholdStore(private val store: DataStore<Preferences>) : L
 
     override suspend fun write(id: UUID) {
         store.edit { it[KEY] = id.toString() }
+    }
+
+    override suspend fun clear() {
+        store.edit { it.remove(KEY) }
     }
 
     companion object {
@@ -38,5 +43,9 @@ class InMemoryLastHouseholdStore(private var id: UUID? = null) : LastHouseholdSt
     override suspend fun read(): UUID? = id
     override suspend fun write(id: UUID) {
         this.id = id
+    }
+
+    override suspend fun clear() {
+        id = null
     }
 }

@@ -43,13 +43,17 @@ function toYaml(value: Json, indent = 0): string {
   return `${pad}${scalar(value)}\n`;
 }
 
+const STATUS_TEXT: Record<number, string> = { 200: 'OK', 201: 'Created', 204: 'No Content' };
+
 const paths: Record<string, Record<string, Json>> = {};
 const schemas: Record<string, Json> = { ...(componentSchemas as Record<string, Json>) };
 
 for (const route of routes) {
   // A route may reference a component schema by name (no inline `schema`) instead of redefining it.
   if (route.requestBody) schemas[route.requestBody.schemaName] = route.requestBody.schema as Json;
-  if (route.response.schema) schemas[route.response.schemaName] = route.response.schema as Json;
+  if (route.response.schema && route.response.schemaName) {
+    schemas[route.response.schemaName] = route.response.schema as Json;
+  }
   paths[route.path] ??= {};
   paths[route.path]![route.method] = {
     summary: route.summary,
@@ -59,7 +63,7 @@ for (const route of routes) {
             name,
             in: 'path',
             required: true,
-            schema: name === 'id' ? { type: 'string', format: 'uuid' } : { type: 'string' },
+            schema: name === 'id' || name === 'user_id' ? { type: 'string', format: 'uuid' } : { type: 'string' },
           })),
         }
       : {}),
@@ -78,12 +82,16 @@ for (const route of routes) {
       : {}),
     responses: {
       [String(route.response.status)]: {
-        description: route.response.status === 201 ? 'Created' : 'OK',
-        content: {
-          'application/json': {
-            schema: { $ref: `#/components/schemas/${route.response.schemaName}` },
-          },
-        },
+        description: STATUS_TEXT[route.response.status] ?? 'OK',
+        ...(route.response.schemaName
+          ? {
+              content: {
+                'application/json': {
+                  schema: { $ref: `#/components/schemas/${route.response.schemaName}` },
+                },
+              },
+            }
+          : {}),
       },
     },
   };

@@ -40,9 +40,10 @@ simulator. They are checked by hand only, never in e2e (TESTING §5).
 | Unit and component tests | `cd apps/ios && xcodebuild test -project AbodeNestly.xcodeproj -scheme "AbodeNestly Dev" -destination 'platform=iOS Simulator,name=iPhone 16 Pro' -skip-testing:AbodeNestlyUITests` |
 | E2E (XCUITest) | `TEST_RUNNER_SUPABASE_SERVICE_ROLE_KEY=<from supabase status> xcodebuild test … -only-testing:AbodeNestlyUITests` (sign-in: Supabase only; create household: also the API) |
 
-E2E-CORE-1 runs in three UI tests that share `AbodeNestlyUITests/E2EHelpers.swift`: `SignInUITests` (sign in, Welcome,
-relaunch), `WelcomeUITests` (create a household, land on Home, check the seeded defaults) and `InviteSheetUITests`
-(read the invite code from Home → Members → Invite, a second user joins with it). Each test creates its
+E2E-CORE-1 runs in four UI tests that share `AbodeNestlyUITests/E2EHelpers.swift`: `SignInUITests` (sign in, Welcome,
+relaunch), `WelcomeUITests` (create a household, land on Home, check the seeded defaults), `InviteSheetUITests`
+(read the invite code from Home → Members → Invite, a second user joins with it) and `MembersUITests`
+(both users see each other, the last owner cannot leave, the owner removes the other after the 5 s undo window). Each test creates its
 own user through the admin API, reads the magic link from Mailpit (`127.0.0.1:54324`), follows the verify URL without
 redirects and opens the resulting `abodenestly-dev://auth/callback?code=…` in the app for a real PKCE exchange, then
 deletes the user (and its household). `WelcomeUITests` also needs the API on :3000

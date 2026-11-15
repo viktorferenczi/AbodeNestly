@@ -90,7 +90,7 @@ export function HouseholdSettings() {
     const userId = session?.user.id;
     if (!userId) return;
     dispatch({ type: 'leave' });
-    const result = await api.leaveHousehold(household!.id, userId);
+    const result = await api.removeMember(household!.id, userId);
     if (!result.ok) return dispatch({ type: 'leave-failed', code: result.error.code });
     clearLastHousehold();
     clearCachedHousehold(userId, household!.id);
