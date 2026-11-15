@@ -88,6 +88,24 @@ class SessionViewModel(
         writeJob = scope.launch { lastHousehold.write(household.id) }
     }
 
+    /**
+     * Settings saved new module flags for the current household. Only the flags change, never the destination,
+     * so the tab bar follows in place without bouncing the person back to the start tab.
+     */
+    fun updateHousehold(updated: com.abodenestly.contract.models.Household) {
+        mutableState.update { s ->
+            val current = s.household
+            if (current == null || current.id != updated.id) s
+            else s.copy(
+                household = current.copy(
+                    moduleShopping = updated.moduleShopping,
+                    modulePantry = updated.modulePantry,
+                    moduleMaintenance = updated.moduleMaintenance,
+                ),
+            )
+        }
+    }
+
     /** An invite was accepted: reload the memberships and open that household on Home. */
     fun enterJoined(householdId: UUID) {
         val user = userId ?: return

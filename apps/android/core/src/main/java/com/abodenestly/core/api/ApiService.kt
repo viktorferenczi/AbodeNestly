@@ -40,6 +40,10 @@ data class MemberRow(val member: Member, val profile: MemberProfile?) {
     val id: UUID get() = member.userId
 }
 
+/** A household with the viewer's role in it: the `member?select=role,household:household!inner(*)` read, and the Settings cache entry. */
+@Serializable
+data class HouseholdWithRole(val household: Household, val role: Member.Role)
+
 sealed interface ApiResult<out T> {
     data class Success<T>(val value: T) : ApiResult<T>
     data class Failure(val failure: ApiFailure) : ApiResult<Nothing>
@@ -70,4 +74,13 @@ interface ApiService {
 
     /** Promotes a member through PostgREST (`PATCH member`). A row RLS hides counts as a failure. */
     suspend fun makeOwner(householdId: UUID, userId: UUID): ApiResult<Unit>
+
+    /** The household and the viewer's role, or `null` when they are no longer an active member (or it was deleted). PostgREST read under RLS. */
+    suspend fun fetchHousehold(householdId: UUID, userId: UUID): ApiResult<HouseholdWithRole?>
+
+    /** `PATCH /households/{id}/modules`: only the flags given are sent. */
+    suspend fun updateModules(householdId: UUID, shopping: Boolean? = null, pantry: Boolean? = null, maintenance: Boolean? = null): ApiResult<Household>
+
+    /** `PATCH household` through PostgREST (owners only, by RLS). A non-owner is `Forbidden`; a row RLS hides is `Unknown`. */
+    suspend fun updateHousehold(householdId: UUID, name: String? = null, currency: String? = null): ApiResult<Household>
 }

@@ -14,6 +14,8 @@ import com.abodenestly.core.members.MembersCache
 import com.abodenestly.core.auth.ProfileCache
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.auth.SupabaseAuthService
+import com.abodenestly.core.settings.DataStoreHouseholdCache
+import com.abodenestly.core.settings.HouseholdCache
 import com.abodenestly.core.signin.SignInViewModel
 import com.abodenestly.core.welcome.WelcomeViewModel
 import com.abodenestly.core.welcome.land
@@ -39,6 +41,8 @@ class AppGraph(context: Context) {
         DataStoreLastHouseholdStore.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
     val membersCache: MembersCache =
         DataStoreMembersCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
+    val householdCache: HouseholdCache =
+        DataStoreHouseholdCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
     val profileCache: ProfileCache =
         DataStoreProfileCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
 

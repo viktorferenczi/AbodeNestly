@@ -31,13 +31,17 @@ import androidx.compose.ui.unit.dp
 import com.abodenestly.core.api.ApiService
 import com.abodenestly.core.auth.AppTab
 import com.abodenestly.core.auth.Destination
+import com.abodenestly.core.auth.Landing
 import com.abodenestly.core.auth.LandingHousehold
 import com.abodenestly.core.auth.LastHouseholdStore
 import com.abodenestly.core.auth.SessionState
 import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.members.MembersCache
+import com.abodenestly.contract.models.Household
 import com.abodenestly.core.members.MembersScreen
+import com.abodenestly.core.settings.HouseholdCache
+import com.abodenestly.core.settings.HouseholdSettingsScreen
 import com.abodenestly.core.signin.SignInScreen
 import com.abodenestly.core.signin.SignInViewModel
 import com.abodenestly.core.welcome.WelcomeScreen
@@ -58,6 +62,7 @@ fun AppRoot(
     api: ApiService,
     lastHousehold: LastHouseholdStore,
     membersCache: MembersCache,
+    householdCache: HouseholdCache,
     webBaseUrl: String,
 ) {
     val state by session.state.collectAsState()
@@ -68,9 +73,9 @@ fun AppRoot(
             SessionStatus.Loading -> Box(Modifier.fillMaxSize().testTag("session.loading"))
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = online)
             SessionStatus.SignedIn -> SignedInShell(
-                state, welcome, api, lastHousehold, membersCache, webBaseUrl,
+                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl,
                 meId = session.userId, isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
-                onLeft = session::leftHousehold,
+                onLeft = session::leftHousehold, onHouseholdChanged = session::updateHousehold,
             )
         }
     }
@@ -83,12 +88,14 @@ private fun SignedInShell(
     api: ApiService,
     lastHousehold: LastHouseholdStore,
     membersCache: MembersCache,
+    householdCache: HouseholdCache,
     webBaseUrl: String,
     meId: UUID?,
     isOnline: Boolean,
     onRetry: () -> Unit,
     onSignOut: () -> Unit,
     onLeft: () -> Unit,
+    onHouseholdChanged: (Household) -> Unit,
 ) {
     // AC8: the TopBar shows the person's display name once the profile row is in.
     Scaffold(topBar = { TopBar("AbodeNestly", state.profile?.displayName) }, containerColor = LocalTokens.current.bg) { padding ->
@@ -101,7 +108,7 @@ private fun SignedInShell(
                 state.destination == null -> Centered { CircularProgressIndicator(Modifier.testTag("session.loading")) }
                 state.destination == Destination.Welcome ->
                     WelcomeScreen(welcome, displayName = state.profile?.displayName, isOnline = isOnline, onSignOut = onSignOut)
-                else -> Tabs(state.destination, state.household, api, lastHousehold, membersCache, webBaseUrl, meId, isOnline, onSignOut, onLeft)
+                else -> Tabs(state.destination, state.household, api, lastHousehold, membersCache, householdCache, webBaseUrl, meId, isOnline, onSignOut, onLeft, onHouseholdChanged)
             }
         }
     }
@@ -115,22 +122,22 @@ private fun Tabs(
     api: ApiService,
     lastHousehold: LastHouseholdStore,
     membersCache: MembersCache,
+    householdCache: HouseholdCache,
     webBaseUrl: String,
     meId: UUID?,
     isOnline: Boolean,
     onSignOut: () -> Unit,
     onLeft: () -> Unit,
+    onHouseholdChanged: (Household) -> Unit,
 ) {
     val start = (destination as? Destination.Household)?.tab ?: AppTab.Home
-    val tabs = buildList {
-        if (household?.moduleShopping == true) add(AppTab.Shopping)
-        if (household?.modulePantry == true) add(AppTab.Pantry)
-        if (household?.moduleMaintenance == true) add(AppTab.Maintenance)
-        add(AppTab.Home)
-    }
-    var selected by rememberSaveable(destination) { mutableStateOf(start) }
+    val tabs = Landing.visibleTabs(household)
+    var picked by rememberSaveable(destination) { mutableStateOf(start) }
+    // Settings can switch the selected module off; the tab shell proper is X7, this only keeps a hidden tab from staying selected.
+    val selected = if (picked in tabs) picked else AppTab.Home
     // No NavHost yet, so Members is a flag over the Home tab. The household may be unknown offline at launch; fall back to the last one used.
     var showMembers by rememberSaveable(destination) { mutableStateOf(false) }
+    var showSettings by rememberSaveable(destination) { mutableStateOf(false) }
     var householdId by remember { mutableStateOf<UUID?>(household?.id) }
     LaunchedEffect(household) { householdId = household?.id ?: lastHousehold.read() }
     val members = householdId
@@ -146,12 +153,26 @@ private fun Tabs(
         }
         return
     }
+    if (showSettings && members != null && meId != null) {
+        BackHandler { showSettings = false }
+        Column(Modifier.fillMaxSize()) {
+            TextButton(onClick = { showSettings = false }, modifier = Modifier.testTag("settings.back")) { Text("Back") }
+            HouseholdSettingsScreen(
+                members, meId, api, householdCache, isOnline,
+                onHouseholdChanged = onHouseholdChanged,
+                onLeft = { showSettings = false; onLeft() },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        return
+    }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().testTag("tab.${selected.key}.content"), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(selected.key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.headlineMedium)
                 if (selected == AppTab.Home) {
                     if (members != null && meId != null) TextButton(onClick = { showMembers = true }, modifier = Modifier.testTag("home.members")) { Text("Members") }
+                    if (members != null && meId != null) TextButton(onClick = { showSettings = true }, modifier = Modifier.testTag("home.settings")) { Text("Settings") }
                     TextButton(onClick = onSignOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
                 }
             }
@@ -160,7 +181,7 @@ private fun Tabs(
             tabs.forEach { tab ->
                 NavigationBarItem(
                     selected = tab == selected,
-                    onClick = { selected = tab },
+                    onClick = { picked = tab },
                     icon = {},
                     label = { Text(tab.key.replaceFirstChar { it.uppercase() }) },
                     modifier = Modifier.testTag("tab.${tab.key}"),
