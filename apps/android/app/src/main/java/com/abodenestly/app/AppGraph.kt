@@ -10,6 +10,12 @@ import com.abodenestly.core.auth.DataStoreLastHouseholdStore
 import com.abodenestly.core.auth.DataStoreProfileCache
 import com.abodenestly.core.auth.LastHouseholdStore
 import com.abodenestly.core.members.DataStoreMembersCache
+import com.abodenestly.core.profile.DataStoreProfileOutbox
+import com.abodenestly.core.profile.HttpAvatarLoader
+import com.abodenestly.core.profile.HttpProfileRemote
+import com.abodenestly.core.profile.ProfileDeps
+import com.abodenestly.core.profile.ProfileOutbox
+import com.abodenestly.core.profile.ProfileSync
 import com.abodenestly.core.members.MembersCache
 import com.abodenestly.core.auth.ProfileCache
 import com.abodenestly.core.auth.SessionViewModel
@@ -24,6 +30,9 @@ import com.abodenestly.ui.NetworkMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
+import java.io.File
 
 /** Hand-written DI container (no Hilt, SKILL "Architecture"): created once in [AbodeNestlyApp]. */
 class AppGraph(context: Context) {
@@ -45,11 +54,29 @@ class AppGraph(context: Context) {
         DataStoreHouseholdCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
     val profileCache: ProfileCache =
         DataStoreProfileCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
+    val profileOutbox: ProfileOutbox =
+        DataStoreProfileOutbox.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
+
+    /** Lives as long as the process; the drain triggers below are collected on it. */
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val profileSync = ProfileSync(
+        profileOutbox, HttpProfileRemote(config, auth), profileCache,
+        currentUser = { auth.currentSession()?.userId }, scope = appScope,
+    )
+    val profileDeps = ProfileDeps(
+        profileCache, profileOutbox, profileSync, HttpAvatarLoader(config, auth), avatarDir = File(context.filesDir, "avatars"),
+    )
+
+    init {
+        // Triggers (CORE-06): connectivity returning, and a session appearing (a queue left by an earlier run).
+        appScope.launch { network.isOnline.filter { it }.collect { profileSync.kick() } }
+        appScope.launch { auth.sessionChanges.filter { it != null }.collect { profileSync.kick() } }
+    }
 
     val viewModelFactory = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T = when (modelClass) {
-            SessionViewModel::class.java -> SessionViewModel(auth, lastHousehold, isOnline = { network.isOnline.value }, profileCache = profileCache)
+            SessionViewModel::class.java -> SessionViewModel(auth, lastHousehold, isOnline = { network.isOnline.value }, profileCache = profileCache, profileOutbox = profileOutbox)
             SignInViewModel::class.java -> SignInViewModel(auth, redirectTo = config.authCallbackUrl)
             else -> error("Unknown view model ${modelClass.name}")
         } as T
