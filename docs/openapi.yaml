@@ -58,6 +58,30 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/Invite"
+  "/households/{id}/modules":
+    patch:
+      summary: "Toggle modules (owner)"
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/UpdateModulesRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Household"
   "/invites/{code}/accept":
     post:
       summary: "Join a household with an invite code"
@@ -264,6 +288,16 @@ components:
           type: integer
         max_uses:
           type: integer
+      required: []
+    UpdateModulesRequest:
+      type: object
+      properties:
+        shopping:
+          type: boolean
+        pantry:
+          type: boolean
+        maintenance:
+          type: boolean
       required: []
     AcceptInviteResponse:
       type: object

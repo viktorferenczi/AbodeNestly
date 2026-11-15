@@ -68,5 +68,8 @@ export interface Invite extends Synced {
 /** `POST /households/{id}/invites` body. Ranges are checked by the API (`validation`). */
 export type CreateInviteRequest = { role?: Role; expires_in_days?: number; max_uses?: number };
 
+/** `PATCH /households/{id}/modules` body. Partial; the API requires at least one flag (`validation`). */
+export type UpdateModulesRequest = { shopping?: boolean; pantry?: boolean; maintenance?: boolean };
+
 /** `POST /invites/{code}/accept` response. */
 export type AcceptInviteResponse = { household_id: UUID };
