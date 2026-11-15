@@ -16,3 +16,11 @@ export function writeLastHousehold(id: string): void {
     // Storage blocked (private mode): the earliest-joined fallback still applies.
   }
 }
+
+export function clearLastHousehold(): void {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    // Storage blocked: nothing was stored.
+  }
+}

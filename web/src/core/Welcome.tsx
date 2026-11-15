@@ -15,6 +15,8 @@ const CREATE_MESSAGES: Record<ApiFailure['code'], string> = {
   invalid_code: 'Something went wrong. Try again.',
   network: "Couldn't reach the server. Check your connection and try again.",
   unknown: 'Something went wrong. Try again.',
+  forbidden: 'Something went wrong. Try again.',
+  last_owner: 'Something went wrong. Try again.',
 };
 
 const JOIN_MESSAGES: Record<ApiFailure['code'], string> = {
@@ -22,6 +24,8 @@ const JOIN_MESSAGES: Record<ApiFailure['code'], string> = {
   invalid_code: "That code isn't valid or has expired. Check it and try again.",
   network: "Couldn't reach the server. Check your connection and try again.",
   unknown: 'Something went wrong. Try again.',
+  forbidden: 'Something went wrong. Try again.',
+  last_owner: 'Something went wrong. Try again.',
 };
 
 export function Welcome() {

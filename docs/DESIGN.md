@@ -113,6 +113,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 - Layout: name field (owner) · "Modules" section with three switches + one-line description each · currency picker · "Leave household" (member) / "Delete household" (owner, requires typing name).
 - States: `owner` · `member` (read-only fields) · `offline` (banner, switches disabled) · `saving`.
 - Interactions: toggle module → PATCH → tabs update immediately; leave → confirm sheet → B2 or switcher.
+- Deferred: "Delete household" (owner) waits until SPEC defines an endpoint and what "deleted" hides.
 - Offline: read-only. · Gating: none.
 
 ### B6. Members & invites
