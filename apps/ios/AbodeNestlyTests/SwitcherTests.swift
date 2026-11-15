@@ -265,6 +265,25 @@ struct SessionSwitchTests {
         started.cancel()
     }
 
+    @Test("CORE-07: a switch that resumes after sign-out writes nothing and fails")
+    func signOutDuringSwitch() async {
+        let h = SwitchHarness()
+        let started = await h.start()
+        let switched = Task { try await h.session.switchTo(h.beta.id) }
+        await Task.yield()
+        h.auth.emit(nil)
+        let result = await switched.result
+        while h.session.status != .signedOut { await Task.yield() }
+        if case .success = result {
+            // The sign-out ran after the switch finished; nothing may survive it.
+        } else {
+            #expect(throws: SessionModel.SwitchError.sessionEnded) { try result.get() }
+        }
+        #expect(h.session.destination == nil)
+        #expect(h.session.householdName == nil)
+        started.cancel()
+    }
+
     @Test("CORE-07: a household that is not in the cached list is refused")
     func unknown() async {
         let h = SwitchHarness()

@@ -30,10 +30,11 @@ private struct ViewHarness {
     let beta = HouseholdWithRole(household: makeHousehold(name: "Beta"), role: .member)
     let model: SwitcherModel
 
-    init(entries: [HouseholdWithRole]? = nil, online: Bool = true) {
+    /// `onlyAlpha`: the cached list is just the current household (Alpha) of this same harness.
+    init(entries: [HouseholdWithRole]? = nil, onlyAlpha: Bool = false, online: Bool = true) {
         db = HouseholdDatabase(rootURL: root)
         cache = HouseholdsCache(suiteName: suite)
-        let list = entries ?? [alpha, beta]
+        let list = entries ?? (onlyAlpha ? [alpha] : [alpha, beta])
         cache.write(list, userId: user)
         // The online refresh returns what the server has.
         api.setMyHouseholdsResult(.success(list))
@@ -76,8 +77,10 @@ private struct ViewHarness {
 struct SwitcherViewTests {
     @Test("CORE-07: AC1 one household still shows the create-or-join row")
     func oneHousehold() async throws {
-        let h = ViewHarness(entries: [ViewHarness().alpha])
+        let h = ViewHarness(onlyAlpha: true)
         await h.model.load()
+        #expect(h.model.rows.map(\.household.id) == [h.alpha.household.id])
+        #expect(h.model.rows.first?.isCurrent == true)
         #expect(h.model.state == .oneHousehold)
         #expect(h.has("switcher.create"))
         _ = try h.inspect().find(text: "Create or join another")
@@ -188,6 +191,18 @@ struct SwitcherViewTests {
         failing.api.setMyHouseholdsResult(.failure(.unknown))
         await failing.model.load()
         #expect(failing.model.rows.count == 2)
+    }
+
+    @Test("CORE-07: a refresh that omits the current household is not padded with a stale row")
+    func refreshDropsStale() async {
+        let h = ViewHarness()
+        let model = SwitcherModel(
+            userId: h.user, currentId: h.alpha.household.id, current: h.alpha, api: h.api, cache: h.cache, database: h.db,
+            isOnline: { true }, perform: { _, _ in }
+        )
+        h.api.setMyHouseholdsResult(.success([h.beta]))
+        await model.load()
+        #expect(model.rows.map(\.household.name) == ["Beta"])
     }
 
     @Test("CORE-07: the current household is added when the cached list lacks it")

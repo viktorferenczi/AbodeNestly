@@ -273,6 +273,7 @@
 			mainGroup = A10000000000000000000701;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				A10000000000000000000A01 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				A10000000000000000000A02 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 				A10000000000000000000A03 /* XCLocalSwiftPackageReference "Packages/Shopping" */,
 				A10000000000000000000A04 /* XCLocalSwiftPackageReference "Packages/Pantry" */,
@@ -595,6 +596,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		A10000000000000000000A01 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
 		A10000000000000000000A02 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/supabase/supabase-swift";
@@ -675,10 +684,12 @@
 		};
 		A10000000000000000000C15 /* Sync */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000C05 /* XCLocalSwiftPackageReference "Packages/Sync" */;
 			productName = Sync;
 		};
 		A10000000000000000000E23 /* Sync */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000C05 /* XCLocalSwiftPackageReference "Packages/Sync" */;
 			productName = Sync;
 		};
 /* End XCSwiftPackageProductDependency section */

@@ -57,6 +57,7 @@ public final class SwitcherModel {
         self.database = database
         self.isOnline = isOnline
         self.perform = perform
+        // Only the cached seed gets the current household prepended; a refresh shows what the server says.
         entries = Self.merge(cache.read(userId: userId), current: current)
         rows = []
         rebuild()
@@ -68,7 +69,7 @@ public final class SwitcherModel {
         guard isOnline() else { return }
         if case .success(let list) = await api.fetchMyHouseholds(userId: userId) {
             cache.write(list, userId: userId)
-            entries = Self.merge(list, current: current)
+            entries = Self.merge(list, current: nil)
             rebuild()
             await loadPending()
         }

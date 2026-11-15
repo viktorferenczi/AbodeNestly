@@ -103,11 +103,22 @@ public final class SessionModel {
 
     /// A household was just created (DESIGN B2 → B4): remember it and open its Home tab.
     public func enter(_ household: LandingHousehold) {
+        guard let database else { publishEntered(household); return }
+        let userId = self.userId
+        // The file opens before the household is published; a failed open leaves what was shown in place.
+        Task {
+            let opened: Bool
+            do { try await database.open(householdId: household.id); opened = true } catch { opened = false }
+            guard self.userId == userId else { return }
+            if opened { publishEntered(household) } else { loadFailed = true }
+        }
+    }
+
+    private func publishEntered(_ household: LandingHousehold) {
         lastHousehold.write(household.id)
         self.household = household
         loadFailed = false
         updateHouseholdName(for: household.id)
-        Task { [database] in _ = try? await database?.open(householdId: household.id) }
         destination = .household(id: household.id, tab: .home)
     }
 
@@ -129,6 +140,8 @@ public final class SessionModel {
         case unknownHousehold
         /// The target's database could not be opened.
         case openFailed
+        /// The person signed out (or changed) while the switch ran.
+        case sessionEnded
     }
 
     /// Switches households (CORE-07): closes the current database, opens the target's, keeps the selected tab
@@ -156,6 +169,8 @@ public final class SessionModel {
                 throw SwitchError.openFailed
             }
         }
+        // Signed out meanwhile: write nothing for the next account, and fail so the sheet stays open.
+        guard self.userId == userId else { throw SwitchError.sessionEnded }
         let landing = Self.landing(target.household)
         lastHousehold.write(id)
         household = landing
@@ -256,12 +271,18 @@ public final class SessionModel {
             case .success(let memberships):
                 let lastId = lastHousehold.read()
                 if let chosen = Landing.pickHousehold(memberships, lastHouseholdId: lastId) {
+                    do { try await database?.open(householdId: chosen.householdId) } catch {
+                        // Never publish a household whose file is not open.
+                        guard !Task.isCancelled, self.userId == userId else { return }
+                        loadFailed = true
+                        return
+                    }
+                    guard !Task.isCancelled, self.userId == userId else { return }
                     lastHousehold.write(chosen.householdId)
-                    _ = try? await database?.open(householdId: chosen.householdId)
                 } else {
                     await database?.close()
+                    guard !Task.isCancelled, self.userId == userId else { return }
                 }
-                guard !Task.isCancelled, self.userId == userId else { return }
                 household = Landing.pickHousehold(memberships, lastHouseholdId: lastId)?.household
                 destination = Landing.destination(memberships: memberships, lastHouseholdId: lastId)
                 updateHouseholdName(for: household?.id)
@@ -277,7 +298,13 @@ public final class SessionModel {
                     loadFailed = true
                 } else {
                     // The last household's database still opens; its name comes from the cached list.
-                    if let last = lastHousehold.read() { _ = try? await database?.open(householdId: last) }
+                    if let last = lastHousehold.read() {
+                        do { try await database?.open(householdId: last) } catch {
+                            guard !Task.isCancelled, self.userId == userId else { return }
+                            loadFailed = true
+                            return
+                        }
+                    }
                     guard !Task.isCancelled, self.userId == userId else { return }
                     updateHouseholdName(for: lastHousehold.read())
                     destination = .home
