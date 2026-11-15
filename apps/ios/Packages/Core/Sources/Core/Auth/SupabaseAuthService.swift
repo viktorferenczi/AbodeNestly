@@ -161,7 +161,74 @@ public final class SupabaseAuthService: AuthService {
         }
     }
 
+    // MARK: Writes (profile row and avatar object, user JWT)
+
+    public func updateProfile(userId: UUID, edit: ProfileEdit) async -> Result<Void, AuthError> {
+        do {
+            var components = URLComponents(
+                url: supabaseURL.appendingPathComponent("rest/v1/profile"), resolvingAgainstBaseURL: false
+            )!
+            components.queryItems = [URLQueryItem(name: "id", value: "eq.\(userId.uuidString.lowercased())")]
+            let (data, _) = try await send(
+                url: components.url!, method: "PATCH", body: try JSONEncoder().encode(edit),
+                headers: ["Content-Type": "application/json", "Prefer": "return=representation", "Accept": "application/json"]
+            )
+            return Self.updateOutcome(data)
+        } catch {
+            return .failure(Self.map(error))
+        }
+    }
+
+    /// PostgREST reports zero matched rows as success; a missing own row must not drop the queued edit silently.
+    static func updateOutcome(_ representation: Data) -> Result<Void, AuthError> {
+        let rows = (try? JSONSerialization.jsonObject(with: representation)) as? [Any]
+        return (rows?.isEmpty ?? true) ? .failure(.unknown) : .success(())
+    }
+
+    public func uploadAvatar(path: String, data: Data) async -> Result<Void, AuthError> {
+        do {
+            _ = try await send(
+                url: supabaseURL.appendingPathComponent("storage/v1/object/households/\(path)"), method: "POST",
+                body: data, headers: ["Content-Type": "image/jpeg"]
+            )
+            return .success(())
+        } catch {
+            return .failure(Self.map(error))
+        }
+    }
+
+    public func avatarURL(path: String) async -> URL? {
+        struct Signed: Decodable { let signedURL: String }
+        do {
+            let (data, _) = try await send(
+                url: supabaseURL.appendingPathComponent("storage/v1/object/sign/households/\(path)"), method: "POST",
+                body: try JSONEncoder().encode(["expiresIn": 3600]),
+                headers: ["Content-Type": "application/json", "Accept": "application/json"]
+            )
+            let signed = try JSONDecoder().decode(Signed.self, from: data)
+            // The API returns a path relative to `storage/v1` ("/object/sign/…?token=…").
+            return URL(string: supabaseURL.absoluteString + "/storage/v1" + signed.signedURL)
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: Helpers
+
+    /// A request with the user's JWT and the anon key; non-2xx is `URLError(.badServerResponse)`.
+    private func send(url: URL, method: String, body: Data?, headers: [String: String]) async throws -> (Data, HTTPURLResponse) {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.httpBody = body
+        // `session` refreshes an expired access token first.
+        request.setValue("Bearer \(try await client.session.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
+        let (data, response) = try await urlSession.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard (200..<300).contains(http.statusCode) else { throw HTTPStatusError(status: http.statusCode) }
+        return (data, http)
+    }
 
     private func get<T: Decodable>(_ table: String, query: [(String, String)]) async throws -> T {
         var components = URLComponents(
@@ -187,6 +254,10 @@ public final class SupabaseAuthService: AuthService {
     /// Mirrors web `toAuthError`.
     static func map(_ error: Error) -> AuthError {
         if let error = error as? AuthError { return error }
+        if let error = error as? HTTPStatusError {
+            if error.status == 429 { return .rateLimited }
+            return error.status >= 500 || error.status == 408 ? .server : .unknown
+        }
         if error is CancellationError { return .cancelled }
         if let error = error as? URLError {
             switch error.code {
@@ -214,6 +285,9 @@ public final class SupabaseAuthService: AuthService {
         return .unknown
     }
 }
+
+/// A non-2xx answer from PostgREST or Storage. 5xx is retryable; 4xx is a real rejection.
+struct HTTPStatusError: Error { let status: Int }
 
 /// PostgREST timestamps carry microseconds ("2026-11-09T20:31:12.123456+00:00").
 enum PostgrestJSON {

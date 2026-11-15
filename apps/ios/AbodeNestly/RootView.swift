@@ -57,10 +57,21 @@ private struct SignedInView: View {
     let session: SessionModel
     let environment: AppEnvironment
     @State private var welcome: WelcomeModel
+    /// Lives as long as the signed-in session, not the Profile screen, so queued edits drain on reconnect
+    /// and on foreground wherever the person is (interim stand-in for SHOP-08's `SyncEngine.kick()`).
+    @State private var profile: ProfileModel
+    @Environment(\.scenePhase) private var scenePhase
 
     init(session: SessionModel, environment: AppEnvironment) {
         self.session = session
         self.environment = environment
+        let network = environment.network
+        _profile = State(initialValue: ProfileModel(
+            // Only built while signed in; the nil-UUID fallback never matches a row.
+            userId: session.userId ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+            email: session.email, session: session, auth: environment.auth,
+            isOnline: { network.isOnline }
+        ))
         _welcome = State(initialValue: WelcomeModel(api: environment.api) { [session] outcome in
             switch outcome {
             case .created(let household):
@@ -80,6 +91,11 @@ private struct SignedInView: View {
             content
         }
         .background(Tokens.bg)
+        .task { await profile.start() }
+        .onChange(of: environment.network.isOnline) { _, online in profile.connectivityChanged(online) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { profile.kickDrain() }
+        }
     }
 
     @ViewBuilder
@@ -106,9 +122,9 @@ private struct SignedInView: View {
                     onSignOut: { Task { await session.signOut() } }
                 )
             case .household(_, let tab):
-                MainTabs(session: session, household: session.household, start: tab, environment: environment)
+                MainTabs(session: session, profile: profile, household: session.household, start: tab, environment: environment)
             case .home:
-                MainTabs(session: session, household: nil, start: .home, environment: environment)
+                MainTabs(session: session, profile: profile, household: nil, start: .home, environment: environment)
             }
         }
     }
@@ -117,12 +133,14 @@ private struct SignedInView: View {
 /// Bottom tabs filtered by the household's module flags (DESIGN A6). Content arrives with the module stories.
 private struct MainTabs: View {
     let session: SessionModel
+    let profile: ProfileModel
     let household: LandingHousehold?
     let environment: AppEnvironment
     @State private var selection: AppTab
 
-    init(session: SessionModel, household: LandingHousehold?, start: AppTab, environment: AppEnvironment) {
+    init(session: SessionModel, profile: ProfileModel, household: LandingHousehold?, start: AppTab, environment: AppEnvironment) {
         self.session = session
+        self.profile = profile
         self.household = household
         self.environment = environment
         _selection = State(initialValue: start)
@@ -166,6 +184,10 @@ private struct MainTabs: View {
                             MembersScreen(householdId: householdId, session: session, environment: environment)
                         }
                         .accessibilityIdentifier("home.members")
+                        NavigationLink("Profile") {
+                            ProfileView(model: profile, isOnline: environment.network.isOnline)
+                        }
+                        .accessibilityIdentifier("home.profile")
                         NavigationLink("Settings") {
                             HouseholdSettingsScreen(householdId: householdId, session: session, environment: environment)
                         }

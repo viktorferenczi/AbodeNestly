@@ -11,6 +11,8 @@ public final class FakeAuthService: AuthService {
         case signInWithGoogle(redirectTo: URL)
         case handle(URL)
         case signOut
+        case updateProfile(userId: UUID, edit: ProfileEdit)
+        case uploadAvatar(path: String, byteCount: Int)
     }
 
     private struct State {
@@ -26,6 +28,12 @@ public final class FakeAuthService: AuthService {
         var holdSend = false
         var token: String? = "fake-token"
         var tokenRequests: [Bool] = []
+        var updateProfileResult: Result<Void, AuthError> = .success(())
+        var updateProfileQueue: [Result<Void, AuthError>] = []
+        var uploadResult: Result<Void, AuthError> = .success(())
+        var holdUpload = false
+        var heldUploads: [CheckedContinuation<Void, Never>] = []
+        var avatarURL: URL?
     }
 
     private let state: OSAllocatedUnfairLock<State>
@@ -44,6 +52,24 @@ public final class FakeAuthService: AuthService {
     public func setGoogleError(_ error: AuthError?) { state.withLock { $0.googleError = error } }
     public func setProfile(_ result: Result<Profile?, AuthError>) { state.withLock { $0.profile = result } }
     public func setMemberships(_ result: Result<[Membership], AuthError>) { state.withLock { $0.memberships = result } }
+
+    public func setUpdateProfileResult(_ result: Result<Void, AuthError>) { state.withLock { $0.updateProfileResult = result } }
+    /// Results for the next `updateProfile` calls, in order; the settable default applies after they run out.
+    public func queueUpdateProfileResults(_ results: [Result<Void, AuthError>]) { state.withLock { $0.updateProfileQueue = results } }
+    public func setUploadResult(_ result: Result<Void, AuthError>) { state.withLock { $0.uploadResult = result } }
+    public func setAvatarURL(_ url: URL?) { state.withLock { $0.avatarURL = url } }
+
+    /// Makes `uploadAvatar` suspend until `releaseUpload()`, so tests can observe the uploading state.
+    public func holdUpload() { state.withLock { $0.holdUpload = true } }
+
+    public func releaseUpload() {
+        let waiting = state.withLock { state -> [CheckedContinuation<Void, Never>] in
+            state.holdUpload = false
+            defer { state.heldUploads.removeAll() }
+            return state.heldUploads
+        }
+        waiting.forEach { $0.resume() }
+    }
 
     /// Pushes a session change to every `sessionChanges()` listener.
     public func emit(_ session: AuthSession?) {
@@ -124,4 +150,25 @@ public final class FakeAuthService: AuthService {
     public func fetchMemberships(userId: UUID) async -> Result<[Membership], AuthError> {
         state.withLock { $0.memberships }
     }
+
+    public func updateProfile(userId: UUID, edit: ProfileEdit) async -> Result<Void, AuthError> {
+        record(.updateProfile(userId: userId, edit: edit))
+        return state.withLock { state in
+            state.updateProfileQueue.isEmpty ? state.updateProfileResult : state.updateProfileQueue.removeFirst()
+        }
+    }
+
+    public func uploadAvatar(path: String, data: Data) async -> Result<Void, AuthError> {
+        record(.uploadAvatar(path: path, byteCount: data.count))
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let hold = state.withLock { state -> Bool in
+                if state.holdUpload { state.heldUploads.append(continuation) }
+                return state.holdUpload
+            }
+            if !hold { continuation.resume() }
+        }
+        return state.withLock { $0.uploadResult }
+    }
+
+    public func avatarURL(path: String) async -> URL? { state.withLock { $0.avatarURL } }
 }
