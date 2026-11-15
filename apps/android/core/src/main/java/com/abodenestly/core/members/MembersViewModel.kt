@@ -50,14 +50,16 @@ data class MembersUiState(
 /**
  * Members screen logic; port of iOS `MembersModel`. The undo window is a `delay` in [scope], so tests drive it
  * with virtual time, and the view model keeps its own scope so a pending DELETE outlives the screen.
+ * [isOnline] and [onLeft] are rebound by the screen on every composition, because this instance outlives the
+ * composition (and its callbacks) across a configuration change.
  */
 class MembersViewModel(
     private val householdId: UUID,
     private val meId: UUID,
     private val api: ApiService,
     private val cache: MembersCache,
-    private val isOnline: () -> Boolean,
-    private val onLeft: () -> Unit,
+    var isOnline: () -> Boolean,
+    var onLeft: () -> Unit,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     private val undoMillis: Long = UNDO_MILLIS,
 ) : ViewModel(scope) {

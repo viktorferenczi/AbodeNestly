@@ -35,12 +35,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -48,6 +49,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.abodenestly.contract.models.Member
 import com.abodenestly.core.api.ApiService
 import com.abodenestly.core.api.MemberRow
@@ -81,12 +86,16 @@ fun MembersScreen(
     val tokens = LocalTokens.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
-    // The view model reads the latest connectivity and callback, so it need not be rebuilt when they change.
-    val online by rememberUpdatedState(isOnline)
-    val left by rememberUpdatedState(onLeft)
-    val vm = remember(householdId, meId) {
-        MembersViewModel(householdId, meId, api, cache, isOnline = { online }, onLeft = { left() })
+    // Held by the activity's ViewModelStore, so the undo timer and toast survive rotation, font scale and theme changes.
+    val vm: MembersViewModel = viewModel(key = "members.$householdId.$meId") {
+        MembersViewModel(householdId, meId, api, cache, isOnline = { isOnline }, onLeft = onLeft)
     }
+    // The instance outlives this composition, so give it the current connectivity and callback each time.
+    SideEffect {
+        vm.isOnline = { isOnline }
+        vm.onLeft = onLeft
+    }
+    val activity = LocalContext.current.findActivity()
     val state by vm.state.collectAsState()
     // Created on tap and kept for the sheet's life, so a parent recomposition never resets its state.
     var invite by remember { mutableStateOf<InviteSheetViewModel?>(null) }
@@ -94,8 +103,9 @@ fun MembersScreen(
 
     // Loads on entry and again when connectivity changes.
     LaunchedEffect(isOnline) { vm.load() }
-    // A pending removal is sent now rather than dropped: Undo is the only cancel. The view model keeps its own scope.
-    DisposableEffect(vm) { onDispose { vm.flushPending() } }
+    // Leaving the screen sends a pending removal now rather than dropping it: Undo is the only cancel. A configuration
+    // change is not leaving; the recreated screen picks the same view model and its timer back up.
+    DisposableEffect(vm) { onDispose { if (activity?.isChangingConfigurations != true) vm.flushPending() } }
 
     Box(modifier.fillMaxSize().testTag("members.screen")) {
         Column(
@@ -241,4 +251,10 @@ private fun OverflowMenu(
             )
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
