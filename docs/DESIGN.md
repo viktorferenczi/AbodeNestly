@@ -116,7 +116,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 - States: `owner` · `member` (read-only fields) · `offline` (banner, switches disabled) · `saving`.
 - Interactions: toggle module → PATCH → tabs update immediately; leave → confirm sheet → B2 or switcher.
 - Deferred: "Delete household" (owner) waits until SPEC defines an endpoint and what "deleted" hides.
-- Offline: read-only. · Gating: none. iOS: a `UserDefaults` snapshot (`abodenestly.household.<user_id>.<household_id>`) until iOS sync exists.
+- Offline: read-only. · Gating: none. iOS: a `UserDefaults` snapshot (`abodenestly.household.<user_id>.<household_id>`) until iOS sync exists. Android: the offline snapshot is a DataStore entry keyed by user and household (`abodenestly.household.<user_id>.<household_id>`); Delete is still deferred; until X7/NavHost the entry point is a Settings button on Home.
 
 ### B6. Members & invites
 - Route: `/household/members` · Purpose: CORE-03, CORE-04.

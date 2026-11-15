@@ -36,6 +36,14 @@ object Landing {
         else -> AppTab.Home
     }
 
+    /** The bottom tabs for a household: its enabled modules in order, then Home, which is always there (DESIGN A6). */
+    fun visibleTabs(household: LandingHousehold?): List<AppTab> = buildList {
+        if (household?.moduleShopping == true) add(AppTab.Shopping)
+        if (household?.modulePantry == true) add(AppTab.Pantry)
+        if (household?.moduleMaintenance == true) add(AppTab.Maintenance)
+        add(AppTab.Home)
+    }
+
     /** The last used household if still active, else the earliest joined. */
     fun pickHousehold(memberships: List<Membership>, lastHouseholdId: UUID?): Membership? =
         memberships.firstOrNull { it.householdId == lastHouseholdId } ?: memberships.minByOrNull { it.joinedAt }

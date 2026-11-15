@@ -53,7 +53,7 @@ JUnit 5 runs the pure logic tests; the Robolectric/Compose tests are JUnit 4 and
 vintage engine. In coroutine tests use `runCurrent()`, not `advanceUntilIdle()`: work in `backgroundScope` is ignored
 by the latter.
 
-The e2e journeys (E2E-CORE-1: sign-in, then create-a-household from Welcome, then invite-and-join, then Members remove-after-undo-window, which need the API on :3000 too) each create their own user through the admin API, read the magic link from Mailpit
+The e2e journeys (E2E-CORE-1: sign-in, then create-a-household from Welcome, then invite-and-join, then Members remove-after-undo-window, then E2E-CORE-3 `HouseholdSettingsE2ETest` (an owner switches Pantry off and the tab rule drops it), which need the API on :3000 too) each create their own user through the admin API, read the magic link from Mailpit
 (`10.0.2.2:54324`), follow the verify URL without redirects and hand the `abodenestly-dev://auth/callback?code=…`
 URL to the real `SupabaseAuthService` for a PKCE exchange, then delete the user (and any household it created). They live in `:core`, so they host the
 real screens and session view model in a plain activity rather than `:app`'s `MainActivity`. Debug builds of the

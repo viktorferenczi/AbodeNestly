@@ -149,6 +149,49 @@ class HttpApiService(
         if (promoted) ApiResult.Success(Unit) else ApiResult.Failure(ApiFailure.Unknown)
     }
 
+    override suspend fun fetchHousehold(householdId: UUID, userId: UUID): ApiResult<HouseholdWithRole?> = guarded {
+        val url = restUrl(
+            "member",
+            "select" to "role,household:household!inner(*)",
+            "household_id" to "eq.$householdId",
+            "user_id" to "eq.$userId",
+            "left_at" to "is.null",
+            "household.deleted_at" to "is.null",
+        )
+        val reply = perform(url, "GET", restHeaders())
+        if (reply.status != 200) return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        runCatching {
+            Serializer.kotlinxSerializationJson.decodeFromString(ListSerializer(HouseholdWithRole.serializer()), reply.body)
+        }.fold({ ApiResult.Success(it.firstOrNull()) }, { ApiResult.Failure(ApiFailure.Unknown) })
+    }
+
+    override suspend fun updateModules(
+        householdId: UUID, shopping: Boolean?, pantry: Boolean?, maintenance: Boolean?,
+    ): ApiResult<Household> = guarded {
+        // No generated request model (as for createHousehold); `explicitNulls = false` sends only the flags given.
+        val body = sparse.encodeToString(ModulesBody.serializer(), ModulesBody(shopping, pantry, maintenance))
+        val url = url {
+            addPathSegment("households"); addPathSegment(householdId.toString()); addPathSegment("modules")
+        }
+        val reply = perform(url, "PATCH", emptyMap(), body)
+        if (reply.status == 200) decodeHousehold(reply.body) else ApiResult.Failure(modulesFailure(reply.status, errorCode(reply.body)))
+    }
+
+    override suspend fun updateHousehold(householdId: UUID, name: String?, currency: String?): ApiResult<Household> = guarded {
+        val body = sparse.encodeToString(HouseholdBody.serializer(), HouseholdBody(name, currency))
+        val headers = restHeaders() + ("Prefer" to "return=representation")
+        val reply = perform(restUrl("household", "id" to "eq.$householdId"), "PATCH", headers, body)
+        if (reply.status !in 200..299) return@guarded ApiResult.Failure(updateHouseholdFailure(reply.status, sqlState(reply.body)))
+        // RLS hides rows silently, so an empty array means nothing changed.
+        runCatching {
+            Serializer.kotlinxSerializationJson.decodeFromString(ListSerializer(Household.serializer()), reply.body).first()
+        }.fold({ ApiResult.Success(it) }, { ApiResult.Failure(ApiFailure.Unknown) })
+    }
+
+    private fun decodeHousehold(body: String): ApiResult<Household> =
+        runCatching { Serializer.kotlinxSerializationJson.decodeFromString(Household.serializer(), body) }
+            .fold({ ApiResult.Success(it) }, { ApiResult.Failure(ApiFailure.Unknown) })
+
     // MARK: Transport
 
     private class Reply(val status: Int, val body: String)
@@ -202,6 +245,16 @@ class HttpApiService(
     private data class CreateBody(val name: String)
 
     @Serializable
+    private data class ModulesBody(val shopping: Boolean? = null, val pantry: Boolean? = null, val maintenance: Boolean? = null)
+
+    @Serializable
+    private data class HouseholdBody(val name: String? = null, val currency: String? = null)
+
+    /** PostgREST error bodies carry the SQLSTATE as `{ "code": "42501", … }`. */
+    @Serializable
+    private data class PostgrestError(val code: String? = null)
+
+    @Serializable
     private data class Accepted(@Contextual @SerialName("household_id") val householdId: UUID)
 
     /** `{ "error": { "code": … } }`, the contract's `ApiError` shape. */
@@ -215,6 +268,21 @@ class HttpApiService(
         private const val TIMEOUT_SECONDS = 15L
         private val JSON = "application/json".toMediaType()
         private val lenient = Json { ignoreUnknownKeys = true }
+        private val sparse = Json { explicitNulls = false }
+
+        private fun sqlState(body: String): String? =
+            runCatching { lenient.decodeFromString(PostgrestError.serializer(), body).code }.getOrNull()
+
+        internal fun modulesFailure(status: Int, code: String?): ApiFailure = when {
+            code == "forbidden" || status == 403 -> ApiFailure.Forbidden
+            code == "not_found" || status == 404 -> ApiFailure.NotFound
+            code == "validation" || status == 400 -> ApiFailure.Validation
+            else -> ApiFailure.Unknown
+        }
+
+        /** SQLSTATE 42501 (insufficient privilege) is what RLS raises for a non-owner. */
+        internal fun updateHouseholdFailure(status: Int, sqlState: String?): ApiFailure =
+            if (sqlState == "42501" || status == 403) ApiFailure.Forbidden else ApiFailure.Unknown
 
         /** ISO 8601 UTC with an explicit offset, which PostgREST accepts in `gt.` filters and `timestamptz` bodies. */
         private fun timestamp(now: OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)): String =

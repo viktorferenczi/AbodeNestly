@@ -21,6 +21,9 @@ class FakeApiService : ApiService {
         data class FetchMembers(val householdId: UUID) : Call
         data class RemoveMember(val householdId: UUID, val userId: UUID) : Call
         data class MakeOwner(val householdId: UUID, val userId: UUID) : Call
+        data class FetchHousehold(val householdId: UUID, val userId: UUID) : Call
+        data class UpdateModules(val householdId: UUID, val shopping: Boolean?, val pantry: Boolean?, val maintenance: Boolean?) : Call
+        data class UpdateHousehold(val householdId: UUID, val name: String?, val currency: String?) : Call
     }
 
     private val recorded = CopyOnWriteArrayList<Call>()
@@ -38,6 +41,9 @@ class FakeApiService : ApiService {
     @Volatile var membersResult: ApiResult<List<MemberRow>> = ApiResult.Success(emptyList())
     @Volatile var removeResult: ApiResult<Unit> = ApiResult.Success(Unit)
     @Volatile var makeOwnerResult: ApiResult<Unit> = ApiResult.Success(Unit)
+    @Volatile var fetchHouseholdResult: ApiResult<HouseholdWithRole?> = ApiResult.Failure(ApiFailure.Unknown)
+    @Volatile var updateModulesResult: ApiResult<Household> = ApiResult.Failure(ApiFailure.Unknown)
+    @Volatile var updateHouseholdResult: ApiResult<Household> = ApiResult.Failure(ApiFailure.Unknown)
 
     val calls: List<Call> get() = recorded.toList()
 
@@ -99,5 +105,27 @@ class FakeApiService : ApiService {
         recorded += Call.MakeOwner(householdId, userId)
         gate?.await()
         return makeOwnerResult
+    }
+
+    override suspend fun fetchHousehold(householdId: UUID, userId: UUID): ApiResult<HouseholdWithRole?> {
+        recorded += Call.FetchHousehold(householdId, userId)
+        val result = fetchHouseholdResult
+        // Read before the gate, like fetchMembers: a held fetch returns what the server had when it started.
+        gate?.await()
+        return result
+    }
+
+    override suspend fun updateModules(
+        householdId: UUID, shopping: Boolean?, pantry: Boolean?, maintenance: Boolean?,
+    ): ApiResult<Household> {
+        recorded += Call.UpdateModules(householdId, shopping, pantry, maintenance)
+        gate?.await()
+        return updateModulesResult
+    }
+
+    override suspend fun updateHousehold(householdId: UUID, name: String?, currency: String?): ApiResult<Household> {
+        recorded += Call.UpdateHousehold(householdId, name, currency)
+        gate?.await()
+        return updateHouseholdResult
     }
 }
