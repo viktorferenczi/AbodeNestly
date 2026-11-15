@@ -132,6 +132,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 - States: `idle` · `uploading-avatar` · `offline` (avatar upload queued, name edit allowed).
 - Offline: name edit via outbox. · Gating: none.
 - _Web (CORE-06-web): until web sync exists, the outbox is a localStorage queue drained by a direct SDK update when online, and a queued avatar is held in memory only (lost if the tab reloads while offline)._
+- _iOS (CORE-06-ios): reached from the Home tab's "Profile" link. Until iOS sync exists (SHOP-08), the outbox is a `UserDefaults` queue (`abodenestly.outbox.profile.<uid>`) drained by a direct update when online, and a picked photo (downscaled to ≤ 512 px JPEG) is kept on disk under `Application Support/pending-avatar/<uid>.jpg`, so it survives a relaunch. The email comes from the auth session, not the profile row._
 
 ### B8. Search
 - Route: `/search` (TopBar magnifier) · Purpose: CORE-09.

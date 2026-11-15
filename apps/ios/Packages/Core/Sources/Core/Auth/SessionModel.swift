@@ -21,9 +21,12 @@ public final class SessionModel {
     @ObservationIgnored private let auth: any AuthService
     @ObservationIgnored private let lastHousehold: LastHouseholdStore
     @ObservationIgnored private let profileCache: ProfileCache
+    @ObservationIgnored private let profileOutbox: ProfileOutbox
     @ObservationIgnored private let isOnline: @MainActor () -> Bool
     /// The signed-in user; `nil` when signed out.
     public private(set) var userId: UUID?
+    /// The sign-in email from the auth session (not stored on the profile row); `nil` when signed out or hidden by the provider.
+    public private(set) var email: String?
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     /// A household just joined: the next load lands on its Home tab instead of its first module (DESIGN B2).
     @ObservationIgnored private var landOnHome: UUID?
@@ -32,11 +35,13 @@ public final class SessionModel {
         auth: any AuthService,
         lastHousehold: LastHouseholdStore,
         profileCache: ProfileCache = ProfileCache(),
+        profileOutbox: ProfileOutbox = ProfileOutbox(),
         isOnline: @escaping @MainActor () -> Bool
     ) {
         self.auth = auth
         self.lastHousehold = lastHousehold
         self.profileCache = profileCache
+        self.profileOutbox = profileOutbox
         self.isOnline = isOnline
     }
 
@@ -50,6 +55,12 @@ public final class SessionModel {
 
     public func signOut() async {
         await auth.signOut()
+    }
+
+    /// The profile screen saved an edit locally: the TopBar and Welcome show it at once.
+    public func setLocalProfile(_ updated: Profile) {
+        guard updated.id == userId else { return }
+        profile = updated
     }
 
     public func retry() {
@@ -95,6 +106,7 @@ public final class SessionModel {
     private func apply(_ session: AuthSession?) {
         guard let session else {
             userId = nil
+            email = nil
             loadTask?.cancel()
             status = .signedOut
             profile = nil
@@ -104,6 +116,7 @@ public final class SessionModel {
             return
         }
         status = .signedIn
+        email = session.email
         // Token refreshes re-emit the same user; do not reload or bounce the landing.
         guard userId != session.userId else { return }
         userId = session.userId
@@ -121,13 +134,15 @@ public final class SessionModel {
             let (profileResult2, membershipsResult2) = await (profileResult, membershipsResult)
             guard !Task.isCancelled, self.userId == userId else { return }
             // A missing row (trigger not run yet) leaves the name empty; a failed read falls back to the cache.
+            // Unsynced edits are overlaid so a refetch does not revert them.
+            let pending = profileOutbox.read(userId: userId)
             switch profileResult2 {
             case .success(let value):
-                profile = value
-                if let value { profileCache.write(value, userId: userId) }
+                profile = value.map { ProfileEditing.withPending($0, pending) }
+                if let profile { profileCache.write(profile, userId: userId) }
             case .failure:
                 // Offline reads fail; show the last known name.
-                profile = profileCache.read(userId: userId)
+                profile = profileCache.read(userId: userId).map { ProfileEditing.withPending($0, pending) }
             }
             switch membershipsResult2 {
             case .success(let memberships):

@@ -38,4 +38,10 @@ public protocol AuthService: Sendable {
     /// `.success(nil)`: the server trigger has not created the row yet.
     func fetchProfile(userId: UUID) async -> Result<Profile?, AuthError>
     func fetchMemberships(userId: UUID) async -> Result<[Membership], AuthError>
+    /// Updates the user's own profile row. Zero matched rows is a failure (`.unknown`), so a queued edit is never dropped silently.
+    func updateProfile(userId: UUID, edit: ProfileEdit) async -> Result<Void, AuthError>
+    /// Uploads JPEG bytes to `households/<path>` (`profiles/<uid>/<uuid>.jpg`).
+    func uploadAvatar(path: String, data: Data) async -> Result<Void, AuthError>
+    /// A one-hour signed URL for a Storage avatar path; `nil` when it cannot be signed (offline, missing object).
+    func avatarURL(path: String) async -> URL?
 }

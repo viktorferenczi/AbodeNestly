@@ -166,6 +166,10 @@ private struct MainTabs: View {
                             MembersScreen(householdId: householdId, session: session, environment: environment)
                         }
                         .accessibilityIdentifier("home.members")
+                        NavigationLink("Profile") {
+                            ProfileScreen(session: session, environment: environment)
+                        }
+                        .accessibilityIdentifier("home.profile")
                         NavigationLink("Settings") {
                             HouseholdSettingsScreen(householdId: householdId, session: session, environment: environment)
                         }
@@ -251,5 +255,28 @@ private struct HouseholdSettingsScreen: View {
 
     var body: some View {
         HouseholdSettingsView(model: model, isOnline: environment.network.isOnline)
+    }
+}
+
+/// Owns the `ProfileModel` for the pushed screen, so a re-render of the tabs never resets it.
+private struct ProfileScreen: View {
+    let environment: AppEnvironment
+    @State private var model: ProfileModel
+
+    init(session: SessionModel, environment: AppEnvironment) {
+        self.environment = environment
+        let network = environment.network
+        _model = State(initialValue: ProfileModel(
+            // Profile is only reachable signed in; the nil-UUID fallback never matches a row.
+            userId: session.userId ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+            email: session.email,
+            session: session,
+            auth: environment.auth,
+            isOnline: { network.isOnline }
+        ))
+    }
+
+    var body: some View {
+        ProfileView(model: model, isOnline: environment.network.isOnline)
     }
 }
