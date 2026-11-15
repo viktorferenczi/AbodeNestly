@@ -14,6 +14,7 @@ public final class FakeApiService: ApiService {
         case removeMember(householdId: UUID, userId: UUID)
         case makeOwner(householdId: UUID, userId: UUID)
         case fetchHousehold(householdId: UUID, userId: UUID)
+        case fetchMyHouseholds(userId: UUID)
         case updateModules(householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?)
         case updateHousehold(householdId: UUID, name: String?, currency: String?)
     }
@@ -30,6 +31,7 @@ public final class FakeApiService: ApiService {
         var removeResult: Result<Void, ApiFailure> = .success(())
         var makeOwnerResult: Result<Void, ApiFailure> = .success(())
         var householdResult: Result<HouseholdWithRole?, ApiFailure> = .success(nil)
+        var myHouseholdsResult: Result<[HouseholdWithRole], ApiFailure> = .success([])
         var updateModulesResult: Result<Household, ApiFailure> = .failure(.unknown)
         var updateHouseholdResult: Result<Household, ApiFailure> = .failure(.unknown)
         var held: [CheckedContinuation<Void, Never>] = []
@@ -63,6 +65,7 @@ public final class FakeApiService: ApiService {
     public func setMakeOwnerResult(_ result: Result<Void, ApiFailure>) { state.withLock { $0.makeOwnerResult = result } }
 
     public func setHouseholdResult(_ result: Result<HouseholdWithRole?, ApiFailure>) { state.withLock { $0.householdResult = result } }
+    public func setMyHouseholdsResult(_ result: Result<[HouseholdWithRole], ApiFailure>) { state.withLock { $0.myHouseholdsResult = result } }
     public func setUpdateModulesResult(_ result: Result<Household, ApiFailure>) { state.withLock { $0.updateModulesResult = result } }
     public func setUpdateHouseholdResult(_ result: Result<Household, ApiFailure>) { state.withLock { $0.updateHouseholdResult = result } }
 
@@ -143,6 +146,12 @@ public final class FakeApiService: ApiService {
         state.withLock { $0.calls.append(.fetchHousehold(householdId: householdId, userId: userId)) }
         await suspendIfHeld()
         return state.withLock { $0.householdResult }
+    }
+
+    public func fetchMyHouseholds(userId: UUID) async -> Result<[HouseholdWithRole], ApiFailure> {
+        state.withLock { $0.calls.append(.fetchMyHouseholds(userId: userId)) }
+        await suspendIfHeld()
+        return state.withLock { $0.myHouseholdsResult }
     }
 
     public func updateModules(

@@ -1510,7 +1510,7 @@ Tables: none new (local database per household_id, cursor in that database)  End
 Schema change: no  Contract change: no
 
 ## Tests required
-Unit: apps/ios/Packages/core/Tests/SwitcherTests.swift → AC2 and AC4 the open database name changes and a query does not see the other household's rows
+Unit: apps/ios/AbodeNestlyTests/SwitcherTests.swift → AC2 and AC4 the open database name changes and a query does not see the other household's rows
 Component: apps/ios/AbodeNestlyTests/SwitcherViewTests.swift → AC1 one-household, AC2 many, AC3 switching; tap and long-press. Also asserts AC5
 Integration: n/a (no API handler in this story)
 E2E: E2E-CORE-2 apps/ios/AbodeNestlyUITests/SwitcherUITests.swift

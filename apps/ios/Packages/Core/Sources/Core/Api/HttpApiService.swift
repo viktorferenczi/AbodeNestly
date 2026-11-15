@@ -193,6 +193,24 @@ public final class HttpApiService: ApiService {
         }
     }
 
+    public func fetchMyHouseholds(userId: UUID) async -> Result<[HouseholdWithRole], ApiFailure> {
+        do {
+            let url = try restURL(table: "member", query: [
+                ("select", "role,household:household!inner(*)"),
+                ("user_id", "eq.\(userId.uuidString.lowercased())"),
+                ("left_at", "is.null"),
+                ("household.deleted_at", "is.null"),
+            ])
+            let (data, status) = try await perform(url: url, method: "GET", headers: restHeaders())
+            guard status == 200, let rows = try? PostgrestJSON.decoder.decode([HouseholdWithRole].self, from: data) else {
+                return .failure(.unknown)
+            }
+            return .success(rows)
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
     public func updateModules(
         householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?
     ) async -> Result<Household, ApiFailure> {

@@ -28,10 +28,13 @@ public struct HouseholdCache: Sendable {
     public func write(_ value: HouseholdWithRole, userId: UUID) {
         guard let data = try? Self.encoder.encode(value) else { return }
         defaults.set(data, forKey: Self.key(userId: userId, householdId: value.household.id))
+        // The switcher's list follows, so a rename or role change shows there without a refetch.
+        HouseholdsCache(suiteName: suiteName).upsert(value, userId: userId)
     }
 
     public func clear(userId: UUID, householdId: UUID) {
         defaults.removeObject(forKey: Self.key(userId: userId, householdId: householdId))
+        HouseholdsCache(suiteName: suiteName).remove(householdId: householdId, userId: userId)
     }
 
     /// Dates go out as ISO 8601 text so `PostgrestJSON.decoder` reads them back.

@@ -78,6 +78,9 @@ public protocol ApiService: Sendable {
     func makeOwner(householdId: UUID, userId: UUID) async -> Result<Void, ApiFailure>
     /// The viewer's active membership with its (not deleted) household, or `nil` when there is none. Read under RLS.
     func fetchHousehold(householdId: UUID, userId: UUID) async -> Result<HouseholdWithRole?, ApiFailure>
+    /// Every household the viewer is an active member of, with their role in each. Same read as `fetchHousehold`
+    /// without the household filter (CORE-07).
+    func fetchMyHouseholds(userId: UUID) async -> Result<[HouseholdWithRole], ApiFailure>
     /// `PATCH /households/{id}/modules` (owner only). Pass only the flags to change. 403 → `.forbidden`, 400 → `.validation`.
     func updateModules(householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?) async -> Result<Household, ApiFailure>
     /// Name and/or currency: a direct `household` update under RLS (SPEC §7); a non-owner gets `.forbidden`.

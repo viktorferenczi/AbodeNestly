@@ -17,11 +17,13 @@
 		A10000000000000000000C22 /* UI in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000C12 /* UI */; };
 		A10000000000000000000C23 /* Shared in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000C13 /* Shared */; };
 		A10000000000000000000C24 /* Contract in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000C14 /* Contract */; };
+		A10000000000000000000C25 /* Sync in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000C15 /* Sync */; };
 		A10000000000000000000E03 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E02 /* ViewInspector */; };
 		A10000000000000000000E12 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E11 /* Core */; };
 		A10000000000000000000E14 /* UI in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E13 /* UI */; };
 		A10000000000000000000E16 /* Contract in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E15 /* Contract */; };
 		A10000000000000000000E22 /* Shared in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E21 /* Shared */; };
+		A10000000000000000000E24 /* Sync in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E23 /* Sync */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -96,6 +98,7 @@
 				A10000000000000000000C22 /* UI in Frameworks */,
 				A10000000000000000000C23 /* Shared in Frameworks */,
 				A10000000000000000000C24 /* Contract in Frameworks */,
+				A10000000000000000000C25 /* Sync in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -107,6 +110,7 @@
 				A10000000000000000000E14 /* UI in Frameworks */,
 				A10000000000000000000E16 /* Contract in Frameworks */,
 				A10000000000000000000E22 /* Shared in Frameworks */,
+				A10000000000000000000E24 /* Sync in Frameworks */,
 				A10000000000000000000E03 /* ViewInspector in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -181,6 +185,7 @@
 				A10000000000000000000C12 /* UI */,
 				A10000000000000000000C13 /* Shared */,
 				A10000000000000000000C14 /* Contract */,
+				A10000000000000000000C15 /* Sync */,
 			);
 			productName = AbodeNestly;
 			productReference = A10000000000000000000201 /* AbodeNestly.app */;
@@ -208,6 +213,7 @@
 				A10000000000000000000E13 /* UI */,
 				A10000000000000000000E15 /* Contract */,
 				A10000000000000000000E21 /* Shared */,
+				A10000000000000000000E23 /* Sync */,
 				A10000000000000000000E02 /* ViewInspector */,
 			);
 			productName = AbodeNestlyTests;
@@ -279,6 +285,7 @@
 				A10000000000000000000C02 /* XCLocalSwiftPackageReference "Packages/NestlyUI" */,
 				A10000000000000000000C03 /* XCLocalSwiftPackageReference "Packages/Shared" */,
 				A10000000000000000000C04 /* XCLocalSwiftPackageReference "Packages/Contract" */,
+				A10000000000000000000C05 /* XCLocalSwiftPackageReference "Packages/Sync" */,
 				A10000000000000000000E01 /* XCRemoteSwiftPackageReference "ViewInspector" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -585,6 +592,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Contract;
 		};
+		A10000000000000000000C05 /* XCLocalSwiftPackageReference "Packages/Sync" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Sync;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -678,6 +689,14 @@
 		A10000000000000000000E21 /* Shared */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Shared;
+		};
+		A10000000000000000000C15 /* Sync */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Sync;
+		};
+		A10000000000000000000E23 /* Sync */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Sync;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
