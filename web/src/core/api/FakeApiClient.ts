@@ -17,6 +17,8 @@ export class FakeApiClient implements ApiClient {
   updateModulesCalls: Array<{ householdId: string; body: UpdateModulesRequest }> = [];
   updateHouseholdCalls: Array<{ householdId: string; patch: { name?: string; currency?: string } }> = [];
   fetchHouseholdResult: ApiResult<{ household: Household; role: Role } | null> = { ok: true, value: null };
+  fetchMyHouseholdsCalls: string[] = [];
+  fetchMyHouseholdsResult: ApiResult<Array<{ household: Household; role: Role }>> = { ok: true, value: [] };
   updateModulesResult: ApiResult<Household> = { ok: false, error: { code: 'unknown' } };
   updateHouseholdResult: ApiResult<Household> = { ok: false, error: { code: 'unknown' } };
   fetchMembersCalls: string[] = [];
@@ -57,6 +59,11 @@ export class FakeApiClient implements ApiClient {
   fetchHousehold(householdId: string, userId: string) {
     this.fetchHouseholdCalls.push({ householdId, userId });
     return this.respond(() => this.fetchHouseholdResult);
+  }
+
+  fetchMyHouseholds(userId: string) {
+    this.fetchMyHouseholdsCalls.push(userId);
+    return this.respond(() => this.fetchMyHouseholdsResult);
   }
 
   updateModules(householdId: string, body: UpdateModulesRequest) {

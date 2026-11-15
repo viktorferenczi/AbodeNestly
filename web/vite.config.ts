@@ -13,5 +13,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
+    // The provider opens a per-household Dexie database; every test gets an in-memory IndexedDB.
+    setupFiles: ['src/test/setup.ts'],
   },
 });

@@ -32,6 +32,8 @@ export interface ApiClient {
   retireInvite(id: string): Promise<ApiResult<null>>;
   /** My active membership of the household with the household row, or `null` (left, deleted or not a member). */
   fetchHousehold(householdId: string, userId: string): Promise<ApiResult<{ household: Household; role: Role } | null>>;
+  /** Every household I am an active member of (not deleted), for the switcher. Read under RLS. */
+  fetchMyHouseholds(userId: string): Promise<ApiResult<Array<{ household: Household; role: Role }>>>;
   /** CORE-05 endpoint, owner only. 403 → `forbidden`. */
   updateModules(householdId: string, body: UpdateModulesRequest): Promise<ApiResult<Household>>;
   /** Plain CRUD straight to Supabase under RLS (SPEC §7); a non-owner gets SQLSTATE 42501 → `forbidden`. */
@@ -244,6 +246,21 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
         if (!data) return { ok: true, value: null };
         const row = data as unknown as { role: Role; household: Household };
         return { ok: true, value: { household: row.household, role: row.role } };
+      } catch {
+        return { ok: false, error: { code: 'network' } };
+      }
+    },
+    async fetchMyHouseholds(userId) {
+      try {
+        const { data, error } = await supabase
+          .from('member')
+          .select('role, household:household!inner(*)')
+          .eq('user_id', userId)
+          .is('left_at', null)
+          .is('household.deleted_at', null);
+        if (error) return { ok: false, error: { code: 'unknown' } };
+        const rows = (data ?? []) as unknown as Array<{ role: Role; household: Household }>;
+        return { ok: true, value: rows.map((r) => ({ household: r.household, role: r.role })) };
       } catch {
         return { ok: false, error: { code: 'network' } };
       }

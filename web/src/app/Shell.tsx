@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Outlet } from 'react-router';
 import { useAuth } from '../core/auth/AuthProvider.tsx';
 import { HouseholdProvider, useHousehold } from '../core/household/HouseholdProvider.tsx';
+import { Switcher } from '../core/Switcher.tsx';
 import { TopBar } from '../ui/TopBar.tsx';
 import styles from './Shell.module.css';
 import { TabBar } from './TabBar.tsx';
@@ -10,13 +12,24 @@ function Tabs() {
   return status === 'ready' ? <TabBar /> : null;
 }
 
-// Authenticated layout. Household switcher and sync status arrive with later CORE stories.
-export function Shell() {
+function Bar() {
   const { profile } = useAuth();
+  const { household } = useHousehold();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <TopBar title={household?.name ?? 'AbodeNestly'} trailing={profile?.display_name} onTitleClick={() => setOpen(true)} titleExpanded={open} />
+      {open ? <Switcher onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
+// Authenticated layout. Sync status arrives with later stories.
+export function Shell() {
   return (
     <HouseholdProvider>
       <div className={styles.shell}>
-        <TopBar title="AbodeNestly" trailing={profile?.display_name} />
+        <Bar />
         <main className={styles.main}>
           <Outlet />
         </main>
