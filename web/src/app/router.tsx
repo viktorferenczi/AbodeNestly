@@ -1,12 +1,12 @@
 import { createBrowserRouter, Link, Navigate, useParams } from 'react-router';
 import { joinPath } from '../core/InviteSheet.ts';
 import { HouseholdSettings } from '../core/HouseholdSettings.tsx';
+import { Profile } from '../core/Profile.tsx';
 import { Members } from '../core/Members.tsx';
 import { Welcome } from '../core/Welcome.tsx';
 import { Landing } from '../core/auth/Landing.tsx';
 import { RequireAuth } from '../core/auth/RequireAuth.tsx';
 import { SignIn } from '../core/auth/SignIn.tsx';
-import { SignOutButton } from '../core/auth/SignOutButton.tsx';
 import { Placeholder } from './Placeholder.tsx';
 import { Shell } from './Shell.tsx';
 
@@ -43,14 +43,9 @@ export function createAppRouter() {
             { path: '/shopping', element: <Placeholder /> },
             { path: '/pantry', element: <Placeholder /> },
             { path: '/maintenance', element: <Placeholder /> },
-            {
-              path: '/profile',
-              element: (
-                <Placeholder>
-                  <SignOutButton />
-                </Placeholder>
-              ),
-            },
+            { path: '/profile', element: <Profile /> },
+            // B9 arrives with CORE-12; the link must not bounce to / before then.
+            { path: '/profile/notifications', element: <Placeholder /> },
           ],
         },
       ],

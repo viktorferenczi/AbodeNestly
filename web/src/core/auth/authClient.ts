@@ -20,6 +20,12 @@ export interface AuthClient {
   /** `null` value: the server trigger has not created the row yet. */
   fetchProfile(userId: string): Promise<Result<Profile | null>>;
   fetchMemberships(userId: string): Promise<Result<Membership[]>>;
+  /** Interim direct write used to drain the profile outbox until web sync exists (SHOP-08). */
+  updateProfile(userId: string, data: Partial<Pick<Profile, 'display_name' | 'avatar_path'>>): Promise<Result<void>>;
+  /** `path` is `profiles/<uid>/<file>` in the private `households` bucket. */
+  uploadAvatar(path: string, file: File): Promise<Result<void>>;
+  /** A short-lived signed URL, or `null` when it cannot be created (offline, object missing). */
+  avatarUrl(path: string): Promise<string | null>;
 }
 
 type ErrorLike = { name?: string; code?: string; status?: number };
@@ -33,6 +39,13 @@ export function toAuthError(error: ErrorLike): AuthError {
   }
   if (error.name === 'AuthRetryableFetchError' || error.status === 0) return { code: 'network' };
   return { code: 'unknown' };
+}
+
+// supabase-js reports a failed fetch as an error whose message mentions the fetch, not as a status.
+function toWriteError(error: ErrorLike & { message?: string }): AuthError {
+  const mapped = toAuthError(error);
+  if (mapped.code !== 'unknown') return mapped;
+  return /failed to fetch|network|load failed/i.test(error.message ?? '') ? { code: 'network' } : mapped;
 }
 
 export function createSupabaseAuthClient(sb: SupabaseClient): AuthClient {
@@ -86,6 +99,24 @@ export function createSupabaseAuthClient(sb: SupabaseClient): AuthClient {
         });
       }
       return { ok: true, value: memberships };
+    },
+    async updateProfile(userId, data) {
+      const { data: rows, error } = await sb.from('profile').update(data).eq('id', userId).select('id');
+      if (error) return { ok: false, error: toWriteError(error) };
+      // PostgREST reports zero matched rows as success; a missing own row must not drop the queued edit silently.
+      return rows.length > 0 ? { ok: true, value: undefined } : { ok: false, error: { code: 'unknown' } };
+    },
+    async uploadAvatar(path, file) {
+      try {
+        const { error } = await sb.storage.from('households').upload(path, file, { contentType: file.type });
+        return error ? { ok: false, error: toWriteError(error) } : { ok: true, value: undefined };
+      } catch (e) {
+        return { ok: false, error: toWriteError(e as ErrorLike & { message?: string }) };
+      }
+    },
+    async avatarUrl(path) {
+      const { data } = await sb.storage.from('households').createSignedUrl(path, 3600);
+      return data?.signedUrl ?? null;
     },
   };
 }

@@ -13,6 +13,13 @@ export class FakeAuthClient implements AuthClient {
   memberships: Membership[] = [];
   membershipsFail = false;
   signOutFail = false;
+  updateCalls: Array<{ userId: string; data: Partial<Pick<Profile, 'display_name' | 'avatar_path'>> }> = [];
+  uploadCalls: Array<{ path: string; file: File }> = [];
+  avatarUrlCalls: string[] = [];
+  updateError: AuthError | null = null;
+  uploadError: AuthError | null = null;
+  /** Set to a pending promise to hold `uploadAvatar` in flight; resolve it to let the upload finish. */
+  uploadGate: Promise<void> | null = null;
   private listeners = new Set<(session: AuthSession | null) => void>();
 
   constructor(public session: AuthSession | null = null) {}
@@ -51,5 +58,26 @@ export class FakeAuthClient implements AuthClient {
   fetchMemberships(): Promise<Result<Membership[]>> {
     if (this.membershipsFail) return Promise.resolve({ ok: false, error: { code: 'network' } });
     return Promise.resolve({ ok: true, value: this.memberships });
+  }
+
+  updateProfile(
+    userId: string,
+    data: Partial<Pick<Profile, 'display_name' | 'avatar_path'>>,
+  ): Promise<Result<void>> {
+    this.updateCalls.push({ userId, data });
+    if (this.updateError) return Promise.resolve({ ok: false, error: this.updateError });
+    return Promise.resolve({ ok: true, value: undefined });
+  }
+
+  async uploadAvatar(path: string, file: File): Promise<Result<void>> {
+    this.uploadCalls.push({ path, file });
+    if (this.uploadGate) await this.uploadGate;
+    if (this.uploadError) return { ok: false, error: this.uploadError };
+    return { ok: true, value: undefined };
+  }
+
+  avatarUrl(path: string): Promise<string | null> {
+    this.avatarUrlCalls.push(path);
+    return Promise.resolve(`https://signed.test/${path}`);
   }
 }
