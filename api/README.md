@@ -10,7 +10,7 @@ pnpm --filter @abodenestly/api test    # unit
 pnpm --filter @abodenestly/api test:int   # needs `supabase start`
 ```
 
-Routes: `GET /health`, `POST /households` (JWT required; creates the household with its defaults, returns 201 `Household`), `POST /households/{id}/invites` (JWT required; a member mints an invite code, 201 `Invite`), `POST /invites/{code}/accept` (JWT required; joins the household, 200 `{ household_id }`).
+Routes: `GET /health`, `POST /households` (JWT required; creates the household with its defaults, returns 201 `Household`), `POST /households/{id}/invites` (JWT required; a member mints an invite code, 201 `Invite`), `PATCH /households/{id}/modules` (JWT required; owner only; partial body of `shopping`/`pantry`/`maintenance` booleans; 200 `Household`), `POST /invites/{code}/accept` (JWT required; joins the household, 200 `{ household_id }`).
 
 `scripts/dev-server.ts` maps paths to handlers locally; add each new route to its table.
 
