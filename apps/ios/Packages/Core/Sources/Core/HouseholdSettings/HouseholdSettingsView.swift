@@ -26,6 +26,13 @@ public struct HouseholdSettingsView: View {
             }
             // Loads on appear and again when connectivity changes.
             .task(id: isOnline) { await model.load() }
+            // A visual-only status or error is silent in VoiceOver (web uses aria-live).
+            .onChange(of: model.isSaving) { _, saving in
+                if saving { AccessibilityNotification.Announcement("Saving").post() }
+            }
+            .onChange(of: model.saveErrorMessage) { _, message in
+                if let message { AccessibilityNotification.Announcement(message).post() }
+            }
     }
 
     @ViewBuilder
@@ -169,6 +176,9 @@ struct LeaveHouseholdSheet: View {
         .padding(Tokens.screenPadding)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Tokens.bg)
+        .onChange(of: model.leaveErrorMessage) { _, message in
+            if let message { AccessibilityNotification.Announcement(message).post() }
+        }
         .presentationDetents([.medium])
         .interactiveDismissDisabled(leaving)
     }

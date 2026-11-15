@@ -60,6 +60,8 @@ public final class HouseholdSettingsModel {
 
     public let householdId: UUID
     public let userId: UUID
+    /// Bumped when a save or leave starts; a fetch begun earlier must not overwrite what that save stored.
+    @ObservationIgnored private var generation = 0
     @ObservationIgnored private let api: any ApiService
     @ObservationIgnored private let cache: HouseholdCache
     @ObservationIgnored private let isOnline: @MainActor () -> Bool
@@ -102,7 +104,10 @@ public final class HouseholdSettingsModel {
             if household == nil { loadState = .unavailable }
             return
         }
-        switch await api.fetchHousehold(householdId: householdId, userId: userId) {
+        let started = generation
+        let result = await api.fetchHousehold(householdId: householdId, userId: userId)
+        guard started == generation else { return }
+        switch result {
         case .success(let value?):
             show(value)
             cache.write(value, userId: userId)
@@ -142,7 +147,11 @@ public final class HouseholdSettingsModel {
     public func commitName() async {
         guard canEdit, let current = household, !isBusy else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != current.name else { return }
+        guard !trimmed.isEmpty, trimmed != current.name else {
+            // Nothing to save: show the saved name again rather than a blank or unchanged draft.
+            nameDraft = nil
+            return
+        }
         await save(display: nil) { [api, householdId] in
             await api.updateHousehold(householdId: householdId, name: trimmed, currency: nil)
         }
@@ -161,6 +170,7 @@ public final class HouseholdSettingsModel {
     private var isBusy: Bool { state == .saving || state == .leaving }
 
     private func save(display: Household?, run: () async -> Result<Household, ApiFailure>) async {
+        generation += 1
         state = .saving
         optimistic = display
         let result = await run()
@@ -169,7 +179,7 @@ public final class HouseholdSettingsModel {
         case .success(let saved):
             nameDraft = nil
             household = saved
-            cache.write(HouseholdWithRole(household: saved, role: role ?? .owner), userId: userId)
+            if let role { cache.write(HouseholdWithRole(household: saved, role: role), userId: userId) }
             state = .idle
             onHouseholdChanged(Self.landing(saved))
         case .failure(let failure):
@@ -195,6 +205,7 @@ public final class HouseholdSettingsModel {
 
     public func leave() async {
         guard isOnline(), state != .leaving else { return }
+        generation += 1
         state = .leaving
         switch await api.removeMember(householdId: householdId, userId: userId) {
         case .success, .failure(.notFound):

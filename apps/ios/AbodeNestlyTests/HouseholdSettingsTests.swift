@@ -114,8 +114,11 @@ struct HouseholdSettingsTests {
 
         h.model.nameDraft = "   "
         await h.model.commitName()
+        #expect(h.model.nameDraft == nil)
+        #expect(h.model.name == "Test Home")
         h.model.nameDraft = "Test Home"
         await h.model.commitName()
+        #expect(h.model.nameDraft == nil)
         #expect(h.api.calls.filter { if case .updateHousehold = $0 { true } else { false } }.isEmpty)
 
         h.model.nameDraft = "  Casa  "
@@ -140,6 +143,28 @@ struct HouseholdSettingsTests {
         h.api.release()
         await task.value
         #expect(h.model.household?.currency == "USD")
+    }
+
+    @Test("CORE-05: a fetch that started before a save cannot overwrite what the save stored")
+    func staleFetchIgnored() async {
+        let h = SettingsHarness()
+        await h.model.load()
+        var saved = makeHousehold(id: h.householdId)
+        saved.modulePantry = false
+        h.api.setUpdateModulesResult(.success(saved))
+        // A stale GET (it still says "member") and the PATCH are both in flight; the GET is released first.
+        h.api.setHouseholdResult(.success(HouseholdWithRole(household: makeHousehold(id: h.householdId), role: .member)))
+        h.api.hold()
+        let reload = Task { await h.model.load() }
+        await waitFor { h.api.calls.count == 2 }
+        let toggle = Task { await h.model.toggle(.pantry, on: false) }
+        await waitFor { h.api.calls.count == 3 }
+        h.api.release()
+        await reload.value
+        await toggle.value
+        #expect(h.model.role == .owner)
+        #expect(h.model.household?.modulePantry == false)
+        #expect(h.cache.read(userId: h.me, householdId: h.householdId)?.role == .owner)
     }
 
     @Test("CORE-05: load falls back to the user's cached snapshot offline and never reads another user's")
