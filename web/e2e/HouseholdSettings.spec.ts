@@ -48,6 +48,8 @@ test.describe('E2E-CORE-3: household module toggles', () => {
 
   test('CORE-05: a member leaves and lands on /welcome', async ({ page }) => {
     await signInWithMagicLink(page, member);
+    // Landing must pick the household (and store it) before /household can read it.
+    await expect(page).toHaveURL(/\/(shopping|pantry|maintenance|home)$/);
     await page.goto('/household');
     await expect(page.getByLabel('Household name')).toHaveValue('Toggle Home');
     await expect(page.getByRole('switch', { name: 'Shopping' })).toBeDisabled();

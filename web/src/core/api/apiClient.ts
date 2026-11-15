@@ -195,7 +195,7 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
           .update({ left_at: new Date().toISOString() })
           .eq('household_id', householdId)
           .eq('user_id', userId)
-          .select('id');
+          .select('user_id');
         if (error) {
           const lastOwner = error.code === 'P0001' || /last_owner/.test(error.message ?? '');
           return { ok: false, error: { code: lastOwner ? 'last_owner' : 'unknown' } };
