@@ -71,6 +71,8 @@ System fonts (SF Pro / Roboto / system-ui). Scale: Title 28/34 semibold, Heading
 | `MoneyField` | Locale currency, decimal input, never spinner |
 | `RRulePicker` | Presets: Weekly, Monthly, Every 3 months, Twice a year, Yearly, Custom (interval + unit). Shows "Next: 12 Mar 2027" |
 
+_Web deviation (CORE-05-web): the tab bar also has an always-visible Profile tab after Home (B7 is the only in-shell route to sign-out), so with every module off the tabs are Home and Profile._
+
 _Web deviation (CORE-03-web): `Sheet` dismisses via Close, Esc and backdrop tap only; drag-to-dismiss is not built yet. It traps focus and makes the page behind inert._
 
 ### A7. Screen plan format
@@ -110,7 +112,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 
 ### B5. Household settings
 - Route: `/household` · Purpose: name, modules, danger zone (CORE-05).
-- Layout: name field (owner) · "Modules" section with three switches + one-line description each · currency picker · "Leave household" (member) / "Delete household" (owner, requires typing name).
+- Layout: name field (owner) · "Modules" section with three switches + one-line description each · currency picker · "Leave household" (any role; the last owner is refused by the DB) / "Delete household" (owner, requires typing name).
 - States: `owner` · `member` (read-only fields) · `offline` (banner, switches disabled) · `saving`.
 - Interactions: toggle module → PATCH → tabs update immediately; leave → confirm sheet → B2 or switcher.
 - Deferred: "Delete household" (owner) waits until SPEC defines an endpoint and what "deleted" hides.

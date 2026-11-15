@@ -93,7 +93,7 @@ export function HouseholdSettings() {
     const result = await api.leaveHousehold(household!.id, userId);
     if (!result.ok) return dispatch({ type: 'leave-failed', code: result.error.code });
     clearLastHousehold();
-    clearCachedHousehold(household!.id);
+    clearCachedHousehold(userId, household!.id);
     // Landing sends the user to their next household, or to /welcome when there is none (CORE-07 adds a switcher).
     void navigate('/', { replace: true });
   }
@@ -123,26 +123,28 @@ export function HouseholdSettings() {
           Modules
         </h2>
         {MODULES.map(({ key, label, description }) => (
-          <div key={key} className={styles.switchRow}>
-            <div className={styles.switchText}>
-              <label htmlFor={`module-${key}`} className={styles.switchLabel}>
+          // The whole row is the label, so its full width is the 48px target (DESIGN A5); the accessible
+          // name stays just the module name.
+          <label key={key} className={styles.switchRow}>
+            <span className={styles.switchText}>
+              <span id={`module-${key}-label`} className={styles.switchLabel}>
                 {label}
-              </label>
+              </span>
               <span id={`module-${key}-desc`} className={styles.note}>
                 {description}
               </span>
-            </div>
+            </span>
             <input
-              id={`module-${key}`}
               type="checkbox"
               role="switch"
               className={styles.switch}
+              aria-labelledby={`module-${key}-label`}
               aria-describedby={`module-${key}-desc`}
               checked={shown[`module_${key}`]}
               disabled={locked}
               onChange={(e) => onToggle(key, e.target.checked)}
             />
-          </div>
+          </label>
         ))}
       </section>
 
@@ -152,7 +154,7 @@ export function HouseholdSettings() {
           className={styles.input}
           value={shown.currency}
           disabled={locked}
-          onChange={(e) => void save(() => api.updateHousehold(household.id, { currency: e.target.value }))}
+          onChange={(e) => void save(() => api.updateHousehold(household.id, { currency: e.target.value }), { ...household, currency: e.target.value })}
         >
           {currencyOptions(shown.currency).map((c) => (
             <option key={c} value={c}>
@@ -171,7 +173,7 @@ export function HouseholdSettings() {
         </p>
       ) : null}
 
-      {role === 'member' ? (
+      {role ? (
         <button
           type="button"
           className={styles.danger}

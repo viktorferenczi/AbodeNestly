@@ -81,7 +81,8 @@ describe('CORE-05: HouseholdSettings', () => {
       expect(sw(n).checked).toBe(true);
     }
     expect(currency().disabled).toBe(false);
-    expect(screen.queryByRole('button', { name: 'Leave household' })).toBeNull();
+    // Owners can leave too while Delete has no endpoint; the DB refuses the sole owner.
+    expect(screen.getByRole('button', { name: 'Leave household' })).toBeTruthy();
   });
 
   it('AC2 member: read-only fields, disabled controls, Leave visible', async () => {
@@ -113,7 +114,7 @@ describe('CORE-05: HouseholdSettings', () => {
     expect(sw('Shopping').disabled).toBe(false);
     expect(screen.queryByText('Saving…')).toBeNull();
     // Cached for offline reads.
-    expect(JSON.parse(localStorage.getItem('abodenestly:household:h1')!).household.module_pantry).toBe(false);
+    expect(JSON.parse(localStorage.getItem('abodenestly:household:u1:h1')!).household.module_pantry).toBe(false);
   });
 
   it('AC4 offline: banner shown and every control disabled', async () => {
@@ -129,7 +130,7 @@ describe('CORE-05: HouseholdSettings', () => {
   });
 
   it('offline from the start reads the cached household', async () => {
-    localStorage.setItem('abodenestly:household:h1', JSON.stringify({ household: { ...HOME, name: 'Cached Home' }, role: 'owner' }));
+    localStorage.setItem('abodenestly:household:u1:h1', JSON.stringify({ household: { ...HOME, name: 'Cached Home' }, role: 'owner' }));
     setOnline(false);
     const api = new FakeApiClient();
     api.fetchHouseholdResult = { ok: false, error: { code: 'network' } };
@@ -206,7 +207,45 @@ describe('CORE-05: HouseholdSettings', () => {
     expect(api.leaveCalls).toEqual([{ householdId: 'h1', userId: 'u1' }]);
     expect(router.state.location.pathname).toBe('/');
     expect(readLastHousehold()).toBeNull();
-    expect(localStorage.getItem('abodenestly:household:h1')).toBeNull();
+    expect(localStorage.getItem('abodenestly:household:u1:h1')).toBeNull();
+  });
+
+  it('the select shows the new currency while the update is pending', async () => {
+    const api = new FakeApiClient();
+    api.updateHouseholdResult = { ok: true, value: { ...HOME, currency: 'USD' } };
+    await renderSettings('owner', api);
+    api.pending = true;
+    fireEvent.change(currency(), { target: { value: 'USD' } });
+    await flush();
+    expect(currency().disabled).toBe(true);
+    expect(currency().value).toBe('USD');
+    api.pending = false;
+    api.resolvePending();
+    await flush();
+  });
+
+  it("another user's cached household is not shown as ready", async () => {
+    localStorage.setItem(
+      'abodenestly:household:u2:h1',
+      JSON.stringify({ household: { ...HOME, name: 'Other Home' }, role: 'owner' }),
+    );
+    const api = new FakeApiClient();
+    api.pending = true;
+    await renderSettings('member', api);
+    expect(screen.queryByLabelText('Household name')).toBeNull();
+    expect(screen.getByText('Loading…')).toBeTruthy();
+    api.pending = false;
+    api.resolvePending();
+    await flush();
+  });
+
+  it('clicking a switch description toggles the switch', async () => {
+    const api = new FakeApiClient();
+    api.updateModulesResult = { ok: true, value: { ...HOME, module_pantry: false } };
+    await renderSettings('owner', api);
+    fireEvent.click(screen.getByText(/What you have at home/));
+    await flush();
+    expect(api.updateModulesCalls[0]?.body).toEqual({ pantry: false });
   });
 
   it('Cancel closes the leave sheet without leaving', async () => {
@@ -220,7 +259,7 @@ describe('CORE-05: HouseholdSettings', () => {
   it('last_owner leave shows an inline message and stays', async () => {
     const api = new FakeApiClient();
     api.leaveResult = { ok: false, error: { code: 'last_owner' } };
-    const { router } = await renderSettings('member', api);
+    const { router } = await renderSettings('owner', api);
     fireEvent.click(screen.getByRole('button', { name: 'Leave household' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Leave' }));
     await flush();

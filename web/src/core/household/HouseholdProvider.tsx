@@ -8,28 +8,29 @@ import { readLastHousehold } from '../auth/lastHousehold.ts';
 export type Modules = { shopping: boolean; pantry: boolean; maintenance: boolean };
 type Cached = { household: Household; role: Role };
 
-const cacheKey = (id: string) => `abodenestly:household:${id}`;
+// Keyed by user too: a different account on the same browser must not inherit this one's role.
+const cacheKey = (userId: string, id: string) => `abodenestly:household:${userId}:${id}`;
 
-function readCache(id: string): Cached | null {
+function readCache(userId: string, id: string): Cached | null {
   try {
-    const raw = localStorage.getItem(cacheKey(id));
+    const raw = localStorage.getItem(cacheKey(userId, id));
     return raw ? (JSON.parse(raw) as Cached) : null;
   } catch {
     return null;
   }
 }
 
-function writeCache(id: string, value: Cached): void {
+function writeCache(userId: string, id: string, value: Cached): void {
   try {
-    localStorage.setItem(cacheKey(id), JSON.stringify(value));
+    localStorage.setItem(cacheKey(userId, id), JSON.stringify(value));
   } catch {
     // Storage blocked (private mode): settings just aren't readable offline.
   }
 }
 
-export function clearCachedHousehold(id: string): void {
+export function clearCachedHousehold(userId: string, id: string): void {
   try {
-    localStorage.removeItem(cacheKey(id));
+    localStorage.removeItem(cacheKey(userId, id));
   } catch {
     // Storage blocked: nothing was stored.
   }
@@ -74,7 +75,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!householdId || !userId) return;
     let active = true;
-    const cached = readCache(householdId);
+    const cached = readCache(userId, householdId);
     if (cached) setLoaded({ id: householdId, status: 'ready', ...cached });
     void api.fetchHousehold(householdId, userId).then((result) => {
       if (!active) return;
@@ -84,10 +85,10 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (!result.value) {
-        clearCachedHousehold(householdId);
+        clearCachedHousehold(userId, householdId);
         return setLoaded({ id: householdId, status: 'none', household: null, role: null });
       }
-      writeCache(householdId, result.value);
+      writeCache(userId, householdId, result.value);
       setLoaded({ id: householdId, status: 'ready', ...result.value });
     });
     return () => {
@@ -98,12 +99,12 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const replace = useCallback(
     (household: Household) => {
       setLoaded((prev) => {
-        if (!prev || prev.status !== 'ready' || !prev.role) return prev;
-        writeCache(prev.id, { household, role: prev.role });
+        if (!prev || prev.status !== 'ready' || !prev.role || !userId) return prev;
+        writeCache(userId, prev.id, { household, role: prev.role });
         return { ...prev, household };
       });
     },
-    [],
+    [userId],
   );
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
