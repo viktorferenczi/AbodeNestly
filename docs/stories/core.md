@@ -1278,7 +1278,7 @@ Blocked by: CORE-01-db  Blocks: CORE-06-web, CORE-06-ios, CORE-06-android
 .claude/skills/sql-supabase/SKILL.md
 
 ## Open questions
-§3's Storage path is households/{household_id}/… and a profile has no household. Proposed default: avatars live at profiles/{user_id}/{filename} under a policy that lets the user write their own folder and household peers read it.
+Resolved — adopted default: avatars live at profiles/{user_id}/{filename} under a policy that lets the user write their own folder and household peers read it.
 
 # CORE-06-web — Profile name and avatar
 

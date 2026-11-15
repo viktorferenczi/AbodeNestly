@@ -40,6 +40,16 @@ language sql stable security definer set search_path = public as $$
   );
 $$;
 
+-- Invoker, not definer: RLS on member already shows an active member their whole household.
+create or replace function shares_household(uid uuid) returns boolean
+language sql stable as $$
+  select exists (
+    select 1 from member a join member b on a.household_id = b.household_id
+    where a.user_id = auth.uid() and b.user_id = uid
+      and a.left_at is null and b.left_at is null
+  );
+$$;
+
 create or replace function name_key(p text) returns text
 language sql immutable as $$
   select lower(regexp_replace(trim(p), '\s+', ' ', 'g'));
@@ -72,13 +82,23 @@ create table profile (
   updated_at    timestamptz not null default now()
 );
 alter table profile enable row level security;
-create policy profile_self on profile for all using (id = auth.uid());
--- members of the same household can see each other's name/avatar
-create policy profile_household on profile for select using (
-  exists (select 1 from member a join member b on a.household_id = b.household_id
-          where a.user_id = auth.uid() and b.user_id = profile.id
-            and a.left_at is null and b.left_at is null)
-);
+-- No insert/delete policy: rows come from handle_new_user and cascade from auth.users.
+create policy profile_select on profile for select
+  using (id = auth.uid() or shares_household(id));
+-- USING widens to peers so a peer's update reaches the check and raises 42501; strangers match 0 rows.
+create policy profile_update on profile for update
+  using (id = auth.uid() or shares_household(id)) with check (id = auth.uid());
+
+-- Timestamps are server-owned: a queued offline edit must not forge them.
+create or replace function profile_touch() returns trigger
+language plpgsql as $$
+begin
+  new.updated_at := now();
+  new.created_at := old.created_at;
+  return new;
+end $$;
+create trigger profile_touch before update on profile
+  for each row execute function profile_touch();
 
 -- Create a profile row the first time a user signs in (any provider).
 create or replace function handle_new_user() returns trigger
@@ -826,3 +846,31 @@ alter publication supabase_realtime add table
   store, shopping_list, list_item, store_item_order, item_price,
   location, category, pantry_item, pantry_movement, recipe, recipe_ingredient,
   house, contractor, asset, maint_task, task_consumable, maint_log;
+
+-- ---------------------------------------------------------------------------
+-- Storage
+-- ---------------------------------------------------------------------------
+-- Storage: avatars at profiles/{user_id}/{filename} in the private households bucket.
+insert into storage.buckets (id, name, public) values ('households', 'households', false)
+  on conflict (id) do nothing;
+
+-- Folder 2 is compared as text; the uuid cast runs only behind the regex (CASE guarantees order).
+create policy avatar_select on storage.objects for select using (
+  bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
+  and case
+    when (storage.foldername(name))[2] = auth.uid()::text then true
+    when (storage.foldername(name))[2] ~ '^[0-9a-f-]{36}$'
+      then shares_household(((storage.foldername(name))[2])::uuid)
+    else false
+  end);
+create policy avatar_insert on storage.objects for insert with check (
+  bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
+  and (storage.foldername(name))[2] = auth.uid()::text and array_length(storage.foldername(name), 1) = 2);
+create policy avatar_update on storage.objects for update
+  using (bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
+    and (storage.foldername(name))[2] = auth.uid()::text and array_length(storage.foldername(name), 1) = 2)
+  with check (bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
+    and (storage.foldername(name))[2] = auth.uid()::text and array_length(storage.foldername(name), 1) = 2);
+create policy avatar_delete on storage.objects for delete using (
+  bucket_id = 'households' and (storage.foldername(name))[1] = 'profiles'
+  and (storage.foldername(name))[2] = auth.uid()::text and array_length(storage.foldername(name), 1) = 2);
