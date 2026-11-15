@@ -39,7 +39,10 @@ import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.members.MembersCache
 import com.abodenestly.contract.models.Household
+import com.abodenestly.contract.models.Profile
 import com.abodenestly.core.members.MembersScreen
+import com.abodenestly.core.profile.ProfileDeps
+import com.abodenestly.core.profile.ProfileScreen
 import com.abodenestly.core.settings.HouseholdCache
 import com.abodenestly.core.settings.HouseholdSettingsScreen
 import com.abodenestly.core.signin.SignInScreen
@@ -64,6 +67,7 @@ fun AppRoot(
     membersCache: MembersCache,
     householdCache: HouseholdCache,
     webBaseUrl: String,
+    profileDeps: ProfileDeps,
 ) {
     val state by session.state.collectAsState()
     val online by network.isOnline.collectAsState()
@@ -73,9 +77,10 @@ fun AppRoot(
             SessionStatus.Loading -> Box(Modifier.fillMaxSize().testTag("session.loading"))
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = online)
             SessionStatus.SignedIn -> SignedInShell(
-                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl,
-                meId = session.userId, isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
+                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps,
+                meId = session.userId, email = session.email, isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
                 onLeft = session::leftHousehold, onHouseholdChanged = session::updateHousehold,
+                onProfileChanged = session::updateProfile,
             )
         }
     }
@@ -90,12 +95,15 @@ private fun SignedInShell(
     membersCache: MembersCache,
     householdCache: HouseholdCache,
     webBaseUrl: String,
+    profileDeps: ProfileDeps,
     meId: UUID?,
+    email: String?,
     isOnline: Boolean,
     onRetry: () -> Unit,
     onSignOut: () -> Unit,
     onLeft: () -> Unit,
     onHouseholdChanged: (Household) -> Unit,
+    onProfileChanged: (Profile) -> Unit,
 ) {
     // AC8: the TopBar shows the person's display name once the profile row is in.
     Scaffold(topBar = { TopBar("AbodeNestly", state.profile?.displayName) }, containerColor = LocalTokens.current.bg) { padding ->
@@ -108,7 +116,7 @@ private fun SignedInShell(
                 state.destination == null -> Centered { CircularProgressIndicator(Modifier.testTag("session.loading")) }
                 state.destination == Destination.Welcome ->
                     WelcomeScreen(welcome, displayName = state.profile?.displayName, isOnline = isOnline, onSignOut = onSignOut)
-                else -> Tabs(state.destination, state.household, api, lastHousehold, membersCache, householdCache, webBaseUrl, meId, isOnline, onSignOut, onLeft, onHouseholdChanged)
+                else -> Tabs(state.destination, state.household, state.profile, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, meId, email, isOnline, onSignOut, onLeft, onHouseholdChanged, onProfileChanged)
             }
         }
     }
@@ -119,16 +127,20 @@ private fun SignedInShell(
 private fun Tabs(
     destination: Destination?,
     household: LandingHousehold?,
+    profile: Profile?,
     api: ApiService,
     lastHousehold: LastHouseholdStore,
     membersCache: MembersCache,
     householdCache: HouseholdCache,
     webBaseUrl: String,
+    profileDeps: ProfileDeps,
     meId: UUID?,
+    email: String?,
     isOnline: Boolean,
     onSignOut: () -> Unit,
     onLeft: () -> Unit,
     onHouseholdChanged: (Household) -> Unit,
+    onProfileChanged: (Profile) -> Unit,
 ) {
     val start = (destination as? Destination.Household)?.tab ?: AppTab.Home
     val tabs = Landing.visibleTabs(household)
@@ -138,9 +150,21 @@ private fun Tabs(
     // No NavHost yet, so Members is a flag over the Home tab. The household may be unknown offline at launch; fall back to the last one used.
     var showMembers by rememberSaveable(destination) { mutableStateOf(false) }
     var showSettings by rememberSaveable(destination) { mutableStateOf(false) }
+    var showProfile by rememberSaveable(destination) { mutableStateOf(false) }
     var householdId by remember { mutableStateOf<UUID?>(household?.id) }
     LaunchedEffect(household) { householdId = household?.id ?: lastHousehold.read() }
     val members = householdId
+    if (showProfile && meId != null) {
+        BackHandler { showProfile = false }
+        Column(Modifier.fillMaxSize()) {
+            TextButton(onClick = { showProfile = false }, modifier = Modifier.testTag("profile.back")) { Text("Back") }
+            ProfileScreen(
+                meId, email, profile, profileDeps, isOnline,
+                onProfileChanged = onProfileChanged, onSignOut = onSignOut, modifier = Modifier.weight(1f),
+            )
+        }
+        return
+    }
     if (showMembers && members != null && meId != null) {
         BackHandler { showMembers = false }
         Column(Modifier.fillMaxSize()) {
@@ -173,6 +197,7 @@ private fun Tabs(
                 if (selected == AppTab.Home) {
                     if (members != null && meId != null) TextButton(onClick = { showMembers = true }, modifier = Modifier.testTag("home.members")) { Text("Members") }
                     if (members != null && meId != null) TextButton(onClick = { showSettings = true }, modifier = Modifier.testTag("home.settings")) { Text("Settings") }
+                    if (meId != null) TextButton(onClick = { showProfile = true }, modifier = Modifier.testTag("home.profile")) { Text("Profile") }
                     TextButton(onClick = onSignOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
                 }
             }

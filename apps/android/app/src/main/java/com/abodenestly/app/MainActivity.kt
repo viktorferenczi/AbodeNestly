@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             AbodeTheme { AppRoot(
-                    session, signIn, welcome, graph.network, graph.api, graph.lastHousehold, graph.membersCache, graph.householdCache, graph.config.webBaseUrl,
+                    session, signIn, welcome, graph.network, graph.api, graph.lastHousehold, graph.membersCache, graph.householdCache, graph.config.webBaseUrl, graph.profileDeps,
                 ) }
         }
         lifecycleScope.launch {
@@ -32,6 +32,12 @@ class MainActivity : ComponentActivity() {
             // A recreated activity (rotation) must not replay a code the first instance already used.
             if (savedInstanceState == null) handleCallback(intent)
         }
+    }
+
+    /** A failed drain is not retried while the device stays online, so each return to the foreground tries again. */
+    override fun onStart() {
+        super.onStart()
+        graph.profileSync.kick()
     }
 
     override fun onNewIntent(intent: Intent) {

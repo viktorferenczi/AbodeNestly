@@ -2,6 +2,9 @@ package com.abodenestly.core.auth
 
 import androidx.lifecycle.ViewModel
 import com.abodenestly.contract.models.Profile
+import com.abodenestly.core.profile.InMemoryProfileOutbox
+import com.abodenestly.core.profile.ProfileMutation
+import com.abodenestly.core.profile.ProfileOutbox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,6 +43,7 @@ class SessionViewModel(
     private val lastHousehold: LastHouseholdStore,
     private val isOnline: () -> Boolean,
     private val profileCache: ProfileCache = InMemoryProfileCache(),
+    private val profileOutbox: ProfileOutbox = InMemoryProfileOutbox(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : ViewModel(scope) {
     private val mutableState = MutableStateFlow(SessionState())
@@ -47,6 +51,10 @@ class SessionViewModel(
 
     /** The signed-in user, or `null` when signed out. */
     var userId: UUID? = null
+        private set
+
+    /** The signed-in user's email from the auth session; the Profile screen shows it read-only. */
+    var email: String? = null
         private set
     private var startJob: Job? = null
     private var loadJob: Job? = null
@@ -106,6 +114,11 @@ class SessionViewModel(
         }
     }
 
+    /** The profile was edited on the Profile screen: the TopBar name follows without a reload. */
+    fun updateProfile(profile: Profile) {
+        mutableState.update { if (it.profile?.id == profile.id || it.profile == null) it.copy(profile = profile) else it }
+    }
+
     /** An invite was accepted: reload the memberships and open that household on Home. */
     fun enterJoined(householdId: UUID) {
         val user = userId ?: return
@@ -138,11 +151,13 @@ class SessionViewModel(
     private fun apply(session: AuthSession?) {
         if (session == null) {
             userId = null
+            email = null
             loadJob?.cancel()
             writeJob?.cancel()
             mutableState.value = SessionState(status = SessionStatus.SignedOut)
             return
         }
+        email = session.email
         mutableState.update { it.copy(status = SessionStatus.SignedIn) }
         // Token refreshes re-emit the same user; do not reload or bounce the landing.
         if (userId == session.userId) return
@@ -166,7 +181,10 @@ class SessionViewModel(
         // A missing row (trigger not run yet) leaves the name empty; a failed read (offline) falls back to the
         // last profile seen on this device so the name still renders.
         val profile = when (profileResult) {
-            is Fetch.Success -> profileResult.value?.also { profileCache.write(userId, it) }
+            // Edits still queued in the outbox win over the server row, or a stale read would hide them.
+            is Fetch.Success -> profileResult.value
+                ?.let { ProfileMutation.overlay(it, profileOutbox.pending(userId)) }
+                ?.also { profileCache.write(userId, it) }
             is Fetch.Failure -> profileCache.read(userId)
         }
         when (membershipsResult) {
