@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.android.junit5) apply false
+    alias(libs.plugins.ksp) apply false
 }
 
 // SPEC §2 principle 2: a module never depends on another module. Fails the build if :shopping, :pantry or

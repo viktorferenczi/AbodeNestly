@@ -165,6 +165,21 @@ class HttpApiService(
         }.fold({ ApiResult.Success(it.firstOrNull()) }, { ApiResult.Failure(ApiFailure.Unknown) })
     }
 
+    override suspend fun fetchMyHouseholds(userId: UUID): ApiResult<List<HouseholdWithRole>> = guarded {
+        val url = restUrl(
+            "member",
+            "select" to "role,household:household!inner(*)",
+            "user_id" to "eq.$userId",
+            "left_at" to "is.null",
+            "household.deleted_at" to "is.null",
+        )
+        val reply = perform(url, "GET", restHeaders())
+        if (reply.status != 200) return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        runCatching {
+            Serializer.kotlinxSerializationJson.decodeFromString(ListSerializer(HouseholdWithRole.serializer()), reply.body)
+        }.fold({ ApiResult.Success(it) }, { ApiResult.Failure(ApiFailure.Unknown) })
+    }
+
     override suspend fun updateModules(
         householdId: UUID, shopping: Boolean?, pantry: Boolean?, maintenance: Boolean?,
     ): ApiResult<Household> = guarded {

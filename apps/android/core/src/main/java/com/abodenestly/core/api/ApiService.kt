@@ -78,6 +78,9 @@ interface ApiService {
     /** The household and the viewer's role, or `null` when they are no longer an active member (or it was deleted). PostgREST read under RLS. */
     suspend fun fetchHousehold(householdId: UUID, userId: UUID): ApiResult<HouseholdWithRole?>
 
+    /** Every active household of [userId] with their role: [fetchHousehold]'s PostgREST read without the household filter (CORE-07). */
+    suspend fun fetchMyHouseholds(userId: UUID): ApiResult<List<HouseholdWithRole>>
+
     /** `PATCH /households/{id}/modules`: only the flags given are sent. */
     suspend fun updateModules(householdId: UUID, shopping: Boolean? = null, pantry: Boolean? = null, maintenance: Boolean? = null): ApiResult<Household>
 

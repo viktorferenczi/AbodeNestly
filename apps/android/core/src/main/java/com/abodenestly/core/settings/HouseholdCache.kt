@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
 import com.abodenestly.contract.infrastructure.Serializer
 import com.abodenestly.core.api.HouseholdWithRole
+import com.abodenestly.core.switcher.HouseholdsCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import java.util.UUID
@@ -25,7 +26,11 @@ interface HouseholdCache {
     suspend fun clear(userId: UUID, householdId: UUID)
 }
 
-class DataStoreHouseholdCache(private val store: DataStore<Preferences>) : HouseholdCache {
+class DataStoreHouseholdCache(
+    private val store: DataStore<Preferences>,
+    /** The switcher's list follows Settings writes (a rename shows without a refetch), like iOS. */
+    private val households: HouseholdsCache? = null,
+) : HouseholdCache {
     override suspend fun read(userId: UUID, householdId: UUID): HouseholdWithRole? =
         store.data.first()[key(userId, householdId)]?.let {
             runCatching {
@@ -36,28 +41,33 @@ class DataStoreHouseholdCache(private val store: DataStore<Preferences>) : House
     override suspend fun write(userId: UUID, value: HouseholdWithRole) {
         val json = Serializer.kotlinxSerializationJson.encodeToString(HouseholdWithRole.serializer(), value)
         store.edit { it[key(userId, value.household.id)] = json }
+        households?.upsert(userId, value)
     }
 
     override suspend fun clear(userId: UUID, householdId: UUID) {
         store.edit { it.remove(key(userId, householdId)) }
+        households?.remove(userId, householdId)
     }
 
     companion object {
         private fun key(userId: UUID, householdId: UUID) = stringPreferencesKey("abodenestly.household.$userId.$householdId")
 
-        fun create(context: Context, scope: CoroutineScope) = DataStoreHouseholdCache(
+        fun create(context: Context, scope: CoroutineScope, households: HouseholdsCache? = null) = DataStoreHouseholdCache(
             PreferenceDataStoreFactory.create(scope = scope) { context.preferencesDataStoreFile("household") },
+            households,
         )
     }
 }
 
-class InMemoryHouseholdCache : HouseholdCache {
+class InMemoryHouseholdCache(private val households: HouseholdsCache? = null) : HouseholdCache {
     private val snapshots = mutableMapOf<Pair<UUID, UUID>, HouseholdWithRole>()
     override suspend fun read(userId: UUID, householdId: UUID): HouseholdWithRole? = snapshots[userId to householdId]
     override suspend fun write(userId: UUID, value: HouseholdWithRole) {
         snapshots[userId to value.household.id] = value
+        households?.upsert(userId, value)
     }
     override suspend fun clear(userId: UUID, householdId: UUID) {
         snapshots.remove(userId to householdId)
+        households?.remove(userId, householdId)
     }
 }
