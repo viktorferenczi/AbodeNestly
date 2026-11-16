@@ -18,7 +18,7 @@ apps/ios/
   Packages/
     Contract/                  generated models + API client protocol
     Core/                      auth, households, members, invites, settings, activity, search
-    Sync/                      Database.swift (GRDB), Outbox.swift, SyncEngine.swift, Realtime.swift
+    Sync/                      a library of the Core package (Packages/Core/Sources/Sync): HouseholdDatabase.swift + Migrations.swift (GRDB), Outbox.swift, SyncEngine.swift, Realtime.swift
     Shopping/                  ← module
     Pantry/                    ← module
     Maintenance/               ← module

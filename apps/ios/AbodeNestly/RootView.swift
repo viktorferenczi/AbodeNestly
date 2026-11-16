@@ -1,6 +1,8 @@
 import Contract
 import Core
+import Foundation
 import SwiftUI
+import Sync
 import UI
 
 struct RootView: View {
@@ -24,6 +26,8 @@ private struct RootContent: View {
         _session = State(initialValue: SessionModel(
             auth: environment.auth,
             lastHousehold: environment.lastHousehold,
+            database: environment.database,
+            api: environment.api,
             isOnline: { network.isOnline }
         ))
         _signIn = State(initialValue: SignInModel(
@@ -60,6 +64,10 @@ private struct SignedInView: View {
     /// Lives as long as the signed-in session, not the Profile screen, so queued edits drain on reconnect
     /// and on foreground wherever the person is (interim stand-in for SHOP-08's `SyncEngine.kick()`).
     @State private var profile: ProfileModel
+    @State private var showSwitcher = false
+    /// "Create or join another" was tapped: present Welcome once the switcher sheet is gone (one sheet at a time).
+    @State private var wantsWelcome = false
+    @State private var showWelcome = false
     @Environment(\.scenePhase) private var scenePhase
 
     init(session: SessionModel, environment: AppEnvironment) {
@@ -75,6 +83,9 @@ private struct SignedInView: View {
         _welcome = State(initialValue: WelcomeModel(api: environment.api) { [session] outcome in
             switch outcome {
             case .created(let household):
+                if let userId = session.userId {
+                    HouseholdsCache().upsert(HouseholdWithRole(household: household, role: .owner), userId: userId)
+                }
                 session.enter(LandingHousehold(
                     id: household.id, moduleShopping: household.moduleShopping,
                     modulePantry: household.modulePantry, moduleMaintenance: household.moduleMaintenance
@@ -87,15 +98,57 @@ private struct SignedInView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TopBar(title: "AbodeNestly", trailing: session.profile?.displayName)
+            TopBar(
+                title: session.householdName ?? "AbodeNestly", trailing: session.profile?.displayName,
+                // No household yet (Welcome, loading): nothing to switch from.
+                onTitleTap: showsSwitcher ? { showSwitcher = true } : nil
+            )
             content
         }
         .background(Tokens.bg)
+        .sheet(isPresented: $showSwitcher, onDismiss: {
+            if wantsWelcome {
+                wantsWelcome = false
+                showWelcome = true
+            }
+        }) {
+            if let userId = session.userId {
+                SwitcherSheet(
+                    userId: userId, session: session, environment: environment,
+                    onDismiss: { showSwitcher = false },
+                    onCreateOrJoin: {
+                        wantsWelcome = true
+                        showSwitcher = false
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $showWelcome) {
+            NavigationStack {
+                WelcomeView(
+                    model: welcome, displayName: session.profile?.displayName,
+                    isOnline: environment.network.isOnline,
+                    onSignOut: { Task { await session.signOut() } }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showWelcome = false }.accessibilityIdentifier("switcher.welcome.cancel")
+                    }
+                }
+            }
+        }
+        // Created or joined: the household changed under the sheet.
+        .onChange(of: session.household?.id) { _, _ in showWelcome = false }
         .task { await profile.start() }
         .onChange(of: environment.network.isOnline) { _, online in profile.connectivityChanged(online) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { profile.kickDrain() }
         }
+    }
+
+    private var showsSwitcher: Bool {
+        if case .welcome? = session.destination { return false }
+        return session.destination != nil && !session.loadFailed
     }
 
     @ViewBuilder
@@ -121,10 +174,12 @@ private struct SignedInView: View {
                     isOnline: environment.network.isOnline,
                     onSignOut: { Task { await session.signOut() } }
                 )
-            case .household(_, let tab):
-                MainTabs(session: session, profile: profile, household: session.household, start: tab, environment: environment)
+            case .household(let id, _):
+                // A new id rebuilds the tabs so nothing pushed (Settings, Members) keeps the old household's model.
+                MainTabs(session: session, profile: profile, household: session.household, environment: environment)
+                    .id(id)
             case .home:
-                MainTabs(session: session, profile: profile, household: nil, start: .home, environment: environment)
+                MainTabs(session: session, profile: profile, household: nil, environment: environment)
             }
         }
     }
@@ -136,14 +191,20 @@ private struct MainTabs: View {
     let profile: ProfileModel
     let household: LandingHousehold?
     let environment: AppEnvironment
-    @State private var selection: AppTab
+    @State private var homePath: [HomeRoute] = []
 
-    init(session: SessionModel, profile: ProfileModel, household: LandingHousehold?, start: AppTab, environment: AppEnvironment) {
+    private enum HomeRoute: Hashable { case settings }
+
+    init(session: SessionModel, profile: ProfileModel, household: LandingHousehold?, environment: AppEnvironment) {
         self.session = session
         self.profile = profile
         self.household = household
         self.environment = environment
-        _selection = State(initialValue: start)
+    }
+
+    /// The selection lives on the session so it survives a household switch (CORE-07 AC2).
+    private var selection: Binding<AppTab> {
+        Binding(get: { session.selectedTab }, set: { session.selectedTab = $0 })
     }
 
     private var tabs: [AppTab] {
@@ -155,7 +216,7 @@ private struct MainTabs: View {
     }
 
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: selection) {
             ForEach(tabs, id: \.self) { tab in
                 tabContent(tab)
                     .tabItem { Label(title(tab), systemImage: icon(tab)) }
@@ -165,7 +226,14 @@ private struct MainTabs: View {
         .tint(Tokens.accent)
         // A module switched off while its tab is selected: fall back to Home (Settings lives there, so defensive only).
         .onChange(of: tabs) { _, tabs in
-            if !tabs.contains(selection) { selection = .home }
+            if !tabs.contains(session.selectedTab) { session.selectedTab = .home }
+        }
+        // Long-press in the switcher: Home → Settings (B5). `initial` covers tabs rebuilt by the household change.
+        .onChange(of: session.settingsRequested, initial: true) { _, requested in
+            guard requested else { return }
+            session.settingsRequested = false
+            session.selectedTab = .home
+            homePath = [.settings]
         }
     }
 
@@ -174,7 +242,7 @@ private struct MainTabs: View {
         if tab == .home {
             // The household may be unknown offline at launch; fall back to the last one used.
             let householdId = household?.id ?? environment.lastHousehold.read()
-            NavigationStack {
+            NavigationStack(path: $homePath) {
                 VStack(spacing: 16) {
                     Text(title(tab))
                         .foregroundStyle(Tokens.text)
@@ -196,12 +264,24 @@ private struct MainTabs: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Tokens.bg)
+                .navigationDestination(for: HomeRoute.self) { _ in
+                    if let householdId {
+                        HouseholdSettingsScreen(householdId: householdId, session: session, environment: environment)
+                    }
+                }
             }
         } else {
-            Text(title(tab))
-                .foregroundStyle(Tokens.text)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .accessibilityIdentifier("tab.\(tab.rawValue).content")
+            VStack(spacing: 12) {
+                Text(title(tab))
+                    .foregroundStyle(Tokens.text)
+                    .accessibilityIdentifier("tab.\(tab.rawValue).content")
+                #if DEBUG
+                if tab == .shopping, let householdId = household?.id ?? session.currentHouseholdId {
+                    LocalListsDebugView(householdId: householdId, database: environment.database)
+                }
+                #endif
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -275,3 +355,56 @@ private struct HouseholdSettingsScreen: View {
         HouseholdSettingsView(model: model, isOnline: environment.network.isOnline)
     }
 }
+
+/// Owns the `SwitcherModel` for one presentation of the B3 sheet.
+private struct SwitcherSheet: View {
+    @State private var model: SwitcherModel
+    let onDismiss: () -> Void
+    let onCreateOrJoin: () -> Void
+
+    init(
+        userId: UUID, session: SessionModel, environment: AppEnvironment,
+        onDismiss: @escaping () -> Void, onCreateOrJoin: @escaping () -> Void
+    ) {
+        self.onDismiss = onDismiss
+        self.onCreateOrJoin = onCreateOrJoin
+        let network = environment.network
+        let currentId = session.currentHouseholdId
+        _model = State(initialValue: SwitcherModel(
+            userId: userId, currentId: currentId,
+            current: currentId.flatMap { HouseholdCache().read(userId: userId, householdId: $0) },
+            api: environment.api, cache: HouseholdsCache(), database: environment.database,
+            isOnline: { network.isOnline },
+            perform: { [session] id, openSettings in try await session.switchTo(id, openSettings: openSettings) }
+        ))
+    }
+
+    var body: some View {
+        SwitcherView(model: model, onDismiss: onDismiss, onCreateOrJoin: onCreateOrJoin)
+    }
+}
+
+#if DEBUG
+/// E2E only: the local `shopping_list` rows of the open household, so isolation between households is visible.
+private struct LocalListsDebugView: View {
+    let householdId: UUID
+    let database: HouseholdDatabase
+    @State private var names: [String] = []
+
+    var body: some View {
+        Text(names.joined(separator: ", "))
+            .foregroundStyle(Tokens.text2)
+            .accessibilityIdentifier("shopping.local-lists")
+            .task(id: householdId) {
+                // The switch opens the database before the destination changes, but a launch may still be opening it.
+                for _ in 0..<20 {
+                    if let lists = try? await database.lists(), await database.current == householdId {
+                        names = lists.map(\.name)
+                        return
+                    }
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
+    }
+}
+#endif
