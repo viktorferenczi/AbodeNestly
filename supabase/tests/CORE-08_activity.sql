@@ -1,7 +1,7 @@
 -- CORE-08: activity table (member insert, actor check, RLS isolation, 30-day feed window and index)
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(20);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'anna@example.com', 'authenticated', 'authenticated'),
@@ -53,6 +53,24 @@ select is_empty($$select 1 from public.activity where household_id = current_set
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}', true);
 select isnt_empty($$select 1 from public.activity where household_id = current_setting('test.hid')::uuid$$,
   'AC2: member reads own household activity');
+
+-- Immutability: members may only soft-delete
+select throws_ok($$update public.activity set actor_id = '00000000-0000-0000-0000-0000000000a2'
+  where household_id = current_setting('test.hid')::uuid$$, '42501', 'activity_field_immutable',
+  'guard: cannot reassign actor_id');
+select throws_ok($$update public.activity set summary = 'rewritten'
+  where household_id = current_setting('test.hid')::uuid$$, '42501', 'activity_field_immutable',
+  'guard: cannot rewrite summary');
+select throws_ok($$update public.activity set created_at = now() - interval '40 days'
+  where household_id = current_setting('test.hid')::uuid$$, '42501', 'activity_field_immutable',
+  'guard: cannot change created_at');
+select throws_ok($$delete from public.activity where household_id = current_setting('test.hid')::uuid$$,
+  '42501', 'activity_soft_delete_only', 'guard: cannot hard delete');
+select lives_ok($$update public.activity set deleted_at = now()
+  where household_id = current_setting('test.hid')::uuid$$, 'guard: member can soft-delete');
+select is((select count(*)::int from public.activity
+  where household_id = current_setting('test.hid')::uuid and deleted_at is null), 0,
+  'guard: soft-deleted rows leave the live feed');
 
 -- AC3: 30-day feed window (service role / table owner inserts)
 reset role;

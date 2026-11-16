@@ -1149,6 +1149,37 @@ call setup_scoped('activity');
 drop policy activity_insert on activity;
 create policy activity_insert on activity for insert with check (
   is_member(household_id) and actor_id = auth.uid());
+
+-- A WITH CHECK cannot see OLD, so a trigger keeps feed rows immutable for clients: only deleted_at may change
+-- (soft delete), and a hard delete would never reach devices that already pulled the row (SPEC §6.3 tombstones).
+-- Service-role / function-owner writes are not restricted.
+create or replace function guard_activity_update() returns trigger
+language plpgsql as $$
+begin
+  if current_user <> 'authenticated' then return new; end if;
+  if new.household_id is distinct from old.household_id
+     or new.actor_id is distinct from old.actor_id
+     or new.module is distinct from old.module
+     or new.entity is distinct from old.entity
+     or new.entity_id is distinct from old.entity_id
+     or new.action is distinct from old.action
+     or new.summary is distinct from old.summary
+     or new.created_at is distinct from old.created_at then
+    raise exception 'activity_field_immutable' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+create trigger activity_guard before update on activity for each row execute function guard_activity_update();
+
+create or replace function guard_activity_delete() returns trigger
+language plpgsql as $$
+begin
+  if current_user = 'authenticated' then
+    raise exception 'activity_soft_delete_only' using errcode = '42501';
+  end if;
+  return old;
+end $$;
+create trigger activity_guard_delete before delete on activity for each row execute function guard_activity_delete();
 -- Feed window: newest first per household. now() is not immutable, so the 30-day cut-off is a range scan
 -- on created_at, not a partial-index predicate.
 create index activity_feed_idx on activity (household_id, created_at desc) where deleted_at is null;
