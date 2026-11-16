@@ -1559,10 +1559,10 @@ Tables: none new (local database per household_id, cursor in that database)  End
 Schema change: no  Contract change: no
 
 ## Tests required
-Unit: apps/android/core/src/test/java/app/abodenestly/core/SwitcherTest.kt → AC2 and AC4 the open database name changes and a query does not see the other household's rows
-Component: apps/android/core/src/test/java/app/abodenestly/core/SwitcherComposeTest.kt → AC1 one-household, AC2 many, AC3 switching; tap and long-press. Also asserts AC5
+Unit: apps/android/core/src/test/java/com/abodenestly/core/SwitcherTest.kt → AC2 and AC4 the open database name changes and a query does not see the other household's rows
+Component: apps/android/core/src/test/java/com/abodenestly/core/SwitcherComposeTest.kt → AC1 one-household, AC2 many, AC3 switching; tap and long-press. Also asserts AC5
 Integration: n/a (no API handler in this story)
-E2E: E2E-CORE-2 apps/android/core/src/androidTest/java/app/abodenestly/core/SwitcherE2ETest.kt
+E2E: E2E-CORE-2 apps/android/core/src/androidTest/java/com/abodenestly/core/SwitcherE2ETest.kt
 Offline test: n/a (core)
 
 ## Dependencies

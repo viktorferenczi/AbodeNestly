@@ -67,5 +67,9 @@ app also accept the `reset-session` boolean intent extra to start signed out
 
 ## Modules
 
-`:app` (shell, DI) → `:core` (auth, sign-in) → `:ui`, `:shared`, `:contract`. Feature modules never depend on each other
+`:app` (shell, DI) → `:core` (auth, sign-in, household switcher) → `:sync`, `:ui`, `:shared`, `:contract`. Feature modules never depend on each other
 (`checkModuleGraph`). `:core` declares the same `env` flavors as `:app` so root-level `*DevDebug*` tasks reach it.
+
+`:sync` holds the Room database per household (`HouseholdDatabase`, file `household-<id>.db`, cursor in its `meta` table) and
+`DatabaseRegistry`, which opens the current household's file on landing and switch. Room's exported schemas are committed in
+`sync/schemas/`; a schema change adds a `Migration`, never edits version 1.

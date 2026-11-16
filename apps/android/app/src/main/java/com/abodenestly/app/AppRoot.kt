@@ -44,6 +44,16 @@ import com.abodenestly.core.members.MembersScreen
 import com.abodenestly.core.profile.ProfileDeps
 import com.abodenestly.core.profile.ProfileScreen
 import com.abodenestly.core.settings.HouseholdCache
+import com.abodenestly.core.switcher.HouseholdsCache
+import com.abodenestly.core.switcher.SwitcherSheet
+import com.abodenestly.core.switcher.SwitcherViewModel
+import com.abodenestly.sync.DatabaseRegistry
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
 import com.abodenestly.core.settings.HouseholdSettingsScreen
 import com.abodenestly.core.signin.SignInScreen
 import com.abodenestly.core.signin.SignInViewModel
@@ -68,6 +78,8 @@ fun AppRoot(
     householdCache: HouseholdCache,
     webBaseUrl: String,
     profileDeps: ProfileDeps,
+    database: DatabaseRegistry,
+    householdsCache: HouseholdsCache,
 ) {
     val state by session.state.collectAsState()
     val online by network.isOnline.collectAsState()
@@ -77,7 +89,8 @@ fun AppRoot(
             SessionStatus.Loading -> Box(Modifier.fillMaxSize().testTag("session.loading"))
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = online)
             SessionStatus.SignedIn -> SignedInShell(
-                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps,
+                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, householdsCache,
+                onSwitch = session::switchTo, onSelectTab = session::selectTab, onSettingsShown = session::settingsShown,
                 meId = session.userId, email = session.email, isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
                 onLeft = session::leftHousehold, onHouseholdChanged = session::updateHousehold,
                 onProfileChanged = session::updateProfile,
@@ -96,6 +109,11 @@ private fun SignedInShell(
     householdCache: HouseholdCache,
     webBaseUrl: String,
     profileDeps: ProfileDeps,
+    database: DatabaseRegistry,
+    householdsCache: HouseholdsCache,
+    onSwitch: suspend (UUID, Boolean) -> Unit,
+    onSelectTab: (AppTab) -> Unit,
+    onSettingsShown: () -> Unit,
     meId: UUID?,
     email: String?,
     isOnline: Boolean,
@@ -105,8 +123,22 @@ private fun SignedInShell(
     onHouseholdChanged: (Household) -> Unit,
     onProfileChanged: (Profile) -> Unit,
 ) {
-    // AC8: the TopBar shows the person's display name once the profile row is in.
-    Scaffold(topBar = { TopBar("AbodeNestly", state.profile?.displayName) }, containerColor = LocalTokens.current.bg) { padding ->
+    var showSwitcher by remember { mutableStateOf(false) }
+    var showWelcome by remember { mutableStateOf(false) }
+    val currentHouseholdId = (state.destination as? Destination.Household)?.id
+    // "Create or join another" ends when a household was entered (created or joined), which changes the id.
+    LaunchedEffect(currentHouseholdId) { showWelcome = false }
+    val canSwitch = (state.destination is Destination.Household || state.destination == Destination.Home) && !state.loadFailed
+    // AC8: the TopBar shows the person's display name once the profile row is in. The title opens the switcher (B3).
+    Scaffold(
+        topBar = {
+            TopBar(
+                state.householdName ?: "AbodeNestly", state.profile?.displayName,
+                onTitleClick = if (canSwitch && meId != null) ({ showSwitcher = true }) else null,
+            )
+        },
+        containerColor = LocalTokens.current.bg,
+    ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when {
                 state.loadFailed -> Centered {
@@ -116,10 +148,56 @@ private fun SignedInShell(
                 state.destination == null -> Centered { CircularProgressIndicator(Modifier.testTag("session.loading")) }
                 state.destination == Destination.Welcome ->
                     WelcomeScreen(welcome, displayName = state.profile?.displayName, isOnline = isOnline, onSignOut = onSignOut)
-                else -> Tabs(state.destination, state.household, state.profile, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, meId, email, isOnline, onSignOut, onLeft, onHouseholdChanged, onProfileChanged)
+                showWelcome -> {
+                    BackHandler { showWelcome = false }
+                    Column(Modifier.fillMaxSize()) {
+                        TextButton(onClick = { showWelcome = false }, modifier = Modifier.testTag("switcher.welcome.cancel")) { Text("Cancel") }
+                        WelcomeScreen(welcome, displayName = state.profile?.displayName, isOnline = isOnline, onSignOut = onSignOut, modifier = Modifier.weight(1f))
+                    }
+                }
+                else -> Tabs(
+                    state.destination, state.household, state.profile, state.selectedTab, state.settingsRequested, onSelectTab, onSettingsShown,
+                    api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, meId, email, isOnline, onSignOut, onLeft, onHouseholdChanged, onProfileChanged,
+                )
             }
         }
+        if (showSwitcher && meId != null) {
+            SwitcherHost(
+                meId, state.destination, api, lastHousehold, householdCache, householdsCache, database, isOnline,
+                onSwitch = onSwitch, onDismiss = { showSwitcher = false }, onCreateOrJoin = { showSwitcher = false; showWelcome = true },
+            )
+        }
     }
+}
+
+/** One [SwitcherViewModel] per presentation, built once the current household is known (it may come from storage offline). */
+@Composable
+private fun SwitcherHost(
+    userId: UUID,
+    destination: Destination?,
+    api: ApiService,
+    lastHousehold: LastHouseholdStore,
+    householdCache: HouseholdCache,
+    householdsCache: HouseholdsCache,
+    database: DatabaseRegistry,
+    isOnline: Boolean,
+    onSwitch: suspend (UUID, Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onCreateOrJoin: () -> Unit,
+) {
+    val online by rememberUpdatedState(isOnline)
+    val perform by rememberUpdatedState(onSwitch)
+    val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+    DisposableEffect(Unit) { onDispose { scope.cancel() } }
+    var viewModel by remember { mutableStateOf<SwitcherViewModel?>(null) }
+    LaunchedEffect(Unit) {
+        val currentId = (destination as? Destination.Household)?.id ?: lastHousehold.read()
+        viewModel = SwitcherViewModel(
+            userId, currentId, currentId?.let { householdCache.read(userId, it) }, api, householdsCache, database,
+            isOnline = { online }, perform = { id, settings -> perform(id, settings) }, scope = scope,
+        )
+    }
+    viewModel?.let { SwitcherSheet(it, onDismiss, onCreateOrJoin) }
 }
 
 /** Bottom tabs, hidden for disabled modules (DESIGN A6). Content is a placeholder until the module stories land. */
@@ -128,12 +206,17 @@ private fun Tabs(
     destination: Destination?,
     household: LandingHousehold?,
     profile: Profile?,
+    selectedTab: AppTab,
+    settingsRequested: Boolean,
+    onSelectTab: (AppTab) -> Unit,
+    onSettingsShown: () -> Unit,
     api: ApiService,
     lastHousehold: LastHouseholdStore,
     membersCache: MembersCache,
     householdCache: HouseholdCache,
     webBaseUrl: String,
     profileDeps: ProfileDeps,
+    database: DatabaseRegistry,
     meId: UUID?,
     email: String?,
     isOnline: Boolean,
@@ -142,17 +225,22 @@ private fun Tabs(
     onHouseholdChanged: (Household) -> Unit,
     onProfileChanged: (Profile) -> Unit,
 ) {
-    val start = (destination as? Destination.Household)?.tab ?: AppTab.Home
     val tabs = Landing.visibleTabs(household)
-    var picked by rememberSaveable(destination) { mutableStateOf(start) }
     // Settings can switch the selected module off; the tab shell proper is X7, this only keeps a hidden tab from staying selected.
-    val selected = if (picked in tabs) picked else AppTab.Home
+    val selected = if (selectedTab in tabs) selectedTab else AppTab.Home
     // No NavHost yet, so Members is a flag over the Home tab. The household may be unknown offline at launch; fall back to the last one used.
     var showMembers by rememberSaveable(destination) { mutableStateOf(false) }
     var showSettings by rememberSaveable(destination) { mutableStateOf(false) }
     var showProfile by rememberSaveable(destination) { mutableStateOf(false) }
     var householdId by remember { mutableStateOf<UUID?>(household?.id) }
     LaunchedEffect(household) { householdId = household?.id ?: lastHousehold.read() }
+    // A long-press in the switcher asks for this household's Settings (B3 → B5).
+    LaunchedEffect(settingsRequested) {
+        if (settingsRequested) {
+            showSettings = true
+            onSettingsShown()
+        }
+    }
     val members = householdId
     if (showProfile && meId != null) {
         BackHandler { showProfile = false }
@@ -194,6 +282,7 @@ private fun Tabs(
         Box(Modifier.weight(1f).fillMaxSize().testTag("tab.${selected.key}.content"), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(selected.key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.headlineMedium)
+                if (BuildConfig.DEBUG && selected == AppTab.Shopping) LocalLists(database)
                 if (selected == AppTab.Home) {
                     if (members != null && meId != null) TextButton(onClick = { showMembers = true }, modifier = Modifier.testTag("home.members")) { Text("Members") }
                     if (members != null && meId != null) TextButton(onClick = { showSettings = true }, modifier = Modifier.testTag("home.settings")) { Text("Settings") }
@@ -206,7 +295,7 @@ private fun Tabs(
             tabs.forEach { tab ->
                 NavigationBarItem(
                     selected = tab == selected,
-                    onClick = { picked = tab },
+                    onClick = { onSelectTab(tab) },
                     icon = {},
                     label = { Text(tab.key.replaceFirstChar { it.uppercase() }) },
                     modifier = Modifier.testTag("tab.${tab.key}"),
@@ -223,4 +312,15 @@ private fun Centered(content: @Composable () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
     ) { content() }
+}
+
+/** Debug only: the household database's placeholder lists, so E2E can see that each household has its own (CORE-07 AC4). */
+@Composable
+private fun LocalLists(database: DatabaseRegistry) {
+    val current by database.current.collectAsState()
+    var names by remember { mutableStateOf("") }
+    LaunchedEffect(current) {
+        names = if (current == null) "" else runCatching { database.lists().joinToString(", ") { it.name } }.getOrDefault("")
+    }
+    Text(names, modifier = Modifier.testTag("shopping.local-lists"))
 }

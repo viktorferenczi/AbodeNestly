@@ -44,6 +44,7 @@ kotlin { jvmToolchain(17) }
 dependencies {
     api(project(":contract"))
     api(project(":shared"))
+    api(project(":sync"))
     implementation(project(":ui"))
 
     implementation(platform(libs.androidx.compose.bom))

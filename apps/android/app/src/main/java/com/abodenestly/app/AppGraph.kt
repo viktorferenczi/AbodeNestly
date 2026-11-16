@@ -22,6 +22,9 @@ import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.auth.SupabaseAuthService
 import com.abodenestly.core.settings.DataStoreHouseholdCache
 import com.abodenestly.core.settings.HouseholdCache
+import com.abodenestly.core.switcher.DataStoreHouseholdsCache
+import com.abodenestly.core.switcher.HouseholdsCache
+import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.core.signin.SignInViewModel
 import com.abodenestly.core.welcome.WelcomeViewModel
 import com.abodenestly.core.welcome.land
@@ -50,8 +53,13 @@ class AppGraph(context: Context) {
         DataStoreLastHouseholdStore.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
     val membersCache: MembersCache =
         DataStoreMembersCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
+    /** Every household of the signed-in person, for the switcher (CORE-07). Settings writes follow into it. */
+    val householdsCache: HouseholdsCache =
+        DataStoreHouseholdsCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
     val householdCache: HouseholdCache =
-        DataStoreHouseholdCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
+        DataStoreHouseholdCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO), householdsCache)
+    /** One Room database per household (SPEC §6.1); the session opens the current one. */
+    val database = DatabaseRegistry(context)
     val profileCache: ProfileCache =
         DataStoreProfileCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
     val profileOutbox: ProfileOutbox =
@@ -76,7 +84,7 @@ class AppGraph(context: Context) {
     val viewModelFactory = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T = when (modelClass) {
-            SessionViewModel::class.java -> SessionViewModel(auth, lastHousehold, isOnline = { network.isOnline.value }, profileCache = profileCache, profileOutbox = profileOutbox)
+            SessionViewModel::class.java -> SessionViewModel(auth, lastHousehold, isOnline = { network.isOnline.value }, profileCache = profileCache, profileOutbox = profileOutbox, database = database, householdsCache = householdsCache, api = api)
             SignInViewModel::class.java -> SignInViewModel(auth, redirectTo = config.authCallbackUrl)
             else -> error("Unknown view model ${modelClass.name}")
         } as T
