@@ -105,7 +105,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 
 ### B4. Home tab
 - Route: `/home` · Purpose: overview and entry to core settings.
-- Layout: TopBar "Test Home ▾" · "Today" card: counts (eat soon, low, due tasks) each tapping into its module view; cards hidden for disabled modules · Activity feed (last 20, CORE-08) · footer links: Members, Settings, Recently deleted.
+- Layout: TopBar "Test Home ▾" · "Today" card: counts (eat soon, low, due tasks) each tapping into its module view; cards hidden for disabled modules · Activity feed (last 20 rows of the last 30 days, CORE-08) · footer links: Members, Settings, Recently deleted.
 - States: `empty-activity` · `populated` · `all-modules-off` (shows only settings prompt).
 - Interactions: tap count → module view; pull to refresh → `kick()`.
 - Offline: works. · Gating: cards per module.
