@@ -104,8 +104,13 @@ internal fun SwitcherContent(viewModel: SwitcherViewModel, onDismiss: () -> Unit
                             selected = row.isCurrent
                             customActions = listOf(
                                 CustomAccessibilityAction("Household settings") {
-                                    scope.launch { if (viewModel.openSettings(row.id)) onDismiss() }
-                                    true
+                                    // Not performed while a switch runs: the action must not report success then.
+                                    if (switching) {
+                                        false
+                                    } else {
+                                        scope.launch { if (viewModel.openSettings(row.id)) onDismiss() }
+                                        true
+                                    }
                                 },
                             )
                         },

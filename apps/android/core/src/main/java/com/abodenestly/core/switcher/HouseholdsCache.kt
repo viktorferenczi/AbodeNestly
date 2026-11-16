@@ -49,7 +49,9 @@ class DataStoreHouseholdsCache(private val store: DataStore<Preferences>) : Hous
             runCatching { Serializer.kotlinxSerializationJson.decodeFromString(serializer, it) }.getOrNull()
         } ?: emptyList()
 
-    override suspend fun write(userId: UUID, list: List<HouseholdWithRole>) {
+    override suspend fun write(userId: UUID, list: List<HouseholdWithRole>) = lock.withLock { writeLocked(userId, list) }
+
+    private suspend fun writeLocked(userId: UUID, list: List<HouseholdWithRole>) {
         val json = Serializer.kotlinxSerializationJson.encodeToString(serializer, list)
         store.edit { it[key(userId)] = json }
     }
@@ -57,15 +59,16 @@ class DataStoreHouseholdsCache(private val store: DataStore<Preferences>) : Hous
     override suspend fun upsert(userId: UUID, entry: HouseholdWithRole) = lock.withLock {
         val list = read(userId)
         val index = list.indexOfFirst { it.household.id == entry.household.id }
-        write(userId, if (index >= 0) list.toMutableList().also { it[index] = entry } else list + entry)
+        writeLocked(userId, if (index >= 0) list.toMutableList().also { it[index] = entry } else list + entry)
     }
 
     override suspend fun remove(userId: UUID, householdId: UUID) = lock.withLock {
-        write(userId, read(userId).filter { it.household.id != householdId })
+        writeLocked(userId, read(userId).filter { it.household.id != householdId })
     }
 
-    override suspend fun clear(userId: UUID) {
+    override suspend fun clear(userId: UUID) = lock.withLock {
         store.edit { it.remove(key(userId)) }
+        Unit
     }
 
     companion object {

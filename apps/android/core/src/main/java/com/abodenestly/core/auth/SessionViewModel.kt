@@ -93,6 +93,9 @@ class SessionViewModel(
     private var loadJob: Job? = null
     private var writeJob: Job? = null
 
+    /** The close a sign-out started; an open for the next account waits for it, so it cannot close the new file. */
+    private var closeJob: Job? = null
+
     /** Set before the first suspension of a switch, so a second tap cannot start another one. */
     private var switchClaimed = false
 
@@ -129,6 +132,9 @@ class SessionViewModel(
     fun enter(household: LandingHousehold) {
         loadJob?.cancel()
         val user = userId
+        // The shell must leave Welcome on this turn, before the file open suspends, or the idle form is tappable again
+        // and a second tap sends another POST /households. The loading state is what it shows meanwhile.
+        mutableState.update { it.copy(destination = null, household = null, householdName = null, loadFailed = false) }
         writeJob?.cancel()
         writeJob = scope.launch {
             // The file opens before the household is published; a failed open never shows a household without its file.
@@ -138,8 +144,6 @@ class SessionViewModel(
                 mutableState.update { it.copy(loadFailed = true) }
                 return@launch
             }
-            // Publish before the DataStore write suspends: the shell must leave Welcome on this turn, or the idle form
-            // is tappable again and a second tap sends another POST /households.
             mutableState.update {
                 it.copy(household = household, householdName = cachedName(user, household.id), loadFailed = false)
                     .landed(Destination.Household(household.id, AppTab.Home))
@@ -205,7 +209,7 @@ class SessionViewModel(
         if (session == null) {
             val previous = userId
             if (previous != null) scope.launch { householdsCache.clear(previous) }
-            scope.launch { database?.close() }
+            closeJob = scope.launch { database?.close() }
             userId = null
             email = null
             loadJob?.cancel()
@@ -295,9 +299,11 @@ class SessionViewModel(
     /** Opens the household's database; `true` when there is none to open (tests, signed-out previews) or it opened. */
     private suspend fun openDatabase(id: UUID): Boolean {
         val registry = database ?: return true
+        closeJob?.join()
+        val user = userId
         return try {
-            registry.open(id)
-            true
+            // Asked inside the registry lock: an open that outlived its session never replaces the next one's file.
+            registry.open(id) { userId == user }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -340,12 +346,16 @@ class SessionViewModel(
             mutableState.update { it.copy(switching = target.household.name) }
             // A switch that was started is finished, even if the sheet that asked is dismissed meanwhile.
             withContext(NonCancellable) {
-                if (!openDatabase(id)) {
-                    if (previous != null) openDatabase(previous)
-                    throw SwitchError.OpenFailed
-                }
+                val opened = openDatabase(id)
                 // Signed out meanwhile: write nothing for the next account, and fail so the sheet stays open.
                 if (userId != user) throw SwitchError.SessionEnded
+                if (!opened) {
+                    // The household on screen must keep its file; if even that will not reopen, the shell shows the error.
+                    if (previous != null && !openDatabase(previous) && userId == user) {
+                        mutableState.update { it.copy(loadFailed = true) }
+                    }
+                    throw SwitchError.OpenFailed
+                }
                 val landing = target.household.toLanding()
                 lastHousehold.write(id)
                 mutableState.update {

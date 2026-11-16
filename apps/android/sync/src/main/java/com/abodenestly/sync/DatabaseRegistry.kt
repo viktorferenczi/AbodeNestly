@@ -23,7 +23,7 @@ data class ShoppingList(val id: UUID, val householdId: UUID, val name: String)
  * database of the household being left before the next opens. [seedLists] (E2E only) names one list to insert
  * when a household is opened without any.
  */
-class DatabaseRegistry(
+open class DatabaseRegistry(
     private val context: Context,
     private val seedLists: Map<UUID, String> = emptyMap(),
 ) {
@@ -36,11 +36,14 @@ class DatabaseRegistry(
 
     fun fileName(id: UUID): String = "household-$id.db"
 
-    /** Opens (creating it on first use) the household's file and seeds `meta.cursor = 0`. Opening the open one is a no-op. */
-    suspend fun open(id: UUID) = withContext(Dispatchers.IO) {
+    /**
+     * Opens (creating it on first use) the household's file and seeds `meta.cursor = 0`. Opening the open one is a no-op.
+     * [isCurrent] is asked under the registry lock once the file is ready, before anything is swapped: when it says the
+     * caller is stale (signed out, another account) the new file is closed and the open one stays; returns `false`.
+     */
+    open suspend fun open(id: UUID, isCurrent: () -> Boolean = { true }): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
-            if (mutableCurrent.value == id && database != null) return@withLock
-            closeLocked()
+            if (mutableCurrent.value == id && database != null) return@withLock isCurrent()
             val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).build()
             try {
                 db.meta().putIfAbsent(MetaEntity(CURSOR, "0"))
@@ -52,8 +55,14 @@ class DatabaseRegistry(
                 db.close()
                 throw e
             }
+            if (!isCurrent()) {
+                db.close()
+                return@withLock false
+            }
+            closeLocked()
             database = db
             mutableCurrent.value = id
+            true
         }
     }
 
@@ -68,9 +77,10 @@ class DatabaseRegistry(
 
     // Cursor: SHOP-08's pull loop moves it; this story only stores it.
 
-    suspend fun readCursor(): Int = withOpen { it.meta().get(CURSOR)?.toIntOrNull() ?: 0 }
+    /** `last_seq` is a bigint (SPEC §6.1), so the cursor is a `Long`. */
+    suspend fun readCursor(): Long = withOpen { it.meta().get(CURSOR)?.toLongOrNull() ?: 0L }
 
-    suspend fun writeCursor(value: Int) = withOpen { it.meta().put(MetaEntity(CURSOR, value.toString())) }
+    suspend fun writeCursor(value: Long) = withOpen { it.meta().put(MetaEntity(CURSOR, value.toString())) }
 
     /**
      * Queued writes of a household. Counts on the open database when it is that household's own; otherwise a

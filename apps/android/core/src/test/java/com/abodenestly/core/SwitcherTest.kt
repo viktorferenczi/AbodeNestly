@@ -25,6 +25,7 @@ import com.abodenestly.sync.ShoppingList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -59,17 +60,82 @@ class SwitcherTest {
         assertEquals("household-$a.db", registry.fileName(a))
         assertEquals(a, registry.current.value)
         assertTrue(file(a).exists())
-        assertEquals(0, registry.readCursor())
+        assertEquals(0L, registry.readCursor())
 
-        registry.writeCursor(7)
+        registry.writeCursor(7L)
         registry.open(b)
         assertEquals(b, registry.current.value)
         assertEquals("household-$b.db", registry.fileName(b))
         assertTrue(file(b).exists())
-        assertEquals(0, registry.readCursor())
+        assertEquals(0L, registry.readCursor())
 
         registry.open(a)
-        assertEquals("the cursor lives in the household's own file", 7, registry.readCursor())
+        assertEquals("the cursor lives in the household's own file", 7L, registry.readCursor())
+    }
+
+    @Test
+    fun `a cursor beyond Int is stored and read back whole`() = runBlocking {
+        registry.open(a)
+        registry.writeCursor(5_000_000_000L)
+        assertEquals(5_000_000_000L, registry.readCursor())
+    }
+
+    @Test
+    fun `an open whose caller went stale leaves the open household in place and closes the new file`() = runBlocking {
+        registry.open(a)
+        assertFalse(registry.open(b) { false })
+        assertEquals(a, registry.current.value)
+        assertEquals(0L, registry.readCursor())
+        assertTrue("the stale file may exist but is closed: a fresh open works", registry.open(b))
+        assertEquals(b, registry.current.value)
+    }
+
+    @Test
+    fun `enter leaves Welcome before the file open finishes`() = runBlocking {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val slow = object : DatabaseRegistry(context) {
+            override suspend fun open(id: UUID, isCurrent: () -> Boolean): Boolean {
+                gate.await()
+                return super.open(id, isCurrent)
+            }
+        }
+        val rig = Rig(context, slow, online = true)
+        rig.auth.memberships = Fetch.Success(emptyList())
+        rig.session.start()
+        rig.session.awaitLoaded()
+        assertEquals(Destination.Welcome, rig.session.state.value.destination)
+        rig.session.enter(LandingHousehold(a, true, true, true))
+        assertNull("not Welcome while the file opens", rig.session.state.value.destination)
+        gate.complete(Unit)
+        rig.session.awaitLoaded()
+        kotlinx.coroutines.withTimeout(5_000) { while (rig.session.state.value.destination == null) kotlinx.coroutines.delay(10) }
+        assertEquals(Destination.Household(a, AppTab.Home), rig.session.state.value.destination)
+    }
+
+    @Test
+    fun `a switch that outlives its session does not replace the open database`() = runBlocking {
+        val rig = rig()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val slow = object : DatabaseRegistry(context) {
+            override suspend fun open(id: UUID, isCurrent: () -> Boolean): Boolean {
+                if (id == b) gate.await()
+                return super.open(id, isCurrent)
+            }
+        }
+        // Same user, but a registry that holds the target's open; sign out while it waits.
+        val session = SessionViewModel(
+            rig.auth, rig.last, isOnline = { true }, database = slow, householdsCache = rig.cache, api = rig.api,
+            scope = CoroutineScope(Job() + Dispatchers.Unconfined),
+        )
+        registry.close()
+        session.start(); session.awaitLoaded()
+        val switch = async(Dispatchers.Default) { runCatching { session.switchTo(b) } }
+        kotlinx.coroutines.delay(100)
+        rig.auth.emit(null)
+        gate.complete(Unit)
+        val result = switch.await().exceptionOrNull()
+        assertEquals(SwitchError.SessionEnded, result)
+        slow.close()
     }
 
     @Test

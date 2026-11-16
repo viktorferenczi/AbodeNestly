@@ -228,6 +228,8 @@ private fun Tabs(
     val tabs = Landing.visibleTabs(household)
     // Settings can switch the selected module off; the tab shell proper is X7, this only keeps a hidden tab from staying selected.
     val selected = if (selectedTab in tabs) selectedTab else AppTab.Home
+    // Store the fallback, so a household switch keeps the tab that is on screen rather than the hidden one.
+    LaunchedEffect(selected, selectedTab) { if (selected != selectedTab) onSelectTab(selected) }
     // No NavHost yet, so Members is a flag over the Home tab. The household may be unknown offline at launch; fall back to the last one used.
     var showMembers by rememberSaveable(destination) { mutableStateOf(false) }
     var showSettings by rememberSaveable(destination) { mutableStateOf(false) }
