@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             AbodeTheme { AppRoot(
-                    session, signIn, welcome, graph.network, graph.api, graph.lastHousehold, graph.membersCache, graph.householdCache, graph.config.webBaseUrl, graph.profileDeps, graph.database, graph.householdsCache,
+                    session, signIn, welcome, graph.network, graph.api, graph.lastHousehold, graph.membersCache, graph.householdCache, graph.config.webBaseUrl, graph.profileDeps, graph.database, graph.householdsCache, graph.sync,
                 ) }
         }
         lifecycleScope.launch {
@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         graph.profileSync.kick()
+        graph.sync.kick()
     }
 
     override fun onNewIntent(intent: Intent) {

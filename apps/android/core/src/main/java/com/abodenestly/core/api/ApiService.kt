@@ -1,11 +1,13 @@
 package com.abodenestly.core.api
 
+import com.abodenestly.contract.models.Activity
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
 import com.abodenestly.contract.models.Member
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.time.OffsetDateTime
 import java.util.UUID
 
 /** Why an API call failed, as the Welcome screen needs to tell the person (mirrors iOS `ApiFailure`). */
@@ -76,6 +78,9 @@ interface ApiService {
     suspend fun makeOwner(householdId: UUID, userId: UUID): ApiResult<Unit>
 
     /** The household and the viewer's role, or `null` when they are no longer an active member (or it was deleted). PostgREST read under RLS. */
+    /** CORE-08 interim pull (until SHOP-08's `/sync`): live activity rows created at or after [since], newest first, at most [limit]. Read under RLS, no API route. */
+    suspend fun fetchActivity(householdId: UUID, since: OffsetDateTime, limit: Int): ApiResult<List<Activity>>
+
     suspend fun fetchHousehold(householdId: UUID, userId: UUID): ApiResult<HouseholdWithRole?>
 
     /** Every active household of [userId] with their role: [fetchHousehold]'s PostgREST read without the household filter (CORE-07). */

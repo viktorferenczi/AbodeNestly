@@ -31,6 +31,8 @@ ksp {
 }
 
 dependencies {
+    // `Activity` (CORE-08): the local table stores and returns the generated model.
+    api(project(":contract"))
     api(libs.androidx.room.runtime)
     api(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

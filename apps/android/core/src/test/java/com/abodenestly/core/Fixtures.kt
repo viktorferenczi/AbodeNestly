@@ -1,5 +1,6 @@
 package com.abodenestly.core
 
+import com.abodenestly.contract.models.Activity
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
 import com.abodenestly.contract.models.Member
@@ -59,4 +60,23 @@ object Fixtures {
         Member(householdId, id(n), role, OffsetDateTime.now(), null, OffsetDateTime.now(), syncSeq = 1),
         name?.let { MemberProfile(id(n), it) },
     )
+
+    /** A fixed "now" for the feed window, so the 30-day cut-off is exact. */
+    val homeNow: OffsetDateTime = OffsetDateTime.parse("2026-11-17T12:00:00Z")
+
+    /** A feed row created [ago] before [homeNow]. */
+    fun activity(
+        summary: String,
+        ago: java.time.Duration,
+        householdId: UUID = id(1),
+        id: UUID = UUID.randomUUID(),
+        module: Activity.Module = Activity.Module.shopping,
+        deleted: Boolean = false,
+    ): Activity {
+        val at = homeNow.minus(ago)
+        return Activity(
+            id, householdId, actorId = null, module = module, entity = "list_item", entityId = UUID.randomUUID(),
+            action = "checked", summary = summary, createdAt = at, updatedAt = at, deletedAt = if (deleted) at else null, syncSeq = 1,
+        )
+    }
 }
