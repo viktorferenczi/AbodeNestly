@@ -1,0 +1,14 @@
+.area {
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+}
+
+.indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--color-text-2);
+  font-size: var(--font-caption);
+  line-height: var(--lh-caption);
+}

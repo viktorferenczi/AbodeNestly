@@ -1,4 +1,4 @@
-import type { Household, Invite, Role, UpdateModulesRequest } from '@abodenestly/contract';
+import type { Activity, Household, Invite, Role, UpdateModulesRequest } from '@abodenestly/contract';
 import type { ApiClient, ApiResult, MemberRow } from './apiClient.ts';
 
 // Hand-written fake (TESTING §2 forbids mocking libraries). Records calls, returns what the test sets.
@@ -21,6 +21,8 @@ export class FakeApiClient implements ApiClient {
   fetchMyHouseholdsResult: ApiResult<Array<{ household: Household; role: Role }>> = { ok: true, value: [] };
   updateModulesResult: ApiResult<Household> = { ok: false, error: { code: 'unknown' } };
   updateHouseholdResult: ApiResult<Household> = { ok: false, error: { code: 'unknown' } };
+  fetchActivityCalls: Array<{ householdId: string; sinceIso: string; limit: number }> = [];
+  fetchActivityResult: ApiResult<Activity[]> = { ok: true, value: [] };
   fetchMembersCalls: string[] = [];
   removeCalls: Array<{ householdId: string; userId: string }> = [];
   makeOwnerCalls: Array<{ householdId: string; userId: string }> = [];
@@ -79,6 +81,11 @@ export class FakeApiClient implements ApiClient {
   fetchMembers(householdId: string) {
     this.fetchMembersCalls.push(householdId);
     return this.respond(() => this.fetchMembersResult);
+  }
+
+  fetchActivity(householdId: string, sinceIso: string, limit: number) {
+    this.fetchActivityCalls.push({ householdId, sinceIso, limit });
+    return this.respond(() => this.fetchActivityResult);
   }
 
   removeMember(householdId: string, userId: string) {
