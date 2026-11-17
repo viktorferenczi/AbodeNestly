@@ -95,6 +95,25 @@ public final class HttpApiService: ApiService {
         }
     }
 
+    public func fetchActivity(householdId: UUID, since: Date, limit: Int) async -> Result<[Activity], ApiFailure> {
+        do {
+            let url = try restURL(table: "activity", query: [
+                ("household_id", "eq.\(householdId.uuidString.lowercased())"),
+                ("deleted_at", "is.null"),
+                ("created_at", "gte.\(PostgrestJSON.format(since))"),
+                ("order", "created_at.desc"),
+                ("limit", String(limit)),
+            ])
+            let (data, status) = try await perform(url: url, method: "GET", headers: restHeaders())
+            guard status == 200, let rows = try? PostgrestJSON.decoder.decode([Activity].self, from: data) else {
+                return .failure(.unknown)
+            }
+            return .success(rows)
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
     public func retireInvite(id: UUID) async -> Result<Void, ApiFailure> {
         do {
             let url = try restURL(table: "invite", query: [("id", "eq.\(id.uuidString.lowercased())")])

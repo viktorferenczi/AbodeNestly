@@ -1,3 +1,4 @@
+import Contract
 import Foundation
 import GRDB
 
@@ -124,6 +125,89 @@ public actor HouseholdDatabase {
         let queue = try DatabaseQueue(path: url.path)
         defer { try? queue.close() }
         return try queue.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM outbox") ?? 0 }
+    }
+
+    // MARK: Activity (CORE-08)
+
+    /// Stores pulled rows of the open household. A row of another household is dropped: a pull that was in flight
+    /// when the person switched must not write into the new household's file.
+    public func upsertActivity(_ rows: [Activity]) throws {
+        let pool = try requirePool()
+        guard let householdId = handle?.householdId else { throw HouseholdDatabaseError.notOpen }
+        let own = rows.filter { $0.householdId == householdId }
+        guard !own.isEmpty else { return }
+        try pool.write { db in
+            for row in own {
+                try db.execute(
+                    sql: """
+                    INSERT OR REPLACE INTO activity
+                      (id, household_id, actor_id, module, entity, entity_id, action, summary,
+                       created_at, updated_at, deleted_at, sync_seq)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        row.id.uuidString.lowercased(), row.householdId.uuidString.lowercased(),
+                        row.actorId?.uuidString.lowercased(), row.module.rawValue, row.entity,
+                        row.entityId.uuidString.lowercased(), row.action, row.summary,
+                        Self.text(row.createdAt), Self.text(row.updatedAt), row.deletedAt.map(Self.text), row.syncSeq,
+                    ]
+                )
+            }
+        }
+    }
+
+    /// The household's newest stored rows, re-emitted whenever they change. The screen applies the 30-day / 20-row
+    /// window; the cap here only keeps the observation small. Finishes at once when that household is not open,
+    /// and when its pool closes (a switch).
+    public func observeActivity(householdId: UUID) -> AsyncStream<[Activity]> {
+        guard let pool, handle?.householdId == householdId else {
+            return AsyncStream { $0.finish() }
+        }
+        let key = householdId.uuidString.lowercased()
+        let observation = ValueObservation.tracking { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM activity WHERE household_id = ? AND deleted_at IS NULL
+                ORDER BY created_at DESC, id DESC LIMIT 100
+                """,
+                arguments: [key]
+            ).compactMap(Self.activity)
+        }
+        return AsyncStream { continuation in
+            let task = Task {
+                do {
+                    for try await rows in observation.values(in: pool) { continuation.yield(rows) }
+                } catch {
+                    // A closed pool ends the observation; the screen keeps its last rows.
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private static let dateStyle = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+
+    private static func text(_ date: Date) -> String { date.formatted(dateStyle) }
+
+    private static func date(_ text: String) -> Date? {
+        (try? Date(text, strategy: dateStyle)) ?? (try? Date(text, strategy: Date.ISO8601FormatStyle()))
+    }
+
+    private static func activity(_ row: Row) -> Activity? {
+        guard
+            let id = UUID(uuidString: row["id"]), let householdId = UUID(uuidString: row["household_id"]),
+            let module = Activity.Module(rawValue: row["module"]), let entityId = UUID(uuidString: row["entity_id"]),
+            let created = date(row["created_at"]), let updated = date(row["updated_at"])
+        else { return nil }
+        let actor: String? = row["actor_id"]
+        let deleted: String? = row["deleted_at"]
+        return Activity(
+            id: id, householdId: householdId, actorId: actor.flatMap { UUID(uuidString: $0) }, module: module,
+            entity: row["entity"], entityId: entityId, action: row["action"], summary: row["summary"],
+            createdAt: created, updatedAt: updated, deletedAt: deleted.flatMap(date), syncSeq: row["sync_seq"]
+        )
     }
 
     // MARK: Placeholder lists (replaced by SHOP-01/08)

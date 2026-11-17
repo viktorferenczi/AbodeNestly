@@ -18,7 +18,7 @@ let package = Package(
         .package(url: "https://github.com/supabase/supabase-swift", from: "2.0.0"),
     ],
     targets: [
-        .target(name: "Sync", dependencies: [.product(name: "GRDB", package: "GRDB.swift")]),
+        .target(name: "Sync", dependencies: ["Contract", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(
             name: "Core",
             dependencies: [

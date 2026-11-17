@@ -13,6 +13,8 @@ struct AppEnvironment: Sendable {
     let network: NetworkMonitor
     let lastHousehold: LastHouseholdStore
     let database: HouseholdDatabase
+    /// Interim `ActivityPull` until SHOP-08 brings the full push/pull loop behind the same seam.
+    let sync: any SyncEngine
 
     @MainActor
     static func live() -> AppEnvironment {
@@ -33,13 +35,17 @@ struct AppEnvironment: Sendable {
         let root = (try? FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
         )) ?? FileManager.default.temporaryDirectory
+        let api = HttpApiService(config: config, auth: auth)
+        let network: NetworkMonitor = forceOffline ? NetworkMonitor(isOnline: false) : .live()
+        let database = HouseholdDatabase(rootURL: root, seedLists: seedLists)
         return AppEnvironment(
             config: config,
             auth: auth,
-            api: HttpApiService(config: config, auth: auth),
-            network: forceOffline ? NetworkMonitor(isOnline: false) : .live(),
+            api: api,
+            network: network,
             lastHousehold: LastHouseholdStore(),
-            database: HouseholdDatabase(rootURL: root, seedLists: seedLists)
+            database: database,
+            sync: ActivityPull(api: api, database: database, isOnline: { network.isOnline })
         )
     }
 }

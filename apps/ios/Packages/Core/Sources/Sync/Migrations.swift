@@ -30,6 +30,26 @@ enum Migrations {
             }
         }
 
+        // CORE-08: the server's `activity` columns, so the Home feed reads offline. The index serves the
+        // household-and-time window the feed asks for (mirrors `activity_feed_idx`).
+        migrator.registerMigration("v2") { db in
+            try db.create(table: "activity") { t in
+                t.primaryKey("id", .text)
+                t.column("household_id", .text).notNull()
+                t.column("actor_id", .text)
+                t.column("module", .text).notNull()
+                t.column("entity", .text).notNull()
+                t.column("entity_id", .text).notNull()
+                t.column("action", .text).notNull()
+                t.column("summary", .text).notNull()
+                t.column("created_at", .text).notNull()
+                t.column("updated_at", .text).notNull()
+                t.column("deleted_at", .text)
+                t.column("sync_seq", .integer).notNull()
+            }
+            try db.create(index: "activity_household_created_idx", on: "activity", columns: ["household_id", "created_at"])
+        }
+
         return migrator
     }
 }
