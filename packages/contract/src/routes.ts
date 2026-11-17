@@ -172,6 +172,27 @@ export const componentSchemas: Record<string, JsonSchema> = {
       'created_at', 'updated_at', 'deleted_at', 'sync_seq',
     ],
   },
+  Activity: {
+    type: 'object',
+    properties: {
+      id: uuid,
+      household_id: uuid,
+      actor_id: { type: ['string', 'null'], format: 'uuid' },
+      module: { type: 'string', enum: ['shopping', 'pantry', 'maintenance', 'core'] },
+      entity: { type: 'string' },
+      entity_id: uuid,
+      action: { type: 'string' },
+      summary: { type: 'string' },
+      created_at: dateTime,
+      updated_at: dateTime,
+      deleted_at: nullableDateTime,
+      sync_seq: { type: 'integer' },
+    },
+    required: [
+      'id', 'household_id', 'actor_id', 'module', 'entity', 'entity_id', 'action', 'summary',
+      'created_at', 'updated_at', 'deleted_at', 'sync_seq',
+    ],
+  },
   Profile: {
     type: 'object',
     properties: {

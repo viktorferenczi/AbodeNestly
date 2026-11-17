@@ -223,6 +223,62 @@ components:
         - updated_at
         - deleted_at
         - sync_seq
+    Activity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        household_id:
+          type: string
+          format: uuid
+        actor_id:
+          type:
+            - string
+            - "null"
+          format: uuid
+        module:
+          type: string
+          enum:
+            - shopping
+            - pantry
+            - maintenance
+            - core
+        entity:
+          type: string
+        entity_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        summary:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        sync_seq:
+          type: integer
+      required:
+        - id
+        - household_id
+        - actor_id
+        - module
+        - entity
+        - entity_id
+        - action
+        - summary
+        - created_at
+        - updated_at
+        - deleted_at
+        - sync_seq
     Profile:
       type: object
       properties:
