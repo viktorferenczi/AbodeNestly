@@ -49,6 +49,7 @@ import com.abodenestly.core.switcher.SwitcherSheet
 import com.abodenestly.core.switcher.SwitcherViewModel
 import com.abodenestly.core.home.HomeEvent
 import com.abodenestly.core.home.HomeModules
+import androidx.compose.runtime.produceState
 import com.abodenestly.core.home.HomeScreen
 import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.sync.SyncEngine
@@ -163,7 +164,7 @@ private fun SignedInShell(
                 }
                 else -> Tabs(
                     state.destination, state.household, state.profile, state.selectedTab, state.settingsRequested, onSelectTab, onSettingsShown,
-                    api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, sync, meId, email, isOnline, onSignOut, onLeft, onHouseholdChanged, onProfileChanged,
+                    api, lastHousehold, membersCache, householdCache, householdsCache, webBaseUrl, profileDeps, database, sync, meId, email, isOnline, onSignOut, onLeft, onHouseholdChanged, onProfileChanged,
                 )
             }
         }
@@ -220,6 +221,7 @@ private fun Tabs(
     lastHousehold: LastHouseholdStore,
     membersCache: MembersCache,
     householdCache: HouseholdCache,
+    householdsCache: HouseholdsCache,
     webBaseUrl: String,
     profileDeps: ProfileDeps,
     database: DatabaseRegistry,
@@ -251,6 +253,11 @@ private fun Tabs(
         }
     }
     val members = householdId
+    // Offline at launch the landing read fails and `household` stays null; the flags then come from the cached households list, so the Today cards and the all-off prompt still show.
+    val cachedModules by produceState<HomeModules?>(null, household, members, meId) {
+        value = if (household != null || members == null || meId == null) null
+        else householdsCache.read(meId).firstOrNull { it.household.id == members }?.household?.let(HomeModules::of)
+    }
     if (showProfile && meId != null) {
         BackHandler { showProfile = false }
         Column(Modifier.fillMaxSize()) {
@@ -291,7 +298,7 @@ private fun Tabs(
         if (selected == AppTab.Home && members != null) {
             Column(Modifier.weight(1f).fillMaxSize().testTag("tab.home.content")) {
                 HomeScreen(
-                    members, household?.let(HomeModules::of), database, sync,
+                    members, household?.let(HomeModules::of) ?: cachedModules, database, sync,
                     onNavigate = { event ->
                         when (event) {
                             is HomeEvent.OpenModule -> onSelectTab(event.tab)

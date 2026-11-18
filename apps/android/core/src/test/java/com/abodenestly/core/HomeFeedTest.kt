@@ -163,11 +163,11 @@ class HomeFeedTest {
     private suspend fun stored() = summaries(registry.activityFeed(household).first())
 
     @Test
-    fun `pull asks for the last 30 days, 20 rows, and stores what comes back`() = runBlocking {
+    fun `pull asks for the last 30 days and stores what comes back`() = runBlocking {
         registry.open(household)
         api.activityResult = ApiResult.Success(listOf(activity("pulled", Duration.ofSeconds(5))))
         pull().pull()
-        assertEquals(listOf(FakeApiService.Call.FetchActivity(household, homeNow.minusDays(30), 20)), api.calls)
+        assertEquals(listOf(FakeApiService.Call.FetchActivity(household, homeNow.minusDays(30), HomeFeed.PULL_LIMIT)), api.calls)
         assertEquals(listOf("pulled"), stored())
     }
 
@@ -195,12 +195,43 @@ class HomeFeedTest {
         val engine = pull()
         api.hold()
         val first = async(Dispatchers.Default) { engine.pull() }
-        // The first pull is inside the read; the second must not start another.
+        // The first pull is inside the read; the second must not overlap it, and leaves one follow-up pass.
         withTimeout(5_000) { while (api.calls.isEmpty()) kotlinx.coroutines.delay(10) }
         engine.pull()
+        assertEquals(1, api.calls.size)
         api.release()
         first.await()
-        assertEquals(1, api.calls.size)
+        assertEquals(2, api.calls.size)
+    }
+
+    @Test
+    fun `a switch during the read is pulled again for the household now open`() = runBlocking {
+        val other = id(2)
+        registry.open(household)
+        val engine = pull()
+        api.hold()
+        val first = async(Dispatchers.Default) { engine.pull() }
+        withTimeout(5_000) { while (api.calls.isEmpty()) kotlinx.coroutines.delay(10) }
+        registry.open(other)
+        api.activityResult = ApiResult.Success(listOf(activity("other", Duration.ofSeconds(5), householdId = other)))
+        engine.pull() // the switch's kick, dropped into the running pull's follow-up
+        api.release()
+        first.await()
+        assertEquals(listOf(household, other), api.calls.map { (it as FakeApiService.Call.FetchActivity).householdId })
+        assertEquals(listOf("other"), summaries(registry.activityFeed(other).first()))
+    }
+
+    @Test
+    fun `a tombstone hides the cached row, and an empty page is still a read`() = runBlocking {
+        registry.open(household)
+        val row = activity("shown", Duration.ofSeconds(5))
+        registry.upsertActivity(household, listOf(row))
+        api.activityResult = ApiResult.Success(listOf(activity("shown", Duration.ofSeconds(5), id = row.id, deleted = true)))
+        pull().pull()
+        assertEquals(emptyList<String>(), stored())
+        api.activityResult = ApiResult.Success(emptyList())
+        pull().pull()
+        assertEquals(2, api.calls.size)
     }
 
     @Test

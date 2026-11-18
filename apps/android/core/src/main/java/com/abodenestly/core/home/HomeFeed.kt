@@ -1,6 +1,7 @@
 package com.abodenestly.core.home
 
 import com.abodenestly.contract.models.Activity
+import com.abodenestly.contract.models.Household
 import com.abodenestly.core.auth.AppTab
 import com.abodenestly.core.auth.LandingHousehold
 import java.time.OffsetDateTime
@@ -18,6 +19,9 @@ data class HomeModules(val shopping: Boolean, val pantry: Boolean, val maintenan
 
     companion object {
         fun of(household: LandingHousehold) = HomeModules(household.moduleShopping, household.modulePantry, household.moduleMaintenance)
+
+        /** From the cached household, for an offline launch where the landing read failed. */
+        fun of(household: Household) = HomeModules(household.moduleShopping, household.modulePantry, household.moduleMaintenance)
     }
 }
 
@@ -32,6 +36,9 @@ enum class HomeState {
 object HomeFeed {
     const val DAYS = 30L
     const val LIMIT = 20
+
+    /** How many rows a pull asks for: the screen shows 20 live ones, so the read leaves room for tombstones among them. */
+    const val PULL_LIMIT = 100
 
     fun windowStart(now: OffsetDateTime): OffsetDateTime = now.minusDays(DAYS)
 

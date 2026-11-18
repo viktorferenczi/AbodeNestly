@@ -77,10 +77,10 @@ interface ApiService {
     /** Promotes a member through PostgREST (`PATCH member`). A row RLS hides counts as a failure. */
     suspend fun makeOwner(householdId: UUID, userId: UUID): ApiResult<Unit>
 
-    /** The household and the viewer's role, or `null` when they are no longer an active member (or it was deleted). PostgREST read under RLS. */
-    /** CORE-08 interim pull (until SHOP-08's `/sync`): live activity rows created at or after [since], newest first, at most [limit]. Read under RLS, no API route. */
+    /** CORE-08 interim pull (until SHOP-08's `/sync`): activity rows created at or after [since], newest first, at most [limit]. Rows with `deleted_at` set are included so a client learns of them (SPEC §6.3). Read under RLS, no API route. */
     suspend fun fetchActivity(householdId: UUID, since: OffsetDateTime, limit: Int): ApiResult<List<Activity>>
 
+    /** The household and the viewer's role, or `null` when they are no longer an active member (or it was deleted). PostgREST read under RLS. */
     suspend fun fetchHousehold(householdId: UUID, userId: UUID): ApiResult<HouseholdWithRole?>
 
     /** Every active household of [userId] with their role: [fetchHousehold]'s PostgREST read without the household filter (CORE-07). */

@@ -100,7 +100,6 @@ class HttpApiService(
         val url = restUrl(
             "activity",
             "household_id" to "eq.$householdId",
-            "deleted_at" to "is.null",
             "created_at" to "gte.${timestamp(since)}",
             "order" to "created_at.desc",
             "limit" to limit.toString(),
