@@ -139,6 +139,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 - Layout: SearchField autofocus · results grouped by module (section headers with module colour) · each row navigates to the entity.
 - States: `empty-query` (recent searches) · `no-results` · `results`.
 - Offline: works. · Gating: sections per module.
+- _Android (CORE-09-android): the magnifier is a TopBar action on the Home tab (content description "Search"), and Search is a flag over the shell like Members/Settings (system Back closes it). No entity screens exist yet, so a result row only switches to its module's tab (`SearchEvent.Open(SearchTarget{module, table, id, listId?})`); the typed target is what the entity screens will consume. Recent searches (last 8 per household, newest first, case-insensitive dedupe, recorded when a result is opened or a search with results is submitted) live in DataStore under `abodenestly.search.<household_id>`. The local tables for list_item, pantry_item, recipe, asset, maint_task, store, location and contractor are minimal (id, household_id, name/title, deleted_at, plus list_id on list_item) until the module stories widen them; the Room version is 3. The SQL pre-filter is `LIKE`, which folds ASCII case only, so a non-ASCII name differing from the query only in case is not found yet._
 
 ### B9. Notification preferences
 - Route: `/profile/notifications` · Purpose: CORE-12.

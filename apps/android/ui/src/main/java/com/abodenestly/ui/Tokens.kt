@@ -18,17 +18,22 @@ data class Tokens(
     val accentBg: Color,
     val warn: Color,
     val danger: Color,
+    val shopping: Color,
+    val pantry: Color,
+    val maintenance: Color,
 ) {
     companion object {
         val Light = Tokens(
             bg = Color(0xFFFAF8F5), surface = Color(0xFFFFFFFF), surface2 = Color(0xFFF1EDE7),
             text = Color(0xFF1C1A18), text2 = Color(0xFF6B655E), line = Color(0xFFE4DFD7),
             accent = Color(0xFF2F6B5A), accentBg = Color(0xFFE3F0EB), warn = Color(0xFFB8741A), danger = Color(0xFFB3402F),
+            shopping = Color(0xFF2F6B5A), pantry = Color(0xFFB8741A), maintenance = Color(0xFF3F5E8C),
         )
         val Dark = Tokens(
             bg = Color(0xFF121110), surface = Color(0xFF1C1A18), surface2 = Color(0xFF262320),
             text = Color(0xFFF2EFEA), text2 = Color(0xFFA8A197), line = Color(0xFF2E2B27),
             accent = Color(0xFF6FB79F), accentBg = Color(0xFF1E3A32), warn = Color(0xFFE0A449), danger = Color(0xFFE06A58),
+            shopping = Color(0xFF6FB79F), pantry = Color(0xFFE0A449), maintenance = Color(0xFF86A7D6),
         )
 
         /** 4-dp grid (DESIGN A5). */

@@ -9,7 +9,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
@@ -20,6 +22,22 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+
+/** The modules whose names CORE-09 searches, with the local tables each owns (SPEC §4 CORE-09; open question in the story). */
+enum class SearchModule(val key: String, val tables: List<String>) {
+    Shopping("shopping", listOf("list_item", "store")),
+    Pantry("pantry", listOf("pantry_item", "location", "recipe")),
+    Maintenance("maintenance", listOf("asset", "maint_task", "contractor")),
+}
+
+/** One name found in a local table. [listId] is set for list items only (the list they sit on). */
+data class SearchRow(
+    val table: String,
+    val id: String,
+    val name: String,
+    val listId: String? = null,
+    val deletedAt: String? = null,
+)
 
 /** A read or write that needs the open household database, with none open. */
 class DatabaseNotOpenException : IllegalStateException("No household database is open")
@@ -53,7 +71,7 @@ open class DatabaseRegistry(
     open suspend fun open(id: UUID, isCurrent: () -> Boolean = { true }): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
             if (mutableCurrent.value == id && database != null) return@withLock isCurrent()
-            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2).build()
+            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
             try {
                 db.meta().putIfAbsent(MetaEntity(CURSOR, "0"))
                 val seed = seedLists[id]
@@ -100,7 +118,7 @@ open class DatabaseRegistry(
             val open = database
             if (open != null && mutableCurrent.value == id) return@withLock open.outbox().count()
             if (!context.applicationContext.getDatabasePath(fileName(id)).exists()) return@withLock 0
-            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2).build()
+            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
             try {
                 db.outbox().count()
             } finally {
@@ -136,6 +154,44 @@ open class DatabaseRegistry(
             // The database may close under the collector during a switch.
             .catch { }
     }
+
+    // Search (CORE-09)
+
+    /**
+     * Names in [modules]' tables matching [query] (SQL `LIKE`, a superset of what `Search.group` keeps), re-emitted
+     * when those tables change. Only enabled modules' tables are queried (AC4). Follows the open database like
+     * [activityFeed]; nothing is emitted while [id] is not the open household.
+     */
+    fun searchNames(id: UUID, query: String, modules: Set<SearchModule>): Flow<List<SearchRow>> {
+        val q = query.trim()
+        if (q.isEmpty() || modules.isEmpty()) return flowOf(emptyList())
+        val pattern = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return current.flatMapLatest { open ->
+            val db = database
+            if (open != id || db == null) emptyFlow()
+            else {
+                val dao = db.search()
+                val hid = id.toString()
+                val tables = modules.flatMap { it.tables }.toSet()
+                val flows = buildList<Flow<List<SearchRow>>> {
+                    if ("list_item" in tables) add(dao.listItems(hid, pattern).map { r -> r.map { SearchRow("list_item", it.id, it.name, it.listId, it.deletedAt) } })
+                    if ("store" in tables) add(dao.stores(hid, pattern).map { r -> r.map { SearchRow("store", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("pantry_item" in tables) add(dao.pantryItems(hid, pattern).map { r -> r.map { SearchRow("pantry_item", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("location" in tables) add(dao.locations(hid, pattern).map { r -> r.map { SearchRow("location", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("recipe" in tables) add(dao.recipes(hid, pattern).map { r -> r.map { SearchRow("recipe", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("asset" in tables) add(dao.assets(hid, pattern).map { r -> r.map { SearchRow("asset", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("maint_task" in tables) add(dao.maintTasks(hid, pattern).map { r -> r.map { SearchRow("maint_task", it.id, it.title, deletedAt = it.deletedAt) } })
+                    if ("contractor" in tables) add(dao.contractors(hid, pattern).map { r -> r.map { SearchRow("contractor", it.id, it.name, deletedAt = it.deletedAt) } })
+                }
+                combine(flows) { parts -> parts.toList().flatten() }
+                    // The database may close under the collector during a switch.
+                    .catch { }
+            }
+        }
+    }
+
+    /** Test seam (and the future module stories' pull): runs [block] against the search DAO of the open household. */
+    suspend fun <T> withSearchDao(block: suspend (SearchDao) -> T): T = withOpen { block(it.search()) }
 
     // Placeholder lists (replaced by SHOP-01/08).
 

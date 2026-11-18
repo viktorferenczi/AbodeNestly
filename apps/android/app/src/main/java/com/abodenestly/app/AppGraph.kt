@@ -25,6 +25,8 @@ import com.abodenestly.core.settings.HouseholdCache
 import com.abodenestly.core.switcher.DataStoreHouseholdsCache
 import com.abodenestly.core.switcher.HouseholdsCache
 import com.abodenestly.core.home.ActivityPull
+import com.abodenestly.core.search.DataStoreRecentSearchStore
+import com.abodenestly.core.search.RecentSearchStore
 import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.sync.SyncEngine
 import com.abodenestly.core.signin.SignInViewModel
@@ -62,6 +64,9 @@ class AppGraph(context: Context) {
         DataStoreHouseholdCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO), householdsCache)
     /** One Room database per household (SPEC §6.1); the session opens the current one. */
     val database = DatabaseRegistry(context)
+    /** Recent searches per household (CORE-09). */
+    val recentSearches: RecentSearchStore =
+        DataStoreRecentSearchStore.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
     val profileCache: ProfileCache =
         DataStoreProfileCache.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
     val profileOutbox: ProfileOutbox =
