@@ -49,7 +49,6 @@ import com.abodenestly.core.switcher.SwitcherSheet
 import com.abodenestly.core.switcher.SwitcherViewModel
 import com.abodenestly.core.home.HomeEvent
 import com.abodenestly.core.home.HomeModules
-import androidx.compose.runtime.produceState
 import com.abodenestly.core.home.HomeScreen
 import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.sync.SyncEngine
@@ -254,10 +253,11 @@ private fun Tabs(
     }
     val members = householdId
     // Offline at launch the landing read fails and `household` stays null; the flags then come from the cached households list, so the Today cards and the all-off prompt still show.
-    val cachedModules by produceState<HomeModules?>(null, household, members, meId) {
-        value = null
+    var cachedModules by remember { mutableStateOf<HomeModules?>(null) }
+    LaunchedEffect(household, members, meId) {
+        cachedModules = null
         if (household == null && members != null && meId != null) {
-            value = householdsCache.read(meId).firstOrNull { it.household.id == members }?.household?.let(HomeModules::of)
+            cachedModules = householdsCache.read(meId).firstOrNull { it.household.id == members }?.household?.let(HomeModules::of)
         }
     }
     if (showProfile && meId != null) {
