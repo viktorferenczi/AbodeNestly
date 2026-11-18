@@ -1,3 +1,4 @@
+import Contract
 import Foundation
 import Sync
 
@@ -86,6 +87,14 @@ public enum SearchState: Sendable, Equatable {
 /// DESIGN B8 / CORE-09. Web twin: `web/src/core/search.ts`.
 public enum Search {
     public static let debounce: Duration = .milliseconds(150)
+
+    /// The flags search filters by. The open household's own when known; otherwise (offline `.home`, memberships
+    /// unreadable) the ones cached with that household id. `nil` when neither exists, so Search is not offered.
+    public static func modules(householdId: UUID?, household: LandingHousehold?, cached: [HouseholdWithRole]) -> HomeModules? {
+        if let household { return HomeModules(household) }
+        guard let householdId, let entry = cached.first(where: { $0.household.id == householdId })?.household else { return nil }
+        return HomeModules(shopping: entry.moduleShopping, pantry: entry.modulePantry, maintenance: entry.moduleMaintenance)
+    }
 
     public static func tables(for modules: Set<SearchModule>) -> [String] {
         SearchModule.allCases.filter(modules.contains).flatMap(\.tables)

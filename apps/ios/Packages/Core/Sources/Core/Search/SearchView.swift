@@ -72,6 +72,7 @@ public struct SearchView: View {
                         .frame(minHeight: Tokens.minTouchTarget)
                         .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityIdentifier("search.recent")
                 }
             }
@@ -104,7 +105,9 @@ public struct SearchView: View {
                     .frame(minHeight: Tokens.minTouchTarget)
                     .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("search.row")
             }
         } header: {

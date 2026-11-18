@@ -103,7 +103,7 @@ private struct SignedInView: View {
                 // No household yet (Welcome, loading): nothing to switch from.
                 onTitleTap: showsSwitcher ? { showSwitcher = true } : nil,
                 // Search reads the open household's local database, so it needs one (not Welcome or the load error).
-                actions: showsSwitcher ? [TopBarAction(
+                actions: showsSwitcher && searchModules != nil ? [TopBarAction(
                     systemImage: "magnifyingglass", label: "Search", identifier: "topbar.search",
                     action: { session.searchRequested = true }
                 )] : []
@@ -162,6 +162,15 @@ private struct SignedInView: View {
     private func kickSync() {
         let sync = environment.sync
         Task { await sync.kick() }
+    }
+
+    /// Flags search filters by, from the cache when the household is unknown (offline `.home`); `nil` hides the magnifier.
+    private var searchModules: HomeModules? {
+        guard let userId = session.userId else { return nil }
+        return Search.modules(
+            householdId: session.currentHouseholdId ?? environment.lastHousehold.read(), household: session.household,
+            cached: HouseholdsCache().read(userId: userId)
+        )
     }
 
     private var showsSwitcher: Bool {
@@ -284,7 +293,11 @@ private struct MainTabs: View {
                             ProfileView(model: profile, isOnline: environment.network.isOnline)
                         case .search:
                             SearchScreen(
-                                householdId: householdId, household: household, environment: environment,
+                                householdId: householdId, environment: environment,
+                                modules: Search.modules(
+                                    householdId: householdId, household: household,
+                                    cached: session.userId.map { HouseholdsCache().read(userId: $0) } ?? []
+                                ),
                                 // The entity screens come with the module stories: switch to the module's tab.
                                 onOpen: { target in
                                     homePath = []
@@ -375,21 +388,23 @@ private struct HomeScreen: View {
 /// Owns the `SearchModel` for the pushed screen, so a re-render of the tabs never resets it.
 private struct SearchScreen: View {
     @State private var model: SearchModel
-    let household: LandingHousehold?
+    /// Settings can flip a module while Search is up; the model follows.
+    let modules: HomeModules?
     let onOpen: (SearchTarget) -> Void
 
-    init(householdId: UUID, household: LandingHousehold?, environment: AppEnvironment, onOpen: @escaping (SearchTarget) -> Void) {
-        self.household = household
+    init(householdId: UUID, environment: AppEnvironment, modules: HomeModules?, onOpen: @escaping (SearchTarget) -> Void) {
+        self.modules = modules
         self.onOpen = onOpen
         _model = State(initialValue: SearchModel(
-            householdId: householdId, modules: household.map(HomeModules.init),
+            householdId: householdId, modules: modules,
             database: environment.database, store: RecentSearchStore(householdId: householdId)
         ))
     }
 
     var body: some View {
         SearchView(model: model, onOpen: onOpen)
-            .onChange(of: household) { _, household in model.modules = household.map(HomeModules.init) }
+            .onChange(of: modules) { _, modules in model.modules = modules }
+            .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.inline)
     }
 }

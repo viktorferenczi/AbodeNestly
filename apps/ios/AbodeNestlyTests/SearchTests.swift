@@ -1,3 +1,4 @@
+import Contract
 import Foundation
 import Testing
 @testable import Core
@@ -131,5 +132,40 @@ struct SearchDatabaseTests {
         #expect(await first(await db.observeSearch(householdId: household, query: "50%", tables: ["list_item"]))?.map(\.name) == ["50% off"])
         #expect(await first(await db.observeSearch(householdId: household, query: "50", tables: ["nope; DROP"])) == [])
         #expect(await first(await db.observeSearch(householdId: household, query: " ", tables: ["list_item"])) == [])
+    }
+}
+
+@Suite("CORE-09 search modules offline")
+struct SearchModulesTests {
+    private func entry(_ id: UUID, shopping: Bool, pantry: Bool, maintenance: Bool) -> HouseholdWithRole {
+        HouseholdWithRole(
+            household: Household(
+                id: id, name: "Home", createdBy: UUID(), moduleShopping: shopping, modulePantry: pantry, moduleMaintenance: maintenance,
+                currency: "EUR", createdAt: Date(), updatedAt: Date(), deletedAt: nil, syncSeq: 1
+            ),
+            role: .member
+        )
+    }
+
+    @Test("CORE-09: AC5 offline with no open household, the cached flags of that household id are used")
+    func cachedFlags() {
+        let id = UUID()
+        let cached = [entry(UUID(), shopping: true, pantry: true, maintenance: true), entry(id, shopping: true, pantry: false, maintenance: true)]
+        #expect(Search.modules(householdId: id, household: nil, cached: cached) == HomeModules(shopping: true, pantry: false, maintenance: true))
+    }
+
+    @Test("CORE-09: AC5 no cached row (or no household id) offers no search")
+    func noCache() {
+        let id = UUID()
+        #expect(Search.modules(householdId: id, household: nil, cached: []) == nil)
+        #expect(Search.modules(householdId: nil, household: nil, cached: [entry(id, shopping: true, pantry: true, maintenance: true)]) == nil)
+    }
+
+    @Test("CORE-09: the open household's own flags win over the cache")
+    func openWins() {
+        let id = UUID()
+        let open = LandingHousehold(id: id, moduleShopping: false, modulePantry: true, moduleMaintenance: false)
+        let cached = [entry(id, shopping: true, pantry: true, maintenance: true)]
+        #expect(Search.modules(householdId: id, household: open, cached: cached) == HomeModules(shopping: false, pantry: true, maintenance: false))
     }
 }
