@@ -1,3 +1,4 @@
+import type { Activity } from '@abodenestly/contract';
 import Dexie, { type Table } from 'dexie';
 
 // The contract has no ShoppingList type yet; SHOP-01/08 replace this with it and add the other tables.
@@ -8,6 +9,7 @@ export type MetaRow = { key: string; value: number };
 /** One database per household (SPEC §6.1): own rows, own outbox, own pull cursor. */
 export class HouseholdDb extends Dexie {
   shopping_list!: Table<ShoppingListRow, string>;
+  activity!: Table<Activity, string>;
   outbox!: Table<OutboxRow, number>;
   meta!: Table<MetaRow, string>;
 
@@ -19,6 +21,8 @@ export class HouseholdDb extends Dexie {
       outbox: '++seq',
       meta: 'key',
     });
+    // CORE-08: the Home feed reads one household's rows by time.
+    this.version(2).stores({ activity: 'id, household_id, created_at' });
   }
 }
 

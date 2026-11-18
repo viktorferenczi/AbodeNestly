@@ -1,4 +1,5 @@
 import type {
+  Activity,
   ApiError,
   CreateHouseholdRequest,
   CreateInviteRequest,
@@ -42,6 +43,8 @@ export interface ApiClient {
   fetchMembers(householdId: string): Promise<ApiResult<MemberRow[]>>;
   /** DELETE /households/{id}/members/{user_id}: remove someone, or leave when `userId` is the caller. */
   removeMember(householdId: string, userId: string): Promise<ApiResult<null>>;
+  /** CORE-08 interim pull (until SHOP-08's /sync): live activity rows created at or after `sinceIso`, newest first, at most `limit`. Read under RLS. */
+  fetchActivity(householdId: string, sinceIso: string, limit: number): Promise<ApiResult<Activity[]>>;
   /** Promotes a member to owner. Direct write under RLS (SPEC §7: network-only core settings). */
   makeOwner(householdId: string, userId: string): Promise<ApiResult<null>>;
 }
@@ -203,6 +206,22 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
             return { member, profile: p ? { display_name: p.display_name, avatar_path: p.avatar_path } : null };
           }),
         };
+      } catch {
+        return { ok: false, error: { code: 'network' } };
+      }
+    },
+    async fetchActivity(householdId, sinceIso, limit) {
+      try {
+        const { data, error } = await supabase
+          .from('activity')
+          .select('*')
+          .eq('household_id', householdId)
+          .is('deleted_at', null)
+          .gte('created_at', sinceIso)
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        if (error) return { ok: false, error: { code: 'unknown' } };
+        return { ok: true, value: (data ?? []) as Activity[] };
       } catch {
         return { ok: false, error: { code: 'network' } };
       }
