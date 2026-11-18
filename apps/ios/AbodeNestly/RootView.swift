@@ -140,10 +140,23 @@ private struct SignedInView: View {
         // Created or joined: the household changed under the sheet.
         .onChange(of: session.household?.id) { _, _ in showWelcome = false }
         .task { await profile.start() }
-        .onChange(of: environment.network.isOnline) { _, online in profile.connectivityChanged(online) }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { profile.kickDrain() }
+        // The same triggers as the profile drain (foreground, reconnect), plus entering or switching a household.
+        .onChange(of: environment.network.isOnline) { _, online in
+            profile.connectivityChanged(online)
+            if online { kickSync() }
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                profile.kickDrain()
+                kickSync()
+            }
+        }
+        .onChange(of: session.currentHouseholdId, initial: true) { _, _ in kickSync() }
+    }
+
+    private func kickSync() {
+        let sync = environment.sync
+        Task { await sync.kick() }
     }
 
     private var showsSwitcher: Bool {
@@ -193,7 +206,7 @@ private struct MainTabs: View {
     let environment: AppEnvironment
     @State private var homePath: [HomeRoute] = []
 
-    private enum HomeRoute: Hashable { case settings }
+    fileprivate enum HomeRoute: Hashable { case settings, members, profile }
 
     init(session: SessionModel, profile: ProfileModel, household: LandingHousehold?, environment: AppEnvironment) {
         self.session = session
@@ -243,31 +256,29 @@ private struct MainTabs: View {
             // The household may be unknown offline at launch; fall back to the last one used.
             let householdId = household?.id ?? environment.lastHousehold.read()
             NavigationStack(path: $homePath) {
-                VStack(spacing: 16) {
+                if let householdId {
+                    HomeScreen(
+                        householdId: householdId, household: household, environment: environment,
+                        onOpenModule: { session.selectedTab = $0 },
+                        onOpenRoute: { homePath.append($0) }
+                    )
+                    .navigationDestination(for: HomeRoute.self) { route in
+                        switch route {
+                        case .settings:
+                            HouseholdSettingsScreen(householdId: householdId, session: session, environment: environment)
+                        case .members:
+                            MembersScreen(householdId: householdId, session: session, environment: environment)
+                        case .profile:
+                            ProfileView(model: profile, isOnline: environment.network.isOnline)
+                        }
+                    }
+                } else {
+                    // No household known yet (offline before any was read): nothing to show a feed for.
                     Text(title(tab))
                         .foregroundStyle(Tokens.text)
                         .accessibilityIdentifier("tab.home.content")
-                    if let householdId {
-                        NavigationLink("Members") {
-                            MembersScreen(householdId: householdId, session: session, environment: environment)
-                        }
-                        .accessibilityIdentifier("home.members")
-                        NavigationLink("Profile") {
-                            ProfileView(model: profile, isOnline: environment.network.isOnline)
-                        }
-                        .accessibilityIdentifier("home.profile")
-                        NavigationLink("Settings") {
-                            HouseholdSettingsScreen(householdId: householdId, session: session, environment: environment)
-                        }
-                        .accessibilityIdentifier("home.settings")
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Tokens.bg)
-                .navigationDestination(for: HomeRoute.self) { _ in
-                    if let householdId {
-                        HouseholdSettingsScreen(householdId: householdId, session: session, environment: environment)
-                    }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Tokens.bg)
                 }
             }
         } else {
@@ -301,6 +312,42 @@ private struct MainTabs: View {
         case .maintenance: "wrench.and.screwdriver"
         case .home: "house"
         }
+    }
+}
+
+/// Owns the `HomeModel` for the Home tab, so a re-render of the tabs never resets it. The tabs are rebuilt (`.id`)
+/// for a different household, which starts a fresh model on that household's database.
+private struct HomeScreen: View {
+    @State private var model: HomeModel
+    /// Settings can flip a module while Home is up; the model follows.
+    let household: LandingHousehold?
+    let onOpenModule: (AppTab) -> Void
+    let onOpenRoute: (MainTabs.HomeRoute) -> Void
+
+    init(
+        householdId: UUID, household: LandingHousehold?, environment: AppEnvironment,
+        onOpenModule: @escaping (AppTab) -> Void, onOpenRoute: @escaping (MainTabs.HomeRoute) -> Void
+    ) {
+        self.household = household
+        self.onOpenModule = onOpenModule
+        self.onOpenRoute = onOpenRoute
+        let sync = environment.sync
+        _model = State(initialValue: HomeModel(
+            householdId: householdId, modules: household.map(HomeModules.init),
+            database: environment.database, kick: { await sync.kick() }
+        ))
+    }
+
+    var body: some View {
+        HomeView(
+            model: model, onOpenModule: onOpenModule,
+            onInvite: { onOpenRoute(.members) }, onOpenMembers: { onOpenRoute(.members) },
+            onOpenSettings: { onOpenRoute(.settings) }, onOpenProfile: { onOpenRoute(.profile) }
+        )
+        .onChange(of: household) { _, household in model.modules = household.map(HomeModules.init) }
+        // The household file is open by now (the session opens it before publishing the destination), unlike
+        // the first kick on `SignedInView`, which can run before `open` and has nothing to pull into.
+        .task { await model.refresh() }
     }
 }
 
