@@ -47,7 +47,10 @@ enum Migrations {
                 t.column("deleted_at", .text)
                 t.column("sync_seq", .integer).notNull()
             }
-            try db.create(index: "activity_household_created_idx", on: "activity", columns: ["household_id", "created_at"])
+            // Mirrors SPEC §14 `activity_feed_idx`; `created_at` is UTC text, so text order is time order.
+            try db.execute(sql: """
+                CREATE INDEX activity_feed_idx ON activity (household_id, created_at DESC) WHERE deleted_at IS NULL
+                """)
         }
 
         return migrator

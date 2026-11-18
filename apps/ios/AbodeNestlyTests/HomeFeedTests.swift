@@ -148,11 +148,11 @@ struct ActivityPullTests {
         return []
     }
 
-    @Test("CORE-08: kick asks for the last 30 days, 20 rows, and stores what comes back")
+    @Test("CORE-08: kick asks for the last 30 days and stores what comes back")
     func pulls() async throws {
         let (pull, api, db) = try await setup()
         await pull.kick()
-        #expect(api.calls == [.fetchActivity(householdId: household, since: homeNow.addingTimeInterval(-30 * homeDay), limit: 20)])
+        #expect(api.calls == [.fetchActivity(householdId: household, since: homeNow.addingTimeInterval(-30 * homeDay), limit: HomeFeed.pullLimit)])
         #expect(await stored(db) == ["pulled"])
     }
 
@@ -185,6 +185,42 @@ struct ActivityPullTests {
         api.release()
         _ = await (first, second)
         #expect(api.calls.count == 1)
+    }
+
+    @Test("CORE-08: a tombstone replaces the cached row, and an empty page is still a read")
+    func tombstones() async throws {
+        let (pull, api, db) = try await setup()
+        let row = makeActivity("shown", ago: 5, household: household)
+        try await db.upsertActivity([row])
+        var retired = row
+        retired.deletedAt = homeNow
+        api.setActivityResult(.success([retired]))
+        await pull.kick()
+        #expect(await stored(db) == [])
+        api.setActivityResult(.success([]))
+        await pull.kick()
+        #expect(api.calls.count == 2)
+    }
+
+    @Test("CORE-08: a switch during the read is pulled again for the household now open")
+    func switchDuringRead() async throws {
+        let (pull, api, db) = try await setup()
+        let other = UUID()
+        api.hold()
+        async let kicked: Void = pull.kick()
+        for _ in 0..<50 { await Task.yield() }
+        try await db.open(householdId: other)
+        api.setActivityResult(.success([makeActivity("other", ago: 5, household: other)]))
+        api.release()
+        await kicked
+        let fetched: [UUID] = api.calls.compactMap {
+            if case .fetchActivity(let id, _, _) = $0 { id } else { nil }
+        }
+        #expect(fetched == [household, other])
+        for await rows in await db.observeActivity(householdId: other) {
+            #expect(rows.map(\.summary) == ["other"])
+            break
+        }
     }
 
     @Test("CORE-08: with no household open there is nothing to pull")

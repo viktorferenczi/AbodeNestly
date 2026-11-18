@@ -187,12 +187,12 @@ public actor HouseholdDatabase {
         }
     }
 
-    private static let dateStyle = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+    private static let dateStyle = Date.ISO8601FormatStyle(includingFractionalSeconds: true, timeZone: .gmt)
 
     private static func text(_ date: Date) -> String { date.formatted(dateStyle) }
 
     private static func date(_ text: String) -> Date? {
-        (try? Date(text, strategy: dateStyle)) ?? (try? Date(text, strategy: Date.ISO8601FormatStyle()))
+        (try? Date(text, strategy: dateStyle)) ?? (try? Date(text, strategy: Date.ISO8601FormatStyle(timeZone: .gmt)))
     }
 
     private static func activity(_ row: Row) -> Activity? {

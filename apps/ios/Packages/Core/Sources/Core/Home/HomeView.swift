@@ -55,25 +55,23 @@ public struct HomeView: View {
             }
         } else if let modules = model.modules {
             Section("Today") {
-                if modules.shopping { card(.shopping, "Shopping", ["On the list: 0"]) }
-                if modules.pantry { card(.pantry, "Pantry", ["Eat soon: 0", "Low: 0"]) }
-                if modules.maintenance { card(.maintenance, "Maintenance", ["Due tasks: 0"]) }
+                // Titles and tap-through only: the counts come with the module stories.
+                if modules.shopping { card(.shopping, "Shopping") }
+                if modules.pantry { card(.pantry, "Pantry") }
+                if modules.maintenance { card(.maintenance, "Maintenance") }
             }
         }
     }
 
-    private func card(_ tab: AppTab, _ title: String, _ counts: [String]) -> some View {
+    private func card(_ tab: AppTab, _ title: String) -> some View {
         Button { onOpenModule(tab) } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).foregroundStyle(Tokens.text).fontWeight(.semibold)
-                Text(counts.joined(separator: " · ")).font(.subheadline).foregroundStyle(Tokens.text2)
-            }
+            Text(title).foregroundStyle(Tokens.text).fontWeight(.semibold)
             .frame(maxWidth: .infinity, minHeight: Tokens.minTouchTarget, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title), \(counts.joined(separator: ", "))")
+        .accessibilityLabel(title)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("home.today.\(tab.rawValue)")
     }

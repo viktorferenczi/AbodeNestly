@@ -31,6 +31,8 @@ public enum HomeState: Equatable, Sendable {
 public enum HomeFeed {
     public static let days = 30
     public static let limit = 20
+    /// How many rows a pull asks for: the screen shows 20 live ones, so the read leaves room for tombstones among them.
+    public static let pullLimit = 100
 
     /// The newest 20 live rows of the last 30 days. Same-instant rows keep a stable order (id, descending).
     public static func window(_ rows: [Activity], now: Date) -> [Activity] {

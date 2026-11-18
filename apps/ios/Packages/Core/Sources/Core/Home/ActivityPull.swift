@@ -10,7 +10,8 @@ public actor ActivityPull: SyncEngine {
     private let database: HouseholdDatabase
     private let isOnline: @MainActor @Sendable () -> Bool
     private let now: @Sendable () -> Date
-    private var inflight: Task<Void, Never>?
+    /// The pull in flight; it resolves to the household it read, or `nil` when none was open.
+    private var inflight: Task<UUID?, Never>?
 
     public init(
         api: any ApiService, database: HouseholdDatabase,
@@ -25,23 +26,34 @@ public actor ActivityPull: SyncEngine {
     public func kick() async {
         // Ask first: the check below must not suspend, or two kicks could both see no pull in flight.
         guard await isOnline() else { return }
+        let fetched: UUID?
         if let inflight {
-            await inflight.value
-            return
+            fetched = await inflight.value
+        } else {
+            let task = Task { () -> UUID? in
+                let fetched = await pull()
+                // Cleared before any waiter resumes, so a waiter never joins a finished pull.
+                inflight = nil
+                return fetched
+            }
+            inflight = task
+            fetched = await task.value
         }
-        let task = Task { await pull() }
-        inflight = task
-        await task.value
-        inflight = nil
+        // A switch or landing during the read leaves the household that is open now unread (its rows were
+        // dropped as foreign): pull again for it. No household open (nil == nil) is nothing to pull.
+        if await database.current != fetched { await kick() }
     }
 
-    private func pull() async {
-        guard let householdId = await database.current else { return }
+    /// Returns the household it read.
+    private func pull() async -> UUID? {
+        guard let householdId = await database.current else { return nil }
         let since = HomeFeed.windowStart(now: now())
-        guard case .success(let rows) = await api.fetchActivity(householdId: householdId, since: since, limit: HomeFeed.limit),
-            !rows.isEmpty
-        else { return }
-        // The household may have changed while the read was in flight; `upsertActivity` drops foreign rows.
-        try? await database.upsertActivity(rows)
+        // Tombstones come too (SPEC §6.3), so a sentence soft-deleted on the server stops showing here, and an
+        // empty page is still a successful read. The household may change while the read is in flight;
+        // `upsertActivity` drops foreign rows.
+        if case .success(let rows) = await api.fetchActivity(householdId: householdId, since: since, limit: HomeFeed.pullLimit) {
+            try? await database.upsertActivity(rows)
+        }
+        return householdId
     }
 }

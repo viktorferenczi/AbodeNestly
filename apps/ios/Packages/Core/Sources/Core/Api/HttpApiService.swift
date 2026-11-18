@@ -99,7 +99,6 @@ public final class HttpApiService: ApiService {
         do {
             let url = try restURL(table: "activity", query: [
                 ("household_id", "eq.\(householdId.uuidString.lowercased())"),
-                ("deleted_at", "is.null"),
                 ("created_at", "gte.\(PostgrestJSON.format(since))"),
                 ("order", "created_at.desc"),
                 ("limit", String(limit)),

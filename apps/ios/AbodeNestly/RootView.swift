@@ -345,6 +345,9 @@ private struct HomeScreen: View {
             onOpenSettings: { onOpenRoute(.settings) }, onOpenProfile: { onOpenRoute(.profile) }
         )
         .onChange(of: household) { _, household in model.modules = household.map(HomeModules.init) }
+        // The household file is open by now (the session opens it before publishing the destination), unlike
+        // the first kick on `SignedInView`, which can run before `open` and has nothing to pull into.
+        .task { await model.refresh() }
     }
 }
 
