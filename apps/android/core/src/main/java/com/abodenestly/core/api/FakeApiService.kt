@@ -1,8 +1,10 @@
 package com.abodenestly.core.api
 
+import com.abodenestly.contract.models.Activity
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
 import kotlinx.coroutines.CompletableDeferred
+import java.time.OffsetDateTime
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
@@ -23,6 +25,7 @@ class FakeApiService : ApiService {
         data class MakeOwner(val householdId: UUID, val userId: UUID) : Call
         data class FetchHousehold(val householdId: UUID, val userId: UUID) : Call
         data class FetchMyHouseholds(val userId: UUID) : Call
+        data class FetchActivity(val householdId: UUID, val since: OffsetDateTime, val limit: Int) : Call
         data class UpdateModules(val householdId: UUID, val shopping: Boolean?, val pantry: Boolean?, val maintenance: Boolean?) : Call
         data class UpdateHousehold(val householdId: UUID, val name: String?, val currency: String?) : Call
     }
@@ -44,6 +47,7 @@ class FakeApiService : ApiService {
     @Volatile var makeOwnerResult: ApiResult<Unit> = ApiResult.Success(Unit)
     @Volatile var fetchHouseholdResult: ApiResult<HouseholdWithRole?> = ApiResult.Failure(ApiFailure.Unknown)
     @Volatile var myHouseholdsResult: ApiResult<List<HouseholdWithRole>> = ApiResult.Failure(ApiFailure.Unknown)
+    @Volatile var activityResult: ApiResult<List<Activity>> = ApiResult.Success(emptyList())
     @Volatile var updateModulesResult: ApiResult<Household> = ApiResult.Failure(ApiFailure.Unknown)
     @Volatile var updateHouseholdResult: ApiResult<Household> = ApiResult.Failure(ApiFailure.Unknown)
 
@@ -113,6 +117,13 @@ class FakeApiService : ApiService {
         recorded += Call.FetchHousehold(householdId, userId)
         val result = fetchHouseholdResult
         // Read before the gate, like fetchMembers: a held fetch returns what the server had when it started.
+        gate?.await()
+        return result
+    }
+
+    override suspend fun fetchActivity(householdId: UUID, since: OffsetDateTime, limit: Int): ApiResult<List<Activity>> {
+        recorded += Call.FetchActivity(householdId, since, limit)
+        val result = activityResult
         gate?.await()
         return result
     }

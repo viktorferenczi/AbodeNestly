@@ -24,7 +24,9 @@ import com.abodenestly.core.settings.DataStoreHouseholdCache
 import com.abodenestly.core.settings.HouseholdCache
 import com.abodenestly.core.switcher.DataStoreHouseholdsCache
 import com.abodenestly.core.switcher.HouseholdsCache
+import com.abodenestly.core.home.ActivityPull
 import com.abodenestly.sync.DatabaseRegistry
+import com.abodenestly.sync.SyncEngine
 import com.abodenestly.core.signin.SignInViewModel
 import com.abodenestly.core.welcome.WelcomeViewModel
 import com.abodenestly.core.welcome.land
@@ -71,6 +73,8 @@ class AppGraph(context: Context) {
         profileOutbox, HttpProfileRemote(config, auth), profileCache,
         currentUser = { auth.currentSession()?.userId }, scope = appScope,
     )
+    /** Interim `ActivityPull` until SHOP-08 brings the full push/pull loop behind the same seam. */
+    val sync: SyncEngine = ActivityPull(api, database, isOnline = { network.isOnline.value }, scope = appScope)
     val profileDeps = ProfileDeps(
         profileCache, profileOutbox, profileSync, HttpAvatarLoader(config, auth), avatarDir = File(context.filesDir, "avatars"),
     )
@@ -79,6 +83,9 @@ class AppGraph(context: Context) {
         // Triggers (CORE-06): connectivity returning, and a session appearing (a queue left by an earlier run).
         appScope.launch { network.isOnline.filter { it }.collect { profileSync.kick() } }
         appScope.launch { auth.sessionChanges.filter { it != null }.collect { profileSync.kick() } }
+        // CORE-08: the same connectivity trigger, plus entering or switching a household (its database just opened).
+        appScope.launch { network.isOnline.filter { it }.collect { sync.kick() } }
+        appScope.launch { database.current.filter { it != null }.collect { sync.kick() } }
     }
 
     val viewModelFactory = object : ViewModelProvider.Factory {

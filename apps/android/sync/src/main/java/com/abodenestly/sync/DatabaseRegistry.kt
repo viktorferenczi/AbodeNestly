@@ -1,15 +1,24 @@
 package com.abodenestly.sync
 
 import android.content.Context
+import com.abodenestly.contract.models.Activity
 import androidx.room.Room
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 /** A read or write that needs the open household database, with none open. */
@@ -44,7 +53,7 @@ open class DatabaseRegistry(
     open suspend fun open(id: UUID, isCurrent: () -> Boolean = { true }): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
             if (mutableCurrent.value == id && database != null) return@withLock isCurrent()
-            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).build()
+            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2).build()
             try {
                 db.meta().putIfAbsent(MetaEntity(CURSOR, "0"))
                 val seed = seedLists[id]
@@ -91,13 +100,41 @@ open class DatabaseRegistry(
             val open = database
             if (open != null && mutableCurrent.value == id) return@withLock open.outbox().count()
             if (!context.applicationContext.getDatabasePath(fileName(id)).exists()) return@withLock 0
-            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).build()
+            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2).build()
             try {
                 db.outbox().count()
             } finally {
                 db.close()
             }
         }
+    }
+
+    // Activity (CORE-08)
+
+    /**
+     * Stores pulled rows of household [id]. Dropped when [id] is not the open household: a pull that was in flight
+     * when the person switched must not write into the new household's file.
+     */
+    suspend fun upsertActivity(id: UUID, rows: List<Activity>) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val open = database
+            if (open == null || mutableCurrent.value != id) return@withLock
+            val own = rows.filter { it.householdId == id }
+            if (own.isNotEmpty()) open.activity().upsertAll(own.map(::toEntity))
+        }
+    }
+
+    /**
+     * The household's newest stored rows, re-emitted when they change (cached rows read offline, SPEC §6.5). Follows the
+     * open database: nothing is emitted while [id] is not the open household, and a switch away ends the inner flow.
+     */
+    fun activityFeed(id: UUID): Flow<List<Activity>> = current.flatMapLatest { open ->
+        val db = database
+        if (open != id || db == null) emptyFlow()
+        else db.activity().observeFeed(id.toString(), FEED_ROWS)
+            .map { rows -> rows.mapNotNull(::toActivity) }
+            // The database may close under the collector during a switch.
+            .catch { }
     }
 
     // Placeholder lists (replaced by SHOP-01/08).
@@ -127,5 +164,29 @@ open class DatabaseRegistry(
 
     private companion object {
         const val CURSOR = "cursor"
+        const val FEED_ROWS = 100
+
+        /** Fixed width, so comparing the text compares the time. */
+        val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
+
+        fun stamp(at: OffsetDateTime): String = STAMP.format(at)
+
+        fun toEntity(a: Activity) = ActivityEntity(
+            id = a.id.toString(), householdId = a.householdId.toString(), actorId = a.actorId?.toString(),
+            module = a.module.value, entity = a.entity, entityId = a.entityId.toString(), action = a.action,
+            summary = a.summary, createdAt = stamp(a.createdAt), updatedAt = stamp(a.updatedAt),
+            deletedAt = a.deletedAt?.let(::stamp), syncSeq = a.syncSeq,
+        )
+
+        fun toActivity(e: ActivityEntity): Activity? = runCatching {
+            Activity(
+                id = UUID.fromString(e.id), householdId = UUID.fromString(e.householdId),
+                actorId = e.actorId?.let(UUID::fromString),
+                module = Activity.Module.entries.first { it.value == e.module },
+                entity = e.entity, entityId = UUID.fromString(e.entityId), action = e.action, summary = e.summary,
+                createdAt = OffsetDateTime.parse(e.createdAt), updatedAt = OffsetDateTime.parse(e.updatedAt),
+                deletedAt = e.deletedAt?.let(OffsetDateTime::parse), syncSeq = e.syncSeq,
+            )
+        }.getOrNull()
     }
 }

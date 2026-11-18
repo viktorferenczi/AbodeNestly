@@ -1,6 +1,7 @@
 package com.abodenestly.core.api
 
 import com.abodenestly.contract.infrastructure.Serializer
+import com.abodenestly.contract.models.Activity
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
 import com.abodenestly.contract.models.Member
@@ -93,6 +94,21 @@ class HttpApiService(
             { invites -> ApiResult.Success(invites.firstOrNull { it.uses < it.maxUses }) },
             { ApiResult.Failure(ApiFailure.Unknown) },
         )
+    }
+
+    override suspend fun fetchActivity(householdId: UUID, since: OffsetDateTime, limit: Int): ApiResult<List<Activity>> = guarded {
+        val url = restUrl(
+            "activity",
+            "household_id" to "eq.$householdId",
+            "created_at" to "gte.${timestamp(since)}",
+            "order" to "created_at.desc",
+            "limit" to limit.toString(),
+        )
+        val reply = perform(url, "GET", restHeaders())
+        if (reply.status != 200) return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        runCatching {
+            Serializer.kotlinxSerializationJson.decodeFromString(ListSerializer(Activity.serializer()), reply.body)
+        }.fold({ ApiResult.Success(it) }, { ApiResult.Failure(ApiFailure.Unknown) })
     }
 
     override suspend fun retireInvite(id: UUID): ApiResult<Unit> = guarded {

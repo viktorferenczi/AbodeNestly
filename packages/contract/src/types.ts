@@ -71,5 +71,18 @@ export type CreateInviteRequest = { role?: Role; expires_in_days?: number; max_u
 /** `PATCH /households/{id}/modules` body. Partial; the API requires at least one flag (`validation`). */
 export type UpdateModulesRequest = { shopping?: boolean; pantry?: boolean; maintenance?: boolean };
 
+/**
+ * A sentence a member sees on Home (SPEC §8, CORE-08). Written server-side (X6); clients only read it,
+ * so there is no request type. `module` is `core` for household-level events.
+ */
+export interface Activity extends Synced {
+  actor_id: UUID | null;
+  module: Module | 'core';
+  entity: string;
+  entity_id: UUID;
+  action: string;
+  summary: string;
+}
+
 /** `POST /invites/{code}/accept` response. */
 export type AcceptInviteResponse = { household_id: UUID };

@@ -47,7 +47,11 @@ import com.abodenestly.core.settings.HouseholdCache
 import com.abodenestly.core.switcher.HouseholdsCache
 import com.abodenestly.core.switcher.SwitcherSheet
 import com.abodenestly.core.switcher.SwitcherViewModel
+import com.abodenestly.core.home.HomeEvent
+import com.abodenestly.core.home.HomeModules
+import com.abodenestly.core.home.HomeScreen
 import com.abodenestly.sync.DatabaseRegistry
+import com.abodenestly.sync.SyncEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -80,6 +84,7 @@ fun AppRoot(
     profileDeps: ProfileDeps,
     database: DatabaseRegistry,
     householdsCache: HouseholdsCache,
+    sync: SyncEngine,
 ) {
     val state by session.state.collectAsState()
     val online by network.isOnline.collectAsState()
@@ -89,7 +94,7 @@ fun AppRoot(
             SessionStatus.Loading -> Box(Modifier.fillMaxSize().testTag("session.loading"))
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = online)
             SessionStatus.SignedIn -> SignedInShell(
-                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, householdsCache,
+                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, householdsCache, sync,
                 onSwitch = session::switchTo, onSelectTab = session::selectTab, onSettingsShown = session::settingsShown,
                 meId = session.userId, email = session.email, isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
                 onLeft = session::leftHousehold, onHouseholdChanged = session::updateHousehold,
@@ -111,6 +116,7 @@ private fun SignedInShell(
     profileDeps: ProfileDeps,
     database: DatabaseRegistry,
     householdsCache: HouseholdsCache,
+    sync: SyncEngine,
     onSwitch: suspend (UUID, Boolean) -> Unit,
     onSelectTab: (AppTab) -> Unit,
     onSettingsShown: () -> Unit,
@@ -157,7 +163,7 @@ private fun SignedInShell(
                 }
                 else -> Tabs(
                     state.destination, state.household, state.profile, state.selectedTab, state.settingsRequested, onSelectTab, onSettingsShown,
-                    api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, meId, email, isOnline, onSignOut, onLeft, onHouseholdChanged, onProfileChanged,
+                    api, lastHousehold, membersCache, householdCache, householdsCache, webBaseUrl, profileDeps, database, sync, meId, email, isOnline, onSignOut, onLeft, onHouseholdChanged, onProfileChanged,
                 )
             }
         }
@@ -214,9 +220,11 @@ private fun Tabs(
     lastHousehold: LastHouseholdStore,
     membersCache: MembersCache,
     householdCache: HouseholdCache,
+    householdsCache: HouseholdsCache,
     webBaseUrl: String,
     profileDeps: ProfileDeps,
     database: DatabaseRegistry,
+    sync: SyncEngine,
     meId: UUID?,
     email: String?,
     isOnline: Boolean,
@@ -244,6 +252,14 @@ private fun Tabs(
         }
     }
     val members = householdId
+    // Offline at launch the landing read fails and `household` stays null; the flags then come from the cached households list, so the Today cards and the all-off prompt still show.
+    var cachedModules by remember { mutableStateOf<HomeModules?>(null) }
+    LaunchedEffect(household, members, meId) {
+        cachedModules = null
+        if (household == null && members != null && meId != null) {
+            cachedModules = householdsCache.read(meId).firstOrNull { it.household.id == members }?.household?.let(HomeModules::of)
+        }
+    }
     if (showProfile && meId != null) {
         BackHandler { showProfile = false }
         Column(Modifier.fillMaxSize()) {
@@ -281,15 +297,33 @@ private fun Tabs(
         return
     }
     Column(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f).fillMaxSize().testTag("tab.${selected.key}.content"), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(selected.key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.headlineMedium)
-                if (BuildConfig.DEBUG && selected == AppTab.Shopping) LocalLists(database)
-                if (selected == AppTab.Home) {
-                    if (members != null && meId != null) TextButton(onClick = { showMembers = true }, modifier = Modifier.testTag("home.members")) { Text("Members") }
-                    if (members != null && meId != null) TextButton(onClick = { showSettings = true }, modifier = Modifier.testTag("home.settings")) { Text("Settings") }
-                    if (meId != null) TextButton(onClick = { showProfile = true }, modifier = Modifier.testTag("home.profile")) { Text("Profile") }
-                    TextButton(onClick = onSignOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
+        if (selected == AppTab.Home && members != null) {
+            Column(Modifier.weight(1f).fillMaxSize().testTag("tab.home.content")) {
+                HomeScreen(
+                    members, household?.let(HomeModules::of) ?: cachedModules, database, sync,
+                    onNavigate = { event ->
+                        when (event) {
+                            is HomeEvent.OpenModule -> onSelectTab(event.tab)
+                            HomeEvent.OpenSettings -> if (meId != null) showSettings = true
+                            HomeEvent.OpenMembers -> if (meId != null) showMembers = true
+                            HomeEvent.OpenProfile -> if (meId != null) showProfile = true
+                            HomeEvent.Refresh -> Unit
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onSignOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
+            }
+        } else {
+            Box(Modifier.weight(1f).fillMaxSize().testTag("tab.${selected.key}.content"), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(selected.key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.headlineMedium)
+                    if (BuildConfig.DEBUG && selected == AppTab.Shopping) LocalLists(database)
+                    if (selected == AppTab.Home) {
+                        // No household known yet (offline before any was read): nothing to show a feed for.
+                        if (meId != null) TextButton(onClick = { showProfile = true }, modifier = Modifier.testTag("home.profile")) { Text("Profile") }
+                        TextButton(onClick = onSignOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
+                    }
                 }
             }
         }
