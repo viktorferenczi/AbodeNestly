@@ -140,7 +140,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 - States: `empty-query` (recent searches) · `no-results` · `results`.
 - Offline: works. · Gating: sections per module.
 
-_Deviation (CORE-09): the module list stories do not exist yet, so a result row opens a placeholder at its DESIGN path on web (`/shopping/:listId`, `/shopping/stores/:id`, `/pantry?item=:id`, `/pantry/settings`, `/pantry/recipes/:id`, `/maintenance/assets/:id`, `/maintenance/tasks/:id`, `/maintenance/contractors`) and switches to the module's tab on iOS and Android. Recent searches (last 8 per household, newest first) are stored on the device: `abodenestly:search:<householdId>` (web localStorage), `abodenestly.search.<householdId>` (iOS UserDefaults, Android DataStore). The magnifier is a TopBar action on every web tab screen (beside the profile name) and on Home on iOS and Android._
+_Deviation (CORE-09): the module list stories do not exist yet, so a result row opens a placeholder at its DESIGN path on web (`/shopping/:listId?item=:id`, `/shopping/stores/:id`, `/pantry?item=:id`, `/pantry/settings`, `/pantry/recipes/:id`, `/maintenance/assets/:id`, `/maintenance/tasks/:id`, `/maintenance/contractors`) and switches to the module's tab on iOS and Android. Recent searches (last 8 per household, newest first) are stored on the device: `abodenestly:search:<householdId>` (web localStorage), `abodenestly.search.<householdId>` (iOS UserDefaults, Android DataStore). The magnifier is a TopBar action on every web tab screen once the household is ready (beside the profile name) and on Home on iOS and Android._
 
 ### B9. Notification preferences
 - Route: `/profile/notifications` · Purpose: CORE-12.

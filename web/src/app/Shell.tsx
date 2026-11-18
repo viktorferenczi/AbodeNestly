@@ -18,16 +18,18 @@ function Tabs() {
 
 function Bar() {
   const { profile } = useAuth();
-  const { household } = useHousehold();
+  const { status, household } = useHousehold();
   const [open, setOpen] = useState(false);
   return (
     <>
       <TopBar title={household?.name ?? 'AbodeNestly'} trailing={
           <>
-            {profile?.display_name}
-            <Link to="/search" aria-label="Search" className={styles.search}>
-              🔍
-            </Link>
+            <span className={styles.name}>{profile?.display_name}</span>
+            {status === 'ready' ? (
+              <Link to="/search" aria-label="Search" className={styles.search}>
+                🔍
+              </Link>
+            ) : null}
           </>
         } onTitleClick={() => setOpen(true)} titleExpanded={open} />
       {open ? <Switcher onClose={() => setOpen(false)} /> : null}

@@ -132,6 +132,7 @@ describe('CORE-09: Search screen', () => {
     type('milk');
     await advance(150);
     await afterDebounce();
+    expect(screen.queryByTestId('search.noResults')).toBeNull();
     expect(screen.getByTestId('search.section.shopping')).toBeTruthy();
     expect(screen.getByTestId('search.section.pantry')).toBeTruthy();
     expect(screen.queryByTestId('search.section.maintenance')).toBeNull();
@@ -168,7 +169,20 @@ describe('CORE-09: Search screen', () => {
     fireEvent.click(link);
     await settle();
     expect(router.state.location.pathname).toBe('/shopping/L1');
+    expect(router.state.location.search).toBe('?item=li1');
     expect(readRecentSearches('h1')).toEqual(['milk']);
+  });
+
+  it('CORE-09: a term that matches never flashes no-results while typing a new one', async () => {
+    await renderSearch();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    type('milk');
+    await advance(150);
+    await afterDebounce();
+    type('milk p');
+    await advance(150);
+    expect(screen.queryByTestId('search.noResults')).toBeNull();
+    expect(screen.getAllByTestId('search.row')).toHaveLength(1);
   });
 
   it('CORE-09: the TopBar magnifier links to /search', async () => {

@@ -78,10 +78,11 @@ export function searchState(query: string, sections: readonly SearchSection[]): 
 }
 
 /** DESIGN B8 entity paths; the destinations are placeholders until each module's list story. */
-export function targetPath(t: SearchTarget): string {
+/** `null` when the row has no screen to open. */
+export function targetPath(t: SearchTarget): string | null {
   switch (t.table) {
     case 'list_item':
-      return `/shopping/${t.listId ?? ''}`;
+      return t.listId ? `/shopping/${t.listId}?item=${t.id}` : null;
     case 'store':
       return `/shopping/stores/${t.id}`;
     case 'pantry_item':

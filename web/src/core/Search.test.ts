@@ -72,7 +72,8 @@ describe('CORE-09: search model', () => {
   });
 
   it.each([
-    [{ module: 'shopping', table: 'list_item', id: 'i', listId: 'L' }, '/shopping/L'],
+    [{ module: 'shopping', table: 'list_item', id: 'i', listId: 'L' }, '/shopping/L?item=i'],
+    [{ module: 'shopping', table: 'list_item', id: 'i' }, null],
     [{ module: 'shopping', table: 'store', id: 's' }, '/shopping/stores/s'],
     [{ module: 'pantry', table: 'pantry_item', id: 'p' }, '/pantry?item=p'],
     [{ module: 'pantry', table: 'location', id: 'x' }, '/pantry/settings'],

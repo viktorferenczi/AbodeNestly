@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { useLiveQuery } from '../ui/useLiveQuery.ts';
 import { useHousehold } from './household/HouseholdProvider.tsx';
@@ -32,12 +32,15 @@ export function Search() {
   const householdId = household?.id;
   const [query, setQuery] = useState('');
   const debounced = useDebounced(query, SEARCH_DEBOUNCE_MS);
-  const [recents, setRecents] = useState<string[]>([]);
-  useEffect(() => setRecents(householdId ? readRecentSearches(householdId) : []), [householdId]);
+  // Read during render (not in an effect) so the first paint already lists them; `saved` re-reads after a push.
+  const [saved, setSaved] = useState(0);
+  const recents = useMemo(() => (householdId ? readRecentSearches(householdId) : []), [householdId, saved]);
 
   const tables = enabledTables(modules);
+  // Loads every name of the enabled modules once; the term is applied in `searchSections`, so typing never
+  // blanks the live query (SPEC §6.1: the screen shows the local read).
   const rows = useLiveQuery<SearchRow[]>(async () => {
-    if (!db || !householdId || debounced.trim() === '') return [];
+    if (!db || !householdId) return [];
     const parts = await Promise.all(
       tables.map(async (table): Promise<SearchRow[]> => {
         const all = await db.table(table).where('household_id').equals(householdId).toArray();
@@ -51,14 +54,19 @@ export function Search() {
       }),
     );
     return parts.flat();
-  }, [db, householdId, debounced, tables.join(',')]);
+  }, [db, householdId, tables.join(',')]);
 
   if (status !== 'ready') return null;
 
   const sections = rows ? searchSections(rows, debounced, modules) : [];
+  // Until the first read resolves there is nothing to say about a non-empty term.
   const state = searchState(debounced, sections);
+  const loading = rows === undefined && state !== 'empty-query';
   const remember = () => {
-    if (householdId) setRecents(pushRecentSearch(householdId, debounced));
+    if (householdId) {
+      pushRecentSearch(householdId, debounced);
+      setSaved((n) => n + 1);
+    }
   };
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -79,6 +87,7 @@ export function Search() {
         />
       </form>
 
+      <div aria-live="polite">
       {state === 'empty-query' ? (
         <section data-testid="search.empty" aria-label="Recent searches">
           <h2 className={styles.heading}>Recent searches</h2>
@@ -98,29 +107,38 @@ export function Search() {
         </section>
       ) : null}
 
-      {state === 'no-results' && rows ? (
+      {state === 'no-results' && !loading ? (
         <p className={styles.hint} data-testid="search.noResults">
           No results for “{debounced.trim()}”.
         </p>
       ) : null}
 
-      {state === 'results'
+      {state === 'results' && !loading
         ? sections.map((s) => (
             <section key={s.module} data-testid={`search.section.${s.module}`} aria-label={MODULE_LABEL[s.module]}>
               <h2 className={`${styles.heading} ${styles[s.module]}`}>{MODULE_LABEL[s.module]}</h2>
               <ul className={styles.list}>
                 {s.items.map((i) => (
                   <li key={i.key}>
-                    <Link to={targetPath(i.target)} className={styles.row} data-testid="search.row" onClick={remember}>
-                      <span>{i.name}</span>
-                      <span className={styles.kind}>{i.kind}</span>
-                    </Link>
+                    {targetPath(i.target) ? (
+                      <Link to={targetPath(i.target)!} className={styles.row} data-testid="search.row" onClick={remember}>
+                        <span>{i.name}</span>
+                        <span className={styles.kind}>{i.kind}</span>
+                      </Link>
+                    ) : (
+                      // A list item without its list has no screen to open (its list row has not synced yet).
+                      <div className={styles.row} data-testid="search.row">
+                        <span>{i.name}</span>
+                        <span className={styles.kind}>{i.kind}</span>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
             </section>
           ))
         : null}
+      </div>
     </div>
   );
 }
