@@ -158,14 +158,13 @@ open class DatabaseRegistry(
     // Search (CORE-09)
 
     /**
-     * Names in [modules]' tables matching [query] (SQL `LIKE`, a superset of what `Search.group` keeps), re-emitted
-     * when those tables change. Only enabled modules' tables are queried (AC4). Follows the open database like
+     * The live rows of [modules]' tables, re-emitted when those tables change; a blank [query] reads nothing. The
+     * name match is `Search.group`'s, so every live row of the household comes back. Only enabled modules' tables are queried (AC4). Follows the open database like
      * [activityFeed]; nothing is emitted while [id] is not the open household.
      */
     fun searchNames(id: UUID, query: String, modules: Set<SearchModule>): Flow<List<SearchRow>> {
         val q = query.trim()
         if (q.isEmpty() || modules.isEmpty()) return flowOf(emptyList())
-        val pattern = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         return current.flatMapLatest { open ->
             val db = database
             if (open != id || db == null) emptyFlow()
@@ -174,14 +173,14 @@ open class DatabaseRegistry(
                 val hid = id.toString()
                 val tables = modules.flatMap { it.tables }.toSet()
                 val flows = buildList<Flow<List<SearchRow>>> {
-                    if ("list_item" in tables) add(dao.listItems(hid, pattern).map { r -> r.map { SearchRow("list_item", it.id, it.name, it.listId, it.deletedAt) } })
-                    if ("store" in tables) add(dao.stores(hid, pattern).map { r -> r.map { SearchRow("store", it.id, it.name, deletedAt = it.deletedAt) } })
-                    if ("pantry_item" in tables) add(dao.pantryItems(hid, pattern).map { r -> r.map { SearchRow("pantry_item", it.id, it.name, deletedAt = it.deletedAt) } })
-                    if ("location" in tables) add(dao.locations(hid, pattern).map { r -> r.map { SearchRow("location", it.id, it.name, deletedAt = it.deletedAt) } })
-                    if ("recipe" in tables) add(dao.recipes(hid, pattern).map { r -> r.map { SearchRow("recipe", it.id, it.name, deletedAt = it.deletedAt) } })
-                    if ("asset" in tables) add(dao.assets(hid, pattern).map { r -> r.map { SearchRow("asset", it.id, it.name, deletedAt = it.deletedAt) } })
-                    if ("maint_task" in tables) add(dao.maintTasks(hid, pattern).map { r -> r.map { SearchRow("maint_task", it.id, it.title, deletedAt = it.deletedAt) } })
-                    if ("contractor" in tables) add(dao.contractors(hid, pattern).map { r -> r.map { SearchRow("contractor", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("list_item" in tables) add(dao.listItems(hid).map { r -> r.map { SearchRow("list_item", it.id, it.name, it.listId, it.deletedAt) } })
+                    if ("store" in tables) add(dao.stores(hid).map { r -> r.map { SearchRow("store", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("pantry_item" in tables) add(dao.pantryItems(hid).map { r -> r.map { SearchRow("pantry_item", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("location" in tables) add(dao.locations(hid).map { r -> r.map { SearchRow("location", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("recipe" in tables) add(dao.recipes(hid).map { r -> r.map { SearchRow("recipe", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("asset" in tables) add(dao.assets(hid).map { r -> r.map { SearchRow("asset", it.id, it.name, deletedAt = it.deletedAt) } })
+                    if ("maint_task" in tables) add(dao.maintTasks(hid).map { r -> r.map { SearchRow("maint_task", it.id, it.title, deletedAt = it.deletedAt) } })
+                    if ("contractor" in tables) add(dao.contractors(hid).map { r -> r.map { SearchRow("contractor", it.id, it.name, deletedAt = it.deletedAt) } })
                 }
                 combine(flows) { parts -> parts.toList().flatten() }
                     // The database may close under the collector during a switch.

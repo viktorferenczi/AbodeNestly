@@ -173,34 +173,34 @@ interface ActivityDao {
 }
 
 /**
- * One query per searchable table (CORE-09). `LIKE` narrows in SQL (case-insensitive for ASCII only, `\` escapes
- * `%`/`_` in the query); `Search.group` in `:core` is the exact, locale-insensitive match.
+ * One query per searchable table (CORE-09): the household's live rows. The name match is `Search.group` in `:core`
+ * (locale-insensitive); SQLite `LIKE` only folds ASCII case, so it is not used. These tables hold names only, so the scan is the household.
  */
 @Dao
 interface SearchDao {
-    @Query("SELECT * FROM list_item WHERE household_id = :householdId AND deleted_at IS NULL AND name LIKE '%' || :q || '%' ESCAPE '\\'")
-    fun listItems(householdId: String, q: String): Flow<List<ListItemEntity>>
+    @Query("SELECT * FROM list_item WHERE household_id = :householdId AND deleted_at IS NULL")
+    fun listItems(householdId: String): Flow<List<ListItemEntity>>
 
-    @Query("SELECT * FROM pantry_item WHERE household_id = :householdId AND deleted_at IS NULL AND name LIKE '%' || :q || '%' ESCAPE '\\'")
-    fun pantryItems(householdId: String, q: String): Flow<List<PantryItemEntity>>
+    @Query("SELECT * FROM pantry_item WHERE household_id = :householdId AND deleted_at IS NULL")
+    fun pantryItems(householdId: String): Flow<List<PantryItemEntity>>
 
-    @Query("SELECT * FROM recipe WHERE household_id = :householdId AND deleted_at IS NULL AND name LIKE '%' || :q || '%' ESCAPE '\\'")
-    fun recipes(householdId: String, q: String): Flow<List<RecipeEntity>>
+    @Query("SELECT * FROM recipe WHERE household_id = :householdId AND deleted_at IS NULL")
+    fun recipes(householdId: String): Flow<List<RecipeEntity>>
 
-    @Query("SELECT * FROM asset WHERE household_id = :householdId AND deleted_at IS NULL AND name LIKE '%' || :q || '%' ESCAPE '\\'")
-    fun assets(householdId: String, q: String): Flow<List<AssetEntity>>
+    @Query("SELECT * FROM asset WHERE household_id = :householdId AND deleted_at IS NULL")
+    fun assets(householdId: String): Flow<List<AssetEntity>>
 
-    @Query("SELECT * FROM maint_task WHERE household_id = :householdId AND deleted_at IS NULL AND title LIKE '%' || :q || '%' ESCAPE '\\'")
-    fun maintTasks(householdId: String, q: String): Flow<List<MaintTaskEntity>>
+    @Query("SELECT * FROM maint_task WHERE household_id = :householdId AND deleted_at IS NULL")
+    fun maintTasks(householdId: String): Flow<List<MaintTaskEntity>>
 
-    @Query("SELECT * FROM store WHERE household_id = :householdId AND deleted_at IS NULL AND name LIKE '%' || :q || '%' ESCAPE '\\'")
-    fun stores(householdId: String, q: String): Flow<List<StoreEntity>>
+    @Query("SELECT * FROM store WHERE household_id = :householdId AND deleted_at IS NULL")
+    fun stores(householdId: String): Flow<List<StoreEntity>>
 
-    @Query("SELECT * FROM location WHERE household_id = :householdId AND deleted_at IS NULL AND name LIKE '%' || :q || '%' ESCAPE '\\'")
-    fun locations(householdId: String, q: String): Flow<List<LocationEntity>>
+    @Query("SELECT * FROM location WHERE household_id = :householdId AND deleted_at IS NULL")
+    fun locations(householdId: String): Flow<List<LocationEntity>>
 
-    @Query("SELECT * FROM contractor WHERE household_id = :householdId AND deleted_at IS NULL AND name LIKE '%' || :q || '%' ESCAPE '\\'")
-    fun contractors(householdId: String, q: String): Flow<List<ContractorEntity>>
+    @Query("SELECT * FROM contractor WHERE household_id = :householdId AND deleted_at IS NULL")
+    fun contractors(householdId: String): Flow<List<ContractorEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertListItem(row: ListItemEntity)

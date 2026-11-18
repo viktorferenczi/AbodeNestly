@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -66,11 +67,12 @@ internal fun SearchContent(ui: SearchUiState, onEvent: (SearchEvent) -> Unit, mo
     val tokens = LocalTokens.current
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    Column(modifier.fillMaxSize().padding(Tokens.ScreenPadding), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxSize().imePadding().padding(Tokens.ScreenPadding), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(
             value = ui.query,
             onValueChange = { onEvent(SearchEvent.QueryChanged(it)) },
             modifier = Modifier.fillMaxWidth().heightIn(min = Tokens.MinTouchTarget).focusRequester(focus).testTag("search.field"),
+            label = { Text("Search") },
             placeholder = { Text("Search your household") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),

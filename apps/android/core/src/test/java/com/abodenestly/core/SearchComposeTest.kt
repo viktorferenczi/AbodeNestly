@@ -12,7 +12,9 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import com.abodenestly.core.Fixtures.id
 import com.abodenestly.core.api.ApiService
@@ -196,5 +198,40 @@ class SearchComposeTest {
         scheduler.runCurrent()
         assertEquals(listOf(SearchTarget(SearchModule.Shopping, "list_item", "l1", "list1")), opened)
         assertEquals(listOf("milk"), runBlocking { recents.read(household) })
+    }
+
+    @Test
+    fun `CORE-09 the search key searches the field text before the debounce and records it when it found something`() {
+        show()
+        type("milk")
+        scheduler.advanceTimeBy(50)
+        scheduler.runCurrent()
+        rule.onNodeWithTag("search.field").performImeAction()
+        await("search.row")
+        assertEquals(listOf("milk"), runBlocking { recents.read(household) })
+    }
+
+    @Test
+    fun `CORE-09 the search key shows no-results at once and records nothing`() {
+        show()
+        type("zzz")
+        scheduler.advanceTimeBy(50)
+        scheduler.runCurrent()
+        rule.onNodeWithTag("search.field").performImeAction()
+        await("search.noResults")
+        assertTrue(runBlocking { recents.read(household) }.isEmpty())
+    }
+
+    @Test
+    fun `CORE-09 the search key records the field text, not the previous query`() {
+        show()
+        type("milk")
+        debounce()
+        await("search.row")
+        rule.onNodeWithTag("search.field").performTextReplacement("bread")
+        scheduler.runCurrent()
+        rule.onNodeWithTag("search.field").performImeAction()
+        await("search.noResults")
+        assertTrue(runBlocking { recents.read(household) }.isEmpty())
     }
 }

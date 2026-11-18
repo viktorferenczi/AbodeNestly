@@ -169,10 +169,21 @@ class SearchRegistryTest {
     }
 
     @Test
-    fun `CORE-09 percent and underscore in the query are literal`() {
-        seed()
-        assertTrue(search("%").isEmpty())
-        assertTrue(search("m_lk").isEmpty())
+    fun `CORE-09 the registry leaves the name match to Search group, so non-ASCII case-only pairs come back`() {
+        runBlocking {
+            registry.open(household)
+            registry.withSearchDao { dao ->
+                dao.upsertListItem(ListItemEntity("t1", household.toString(), "list1", "İstanbul"))
+                dao.upsertListItem(ListItemEntity("t2", household.toString(), "list1", "istanbul"))
+                dao.upsertListItem(ListItemEntity("t3", household.toString(), "list1", "Éclair"))
+                dao.upsertListItem(ListItemEntity("t4", household.toString(), "list1", "éclair"))
+            }
+        }
+        val rows = search("istanbul")
+        assertTrue(listOf("t1", "t2").all { id -> rows.any { it.id == id } })
+        assertEquals(listOf("t2"), Search.group(rows, "istanbul", ALL).flatMap { s -> s.rows.map { it.target.id } }.filter { it in setOf("t1", "t2") })
+        val eclair = search("ÉCLAIR")
+        assertEquals(listOf("t3", "t4"), Search.group(eclair, "ÉCLAIR", ALL).flatMap { s -> s.rows.map { it.target.id } }.sorted())
     }
 
     @Test

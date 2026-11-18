@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -51,7 +52,7 @@ sealed interface SearchEvent {
 class SearchViewModel(
     private val householdId: UUID,
     private val modules: Set<SearchModule>,
-    rows: (String, Set<SearchModule>) -> Flow<List<SearchRow>>,
+    private val rows: (String, Set<SearchModule>) -> Flow<List<SearchRow>>,
     private val recents: RecentSearchStore,
     var navigate: (SearchEvent.Open) -> Unit = {},
     debounceMs: Long = Search.DEBOUNCE_MS,
@@ -79,7 +80,7 @@ class SearchViewModel(
         when (event) {
             is SearchEvent.QueryChanged -> setQuery(event.text)
             is SearchEvent.PickRecent -> setQuery(event.text)
-            SearchEvent.Submit -> if (mutableState.value.sections.isNotEmpty()) remember()
+            SearchEvent.Submit -> submit()
             is SearchEvent.Open -> {
                 remember()
                 navigate(event)
@@ -92,9 +93,24 @@ class SearchViewModel(
         queryFlow.value = text
     }
 
+    /** The search key: searches the field text now, ahead of the debounce, and remembers it only if it found something. */
+    private fun submit() {
+        val q = mutableState.value.query
+        if (q.isBlank()) return
+        scope.launch {
+            val sections = Search.group(rows(q, modules).first(), q, modules)
+            mutableState.update { it.copy(debounced = q, sections = sections) }
+            if (sections.isNotEmpty()) recordRecent(q)
+        }
+    }
+
     private fun remember() {
         val q = mutableState.value.debounced
         if (q.isBlank()) return
-        scope.launch { mutableState.update { it.copy(recents = recents.record(householdId, q)) } }
+        scope.launch { recordRecent(q) }
+    }
+
+    private suspend fun recordRecent(q: String) {
+        mutableState.update { it.copy(recents = recents.record(householdId, q)) }
     }
 }

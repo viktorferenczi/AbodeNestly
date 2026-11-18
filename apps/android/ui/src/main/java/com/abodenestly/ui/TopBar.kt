@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -43,9 +42,10 @@ fun TopBar(title: String, trailing: String? = null, modifier: Modifier = Modifie
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val titleModifier = if (onTitleClick == null) {
-            Modifier.testTag("topbar.title").semantics { heading() }
+            Modifier.weight(1f).testTag("topbar.title").semantics { heading() }
         } else {
             Modifier
+                .weight(1f)
                 .heightIn(min = Tokens.MinTouchTarget)
                 .clickable(role = Role.Button, onClick = onTitleClick)
                 .testTag("topbar.title")
@@ -59,8 +59,9 @@ fun TopBar(title: String, trailing: String? = null, modifier: Modifier = Modifie
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = tokens.text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        if (trailing != null || actions != null) Spacer(Modifier.weight(1f))
         if (trailing != null) {
             Text(
                 trailing,
