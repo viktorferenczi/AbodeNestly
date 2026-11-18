@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Outlet } from 'react-router';
+import { Link, Outlet } from 'react-router';
 import { useAuth } from '../core/auth/AuthProvider.tsx';
 import { HouseholdProvider, useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { useApi } from '../core/api/ApiProvider.tsx';
@@ -22,7 +22,14 @@ function Bar() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <TopBar title={household?.name ?? 'AbodeNestly'} trailing={profile?.display_name} onTitleClick={() => setOpen(true)} titleExpanded={open} />
+      <TopBar title={household?.name ?? 'AbodeNestly'} trailing={
+          <>
+            {profile?.display_name}
+            <Link to="/search" aria-label="Search" className={styles.search}>
+              🔍
+            </Link>
+          </>
+        } onTitleClick={() => setOpen(true)} titleExpanded={open} />
       {open ? <Switcher onClose={() => setOpen(false)} /> : null}
     </>
   );
