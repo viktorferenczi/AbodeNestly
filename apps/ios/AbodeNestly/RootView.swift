@@ -101,7 +101,12 @@ private struct SignedInView: View {
             TopBar(
                 title: session.householdName ?? "AbodeNestly", trailing: session.profile?.displayName,
                 // No household yet (Welcome, loading): nothing to switch from.
-                onTitleTap: showsSwitcher ? { showSwitcher = true } : nil
+                onTitleTap: showsSwitcher ? { showSwitcher = true } : nil,
+                // Search reads the open household's local database, so it needs one (not Welcome or the load error).
+                actions: showsSwitcher ? [TopBarAction(
+                    systemImage: "magnifyingglass", label: "Search", identifier: "topbar.search",
+                    action: { session.searchRequested = true }
+                )] : []
             )
             content
         }
@@ -206,7 +211,7 @@ private struct MainTabs: View {
     let environment: AppEnvironment
     @State private var homePath: [HomeRoute] = []
 
-    fileprivate enum HomeRoute: Hashable { case settings, members, profile }
+    fileprivate enum HomeRoute: Hashable { case settings, members, profile, search }
 
     init(session: SessionModel, profile: ProfileModel, household: LandingHousehold?, environment: AppEnvironment) {
         self.session = session
@@ -248,6 +253,13 @@ private struct MainTabs: View {
             session.selectedTab = .home
             homePath = [.settings]
         }
+        // The TopBar magnifier (CORE-09), from any tab.
+        .onChange(of: session.searchRequested, initial: true) { _, requested in
+            guard requested else { return }
+            session.searchRequested = false
+            session.selectedTab = .home
+            homePath = [.search]
+        }
     }
 
     @ViewBuilder
@@ -270,6 +282,15 @@ private struct MainTabs: View {
                             MembersScreen(householdId: householdId, session: session, environment: environment)
                         case .profile:
                             ProfileView(model: profile, isOnline: environment.network.isOnline)
+                        case .search:
+                            SearchScreen(
+                                householdId: householdId, household: household, environment: environment,
+                                // The entity screens come with the module stories: switch to the module's tab.
+                                onOpen: { target in
+                                    homePath = []
+                                    session.selectedTab = target.module.tab
+                                }
+                            )
                         }
                     }
                 } else {
@@ -348,6 +369,28 @@ private struct HomeScreen: View {
         // The household file is open by now (the session opens it before publishing the destination), unlike
         // the first kick on `SignedInView`, which can run before `open` and has nothing to pull into.
         .task { await model.refresh() }
+    }
+}
+
+/// Owns the `SearchModel` for the pushed screen, so a re-render of the tabs never resets it.
+private struct SearchScreen: View {
+    @State private var model: SearchModel
+    let household: LandingHousehold?
+    let onOpen: (SearchTarget) -> Void
+
+    init(householdId: UUID, household: LandingHousehold?, environment: AppEnvironment, onOpen: @escaping (SearchTarget) -> Void) {
+        self.household = household
+        self.onOpen = onOpen
+        _model = State(initialValue: SearchModel(
+            householdId: householdId, modules: household.map(HomeModules.init),
+            database: environment.database, store: RecentSearchStore(householdId: householdId)
+        ))
+    }
+
+    var body: some View {
+        SearchView(model: model, onOpen: onOpen)
+            .onChange(of: household) { _, household in model.modules = household.map(HomeModules.init) }
+            .navigationBarTitleDisplayMode(.inline)
     }
 }
 

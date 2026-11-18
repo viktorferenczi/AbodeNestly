@@ -139,6 +139,7 @@ Each screen below has: **Route**, **Purpose**, **Layout** (top → bottom), **St
 - Layout: SearchField autofocus · results grouped by module (section headers with module colour) · each row navigates to the entity.
 - States: `empty-query` (recent searches) · `no-results` · `results`.
 - Offline: works. · Gating: sections per module.
+- _iOS (CORE-09-ios): until the module stories ship entity screens, a result row only switches to its module's tab (the row emits a typed `SearchTarget {module, table, id, listId?}` for them to route on). Recent searches (last 8 per household, newest first, case-insensitive dedupe, recorded when a result is tapped or Return is pressed with results) live in `UserDefaults` under `abodenestly.search.<householdId>`. The magnifier is a TopBar action (accessibility label "Search") shown whenever a household is open; it pushes Search onto the Home tab. Search reads minimal local `list_item`, `pantry_item`, `recipe`, `asset`, `maint_task` (`title`), `store`, `location`, `contractor` tables (migration v3), which the module stories widen._
 
 ### B9. Notification preferences
 - Route: `/profile/notifications` · Purpose: CORE-12.

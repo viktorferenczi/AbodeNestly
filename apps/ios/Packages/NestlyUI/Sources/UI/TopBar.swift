@@ -1,13 +1,32 @@
 import SwiftUI
 
-/// DESIGN A6 TopBar: a title and optional trailing text. Actions arrive with the screens that need them.
+/// An icon button in the TopBar (DESIGN A6 allows two). `label` is the VoiceOver label.
+public struct TopBarAction {
+    public let systemImage: String
+    public let label: String
+    public let identifier: String
+    public let action: () -> Void
+
+    public init(systemImage: String, label: String, identifier: String, action: @escaping () -> Void) {
+        self.systemImage = systemImage
+        self.label = label
+        self.identifier = identifier
+        self.action = action
+    }
+}
+
+/// DESIGN A6 TopBar: a title, optional trailing text and up to two icon actions.
 public struct TopBar: View {
     private let title: String
     private let trailing: String?
     private let onTitleTap: (() -> Void)?
+    private let actions: [TopBarAction]
 
     /// With `onTitleTap` the title is a button ("<title> ▾") that opens the household switcher (DESIGN B3).
-    public init(title: String, trailing: String? = nil, onTitleTap: (() -> Void)? = nil) {
+    public init(title: String, trailing: String? = nil, onTitleTap: (() -> Void)? = nil,
+        actions: [TopBarAction] = []
+    ) {
+        self.actions = Array(actions.prefix(2))
         self.title = title
         self.trailing = trailing
         self.onTitleTap = onTitleTap
@@ -17,6 +36,18 @@ public struct TopBar: View {
         HStack {
             titleView
             Spacer(minLength: Tokens.screenPadding)
+            ForEach(actions.indices, id: \.self) { index in
+                let item = actions[index]
+                Button(action: item.action) {
+                    Image(systemName: item.systemImage)
+                        .foregroundStyle(Tokens.accent)
+                        .frame(width: Tokens.minTouchTarget, height: Tokens.minTouchTarget)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.label)
+                .accessibilityIdentifier(item.identifier)
+            }
             if let trailing {
                 Text(trailing)
                     .font(.subheadline)

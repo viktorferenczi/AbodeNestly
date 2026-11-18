@@ -13,6 +13,10 @@ public enum Tokens {
     public static let accentBg = color(light: 0xE3F0EB, dark: 0x1E3A32)
     public static let warn = color(light: 0xB8741A, dark: 0xE0A449)
     public static let danger = color(light: 0xB3402F, dark: 0xE06A58)
+    /// Module colours (DESIGN A3).
+    public static let shopping = color(light: 0x2F6B5A, dark: 0x6FB79F)
+    public static let pantry = color(light: 0xB8741A, dark: 0xE0A449)
+    public static let maintenance = color(light: 0x3F5E8C, dark: 0x86A7D6)
 
     /// 4-pt grid (DESIGN A5).
     public static let screenPadding: CGFloat = 16
