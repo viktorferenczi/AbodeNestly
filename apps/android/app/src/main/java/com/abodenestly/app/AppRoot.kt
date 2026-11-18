@@ -255,8 +255,10 @@ private fun Tabs(
     val members = householdId
     // Offline at launch the landing read fails and `household` stays null; the flags then come from the cached households list, so the Today cards and the all-off prompt still show.
     val cachedModules by produceState<HomeModules?>(null, household, members, meId) {
-        value = if (household != null || members == null || meId == null) null
-        else householdsCache.read(meId).firstOrNull { it.household.id == members }?.household?.let(HomeModules::of)
+        value = null
+        if (household == null && members != null && meId != null) {
+            value = householdsCache.read(meId).firstOrNull { it.household.id == members }?.household?.let(HomeModules::of)
+        }
     }
     if (showProfile && meId != null) {
         BackHandler { showProfile = false }
