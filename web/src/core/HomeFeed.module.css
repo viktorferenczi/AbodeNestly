@@ -35,12 +35,6 @@
   font-weight: 600;
 }
 
-.count {
-  color: var(--color-text-2);
-  font-size: var(--font-secondary);
-  line-height: var(--lh-secondary);
-}
-
 .prompt,
 .empty {
   display: flex;

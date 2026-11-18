@@ -2,17 +2,17 @@ import type { Activity } from '@abodenestly/contract';
 import { Link } from 'react-router';
 import { PullToRefresh } from '../ui/PullToRefresh.tsx';
 import { useLiveQuery } from '../ui/useLiveQuery.ts';
-import { useOnline } from '../ui/useOnline.ts';
 import { useSync } from '../sync/SyncEngine.ts';
 import { homeFeed, homeState } from './HomeFeed.ts';
 import { useHousehold, type Modules } from './household/HouseholdProvider.tsx';
 import styles from './HomeFeed.module.css';
 
-// DESIGN B4. Counts stay 0 until the modules exist; the cards only carry the tap-through.
-const TODAY: Array<{ module: keyof Modules; to: string; title: string; counts: string[] }> = [
-  { module: 'shopping', to: '/shopping', title: 'Shopping', counts: ['On the list: 0'] },
-  { module: 'pantry', to: '/pantry', title: 'Pantry', counts: ['Eat soon: 0', 'Low: 0'] },
-  { module: 'maintenance', to: '/maintenance', title: 'Maintenance', counts: ['Due tasks: 0'] },
+// DESIGN B4 Today cards. Titles and tap-through only: the counts (eat soon, low, due tasks) arrive with the
+// module stories, so no figure is shown that nothing supplies.
+const TODAY: Array<{ module: keyof Modules; to: string; title: string }> = [
+  { module: 'shopping', to: '/shopping', title: 'Shopping' },
+  { module: 'pantry', to: '/pantry', title: 'Pantry' },
+  { module: 'maintenance', to: '/maintenance', title: 'Maintenance' },
 ];
 
 const whenFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -21,7 +21,6 @@ export function HomeFeed() {
   const { status, db, household, modules } = useHousehold();
   const sync = useSync();
   // Offline the pull is a no-op that keeps the cached rows; the screen reads the local database either way.
-  const online = useOnline();
   const householdId = household?.id;
   const rows = useLiveQuery(
     () => (db && householdId ? db.activity.where('household_id').equals(householdId).toArray() : []),
@@ -35,7 +34,7 @@ export function HomeFeed() {
 
   return (
     <PullToRefresh onRefresh={() => sync.kick()}>
-      <div className={styles.home} data-testid="home" data-online={online}>
+      <div className={styles.home} data-testid="home">
         {state === 'allModulesOff' ? (
           <section className={styles.prompt} data-testid="home.allOff">
             <p>Every module is off. Turn one on in Settings.</p>
@@ -48,11 +47,6 @@ export function HomeFeed() {
             {TODAY.filter((c) => modules[c.module]).map((c) => (
               <Link key={c.module} to={c.to} className={styles.card} data-testid={`home.today.${c.module}`}>
                 <span className={styles.cardTitle}>{c.title}</span>
-                {c.counts.map((t) => (
-                  <span key={t} className={styles.count}>
-                    {t}
-                  </span>
-                ))}
               </Link>
             ))}
           </section>

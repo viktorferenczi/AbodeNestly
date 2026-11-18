@@ -1,6 +1,5 @@
 .area {
   touch-action: pan-y;
-  overscroll-behavior-y: contain;
 }
 
 .indicator {

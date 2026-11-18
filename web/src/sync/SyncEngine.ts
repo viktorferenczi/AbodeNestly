@@ -26,10 +26,21 @@ export function createActivityPull({ api, householdId, getDb, isOnline, now = ()
   async function pull(): Promise<void> {
     const db = getDb();
     if (!db || !db.isOpen()) return;
-    const result = await api.fetchActivity(householdId, windowStart(now(), FEED_DAYS).toISOString(), FEED_LIMIT);
+    const since = windowStart(now(), FEED_DAYS);
+    const result = await api.fetchActivity(householdId, since.toISOString(), FEED_LIMIT);
     // A failed read leaves the cache as it was; the database may have been closed by a switch meanwhile.
-    if (!result.ok || !db.isOpen() || result.value.length === 0) return;
-    await db.activity.bulkPut(result.value);
+    if (!result.ok || !db.isOpen()) return;
+    // The read is live rows only, so a cached row inside the window that the page omits was soft-deleted on the
+    // server (SPEC §6.3). Replace the window with the page, an empty page included.
+    await db.transaction('rw', db.activity, async () => {
+      const stale = await db.activity
+        .where('household_id')
+        .equals(householdId)
+        .filter((r) => new Date(r.created_at) >= since)
+        .primaryKeys();
+      await db.activity.bulkDelete(stale);
+      await db.activity.bulkPut(result.value);
+    });
   }
   return {
     kick() {

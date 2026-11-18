@@ -50,6 +50,18 @@ describe('CORE-08 ActivityPull', () => {
     expect((await db.activity.toArray()).map((r) => r.id)).toEqual(['cached']);
   });
 
+  it('drops cached rows in the window that the page omits, an empty page included', async () => {
+    const { api, db, engine } = await setup();
+    const old = { ...act('old'), created_at: '2026-09-01T00:00:00.000Z' };
+    await db.activity.bulkPut([act('gone'), act('a'), old]);
+    await engine.kick();
+    // 'gone' was soft-deleted on the server, so the live page omits it; the row older than the window stays.
+    expect((await db.activity.toArray()).map((r) => r.id).sort()).toEqual(['a', 'b', 'old']);
+    api.fetchActivityResult = { ok: true, value: [] };
+    await engine.kick();
+    expect((await db.activity.toArray()).map((r) => r.id)).toEqual(['old']);
+  });
+
   it('keeps the cache when the read fails', async () => {
     const { api, db, engine } = await setup();
     await db.activity.put(act('cached'));

@@ -9,6 +9,8 @@ import { TopBar } from '../ui/TopBar.tsx';
 import styles from './Shell.module.css';
 import { TabBar } from './TabBar.tsx';
 
+const PULL_INTERVAL_MS = 5 * 60 * 1000;
+
 function Tabs() {
   const { status } = useHousehold();
   return status === 'ready' ? <TabBar /> : null;
@@ -26,8 +28,9 @@ function Bar() {
   );
 }
 
-// Provides the interim sync engine (CORE-08) and kicks it on the triggers SPEC §6.4 names: opening the household,
-// coming back to the tab and reconnecting. SHOP-08 swaps the engine for the full loop.
+// Provides the interim sync engine (CORE-08) and kicks it on the SPEC §6.4 triggers available here: opening the
+// household, coming back to the tab, reconnecting, and every 5 minutes while the tab is visible. The Realtime
+// `postgres_changes` kick is not wired: it arrives with SHOP-08's channel subscription, which replaces this engine.
 function HouseholdSync({ children }: { children: ReactNode }) {
   const api = useApi();
   const { db, household } = useHousehold();
@@ -45,9 +48,11 @@ function HouseholdSync({ children }: { children: ReactNode }) {
       if (document.visibilityState === 'visible') void engine.kick();
     };
     const onOnline = () => void engine.kick();
+    const timer = window.setInterval(onVisible, PULL_INTERVAL_MS);
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
     return () => {
+      window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('online', onOnline);
     };
