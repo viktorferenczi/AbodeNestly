@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Outlet } from 'react-router';
+import { Link, Outlet } from 'react-router';
 import { useAuth } from '../core/auth/AuthProvider.tsx';
 import { HouseholdProvider, useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { useApi } from '../core/api/ApiProvider.tsx';
@@ -18,11 +18,20 @@ function Tabs() {
 
 function Bar() {
   const { profile } = useAuth();
-  const { household } = useHousehold();
+  const { status, household } = useHousehold();
   const [open, setOpen] = useState(false);
   return (
     <>
-      <TopBar title={household?.name ?? 'AbodeNestly'} trailing={profile?.display_name} onTitleClick={() => setOpen(true)} titleExpanded={open} />
+      <TopBar title={household?.name ?? 'AbodeNestly'} trailing={
+          <>
+            <span className={styles.name}>{profile?.display_name}</span>
+            {status === 'ready' ? (
+              <Link to="/search" aria-label="Search" className={styles.search}>
+                🔍
+              </Link>
+            ) : null}
+          </>
+        } onTitleClick={() => setOpen(true)} titleExpanded={open} />
       {open ? <Switcher onClose={() => setOpen(false)} /> : null}
     </>
   );
