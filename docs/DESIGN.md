@@ -161,7 +161,7 @@ _Deviation (CORE-09): the module list stories do not exist yet, so a result row 
 - Layout: segmented by module · rows with "Restore" and days left.
 - States: `empty` · `populated`.
 - Offline: restore via outbox (`upsert` with `deleted_at: null`). · Gating: segments per module.
-- Platform notes: **All:** the module tables are those of CORE-09 search (`shopping_list` is out until SHOP-01). Days left = 30 − whole days since `deleted_at`; rows at 0 or below are hidden client-side because the purge sends no tombstone. Restore sends a partial `data` of `{"deleted_at": null}` so a newer rename is not overwritten. Entry: "Recently deleted" link after Settings in the B4 footer. **Web:** the Shell's TopBar owns the page title, so the screen shows an h2 heading; the outbox row keeps the SPEC §6.2 envelope in its `payload`.
+- Platform notes: **All:** the module tables are those of CORE-09 search (`shopping_list` is out until SHOP-01). Days left = 30 − whole days since `deleted_at`; rows at 0 or below are hidden client-side because the purge sends no tombstone. Restore sends a partial `data` of `{"deleted_at": null}` so a newer rename is not overwritten. Entry: "Recently deleted" link after Settings in the B4 footer. **Web:** the Shell's TopBar owns the page title, so the screen shows an h2 heading; the outbox row keeps the SPEC §6.2 envelope in its `payload`. **iOS:** reached from the Home footer link "Recently deleted" (after Settings), pushed on the Home stack; segments are a `Picker(.segmented)`; Restore is one local transaction (row + outbox) followed by `sync.kick()`.
 
 ### B12. Sync sheet
 - Route: from SyncStatusChip · Purpose: transparency and recovery.
