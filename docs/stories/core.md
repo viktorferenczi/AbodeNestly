@@ -2045,7 +2045,7 @@ Tables: the soft-deleted household rows  Endpoints: none  Types: none new
 Schema change: no  Contract change: no
 
 ## Tests required
-Unit: apps/ios/Packages/core/Tests/RecentlyDeletedTests.swift → AC2 days left is 30 minus the age in days; AC3 the outbox payload has deleted_at null
+Unit: apps/ios/AbodeNestlyTests/RecentlyDeletedTests.swift → AC2 days left is 30 minus the age in days; AC3 the outbox payload has deleted_at null
 Component: apps/ios/AbodeNestlyTests/RecentlyDeletedViewTests.swift → AC1 empty, AC2 populated; Restore tap. Also asserts AC4, AC5
 Integration: n/a (no API handler in this story)
 E2E: n/a
