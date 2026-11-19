@@ -228,7 +228,7 @@ open class DatabaseRegistry(
     /**
      * Restores one soft-deleted row of household [id]: clears `deleted_at` and queues the upsert in one transaction, so the
      * two cannot diverge. `data` is partial on purpose (the server merges it, so a rename made elsewhere survives) and the
-     * null is written out: a missing key would mean "unchanged". Throws [DatabaseNotOpenException] when [id] is not the open household.
+     * null is written out: a missing key would mean "unchanged". Nothing is queued when no local row was restored. Throws [DatabaseNotOpenException] when [id] is not the open household.
      */
     suspend fun restore(id: UUID, table: String, rowId: String, now: Instant) = withContext(Dispatchers.IO) {
         mutex.withLock {
@@ -236,7 +236,7 @@ open class DatabaseRegistry(
             if (db == null || mutableCurrent.value != id) throw DatabaseNotOpenException()
             val dao = db.deleted()
             db.withTransaction {
-                when (table) {
+                val changed = when (table) {
                     "list_item" -> dao.clearListItem(rowId)
                     "store" -> dao.clearStore(rowId)
                     "pantry_item" -> dao.clearPantryItem(rowId)
@@ -247,6 +247,8 @@ open class DatabaseRegistry(
                     "contractor" -> dao.clearContractor(rowId)
                     else -> throw IllegalArgumentException("Not restorable: $table")
                 }
+                // Nothing matched (a second tap, or a row the local table no longer has): queuing the partial upsert would insert a bare row on the server.
+                if (changed == 0) return@withTransaction
                 db.outbox().insert(
                     OutboxEntity(
                         id = UUID.randomUUID().toString(), tableName = table, op = "upsert", rowId = rowId,

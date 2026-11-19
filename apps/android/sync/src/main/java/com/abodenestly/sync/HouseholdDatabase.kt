@@ -240,49 +240,49 @@ interface DeletedDao {
     @Query("SELECT * FROM list_item WHERE household_id = :householdId AND deleted_at IS NOT NULL")
     fun listItems(householdId: String): Flow<List<ListItemEntity>>
 
-    @Query("UPDATE list_item SET deleted_at = NULL WHERE id = :id")
+    @Query("UPDATE list_item SET deleted_at = NULL WHERE id = :id AND deleted_at IS NOT NULL")
     suspend fun clearListItem(id: String): Int
 
     @Query("SELECT * FROM pantry_item WHERE household_id = :householdId AND deleted_at IS NOT NULL")
     fun pantryItems(householdId: String): Flow<List<PantryItemEntity>>
 
-    @Query("UPDATE pantry_item SET deleted_at = NULL WHERE id = :id")
+    @Query("UPDATE pantry_item SET deleted_at = NULL WHERE id = :id AND deleted_at IS NOT NULL")
     suspend fun clearPantryItem(id: String): Int
 
     @Query("SELECT * FROM recipe WHERE household_id = :householdId AND deleted_at IS NOT NULL")
     fun recipes(householdId: String): Flow<List<RecipeEntity>>
 
-    @Query("UPDATE recipe SET deleted_at = NULL WHERE id = :id")
+    @Query("UPDATE recipe SET deleted_at = NULL WHERE id = :id AND deleted_at IS NOT NULL")
     suspend fun clearRecipe(id: String): Int
 
     @Query("SELECT * FROM asset WHERE household_id = :householdId AND deleted_at IS NOT NULL")
     fun assets(householdId: String): Flow<List<AssetEntity>>
 
-    @Query("UPDATE asset SET deleted_at = NULL WHERE id = :id")
+    @Query("UPDATE asset SET deleted_at = NULL WHERE id = :id AND deleted_at IS NOT NULL")
     suspend fun clearAsset(id: String): Int
 
     @Query("SELECT * FROM maint_task WHERE household_id = :householdId AND deleted_at IS NOT NULL")
     fun maintTasks(householdId: String): Flow<List<MaintTaskEntity>>
 
-    @Query("UPDATE maint_task SET deleted_at = NULL WHERE id = :id")
+    @Query("UPDATE maint_task SET deleted_at = NULL WHERE id = :id AND deleted_at IS NOT NULL")
     suspend fun clearMaintTask(id: String): Int
 
     @Query("SELECT * FROM store WHERE household_id = :householdId AND deleted_at IS NOT NULL")
     fun stores(householdId: String): Flow<List<StoreEntity>>
 
-    @Query("UPDATE store SET deleted_at = NULL WHERE id = :id")
+    @Query("UPDATE store SET deleted_at = NULL WHERE id = :id AND deleted_at IS NOT NULL")
     suspend fun clearStore(id: String): Int
 
     @Query("SELECT * FROM location WHERE household_id = :householdId AND deleted_at IS NOT NULL")
     fun locations(householdId: String): Flow<List<LocationEntity>>
 
-    @Query("UPDATE location SET deleted_at = NULL WHERE id = :id")
+    @Query("UPDATE location SET deleted_at = NULL WHERE id = :id AND deleted_at IS NOT NULL")
     suspend fun clearLocation(id: String): Int
 
     @Query("SELECT * FROM contractor WHERE household_id = :householdId AND deleted_at IS NOT NULL")
     fun contractors(householdId: String): Flow<List<ContractorEntity>>
 
-    @Query("UPDATE contractor SET deleted_at = NULL WHERE id = :id")
+    @Query("UPDATE contractor SET deleted_at = NULL WHERE id = :id AND deleted_at IS NOT NULL")
     suspend fun clearContractor(id: String): Int
 }
 

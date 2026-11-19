@@ -1,6 +1,7 @@
 package com.abodenestly.core.recentlydeleted
 
 import androidx.lifecycle.ViewModel
+import com.abodenestly.sync.DatabaseNotOpenException
 import com.abodenestly.sync.DeletedRow
 import com.abodenestly.sync.SearchModule
 import com.abodenestly.sync.SyncEngine
@@ -62,7 +63,12 @@ class RecentlyDeletedViewModel(
         when (event) {
             is RecentlyDeletedEvent.Select -> if (event.module in modules) mutableState.update { it.copy(selected = event.module) }
             is RecentlyDeletedEvent.Restore -> scope.launch {
-                restore(event.item.table, event.item.id, now())
+                // A household switch can close the database under an in-flight restore; the list stays as last emitted.
+                try {
+                    restore(event.item.table, event.item.id, now())
+                } catch (_: DatabaseNotOpenException) {
+                    return@launch
+                }
                 sync.kick()
             }
         }

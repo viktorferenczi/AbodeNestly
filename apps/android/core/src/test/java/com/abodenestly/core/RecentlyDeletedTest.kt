@@ -95,4 +95,28 @@ class RecentlyDeletedTest {
         }
         assertEquals(listOf("store"), registry.deletedRows(household, setOf(SearchModule.Shopping)).first().map { it.table })
     }
+
+    @Test
+    fun `CORE-10 a second restore or a missing row queues nothing`() = runBlocking {
+        registry.open(household)
+        registry.withSearchDao { it.upsertStore(StoreEntity("s1", household.toString(), "Lidl", ago(Duration.ofDays(1)))) }
+        registry.restore(household, "store", "s1", NOW)
+        registry.restore(household, "store", "s1", NOW)
+        registry.restore(household, "store", "gone", NOW)
+        assertEquals(1, registry.outboxForTesting().size)
+    }
+
+    @Test
+    fun `CORE-10 a restore that finds the database closed leaves the list and does not kick sync`() {
+        val sync = FakeSyncEngine()
+        val item = RecentlyDeleted.sections(listOf(row("store", "s1", Duration.ofDays(1))), ALL, NOW)[0].items[0]
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = com.abodenestly.core.recentlydeleted.RecentlyDeletedViewModel(
+            kotlinx.coroutines.flow.flowOf(listOf(row("store", "s1", Duration.ofDays(1)))), ALL,
+            restore = { _, _, _ -> throw com.abodenestly.sync.DatabaseNotOpenException() }, sync, now = { NOW }, scope = scope,
+        )
+        vm.onEvent(com.abodenestly.core.recentlydeleted.RecentlyDeletedEvent.Restore(item))
+        assertEquals(0, sync.kicks.get())
+        assertEquals(1, vm.state.value.sections[0].items.size)
+    }
 }

@@ -361,7 +361,7 @@ private fun Tabs(
                             is HomeEvent.OpenModule -> onSelectTab(event.tab)
                             HomeEvent.OpenSettings -> if (meId != null) showSettings = true
                             HomeEvent.OpenMembers -> if (meId != null) showMembers = true
-                            HomeEvent.OpenRecentlyDeleted -> showDeleted = true
+                            HomeEvent.OpenRecentlyDeleted -> if (deletedModules != null) showDeleted = true
                             HomeEvent.OpenProfile -> if (meId != null) showProfile = true
                             HomeEvent.Refresh -> Unit
                         }
