@@ -57,7 +57,7 @@
 
 .left {
   font-size: var(--font-secondary);
-  opacity: 0.7;
+  color: var(--color-text-2);
 }
 
 .restore {
@@ -74,5 +74,5 @@
 
 .hint {
   margin: 0;
-  opacity: 0.7;
+  color: var(--color-text-2);
 }

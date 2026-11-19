@@ -107,3 +107,26 @@ describe('CORE-10: Recently deleted screen', () => {
     expect(within(await screen.findByTestId('deleted.row')).getByText('Rice')).toBeTruthy();
   });
 });
+
+describe('CORE-10: Recently deleted accessibility', () => {
+  it('segments follow the tabs pattern and arrows move between them', async () => {
+    await seed({ pantry: [['Rice', 1]] });
+    await renderDeleted();
+    const shopping = await screen.findByTestId('deleted.segment.shopping');
+    expect(shopping.getAttribute('aria-controls')).toBe('deleted-panel');
+    expect(shopping.getAttribute('tabindex')).toBe('0');
+    expect(screen.getByTestId('deleted.segment.pantry').getAttribute('tabindex')).toBe('-1');
+    fireEvent.keyDown(shopping, { key: 'ArrowRight' });
+    await waitFor(() => expect(screen.getByTestId('deleted.segment.pantry').getAttribute('aria-selected')).toBe('true'));
+    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('deleted-tab-pantry');
+  });
+
+  it('the empty state is announced from the same live region the rows were in', async () => {
+    await seed({ store: [['Lidl', 2]] });
+    await renderDeleted();
+    const panel = (await screen.findByTestId('deleted.row')).closest('[aria-live]');
+    fireEvent.click(screen.getByTestId('deleted.restore'));
+    const empty = await screen.findByTestId('deleted.empty');
+    expect(empty.closest('[aria-live]')).toBe(panel);
+  });
+});
