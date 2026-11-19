@@ -12,7 +12,17 @@ import com.abodenestly.core.auth.LandingHousehold
 import com.abodenestly.core.auth.Membership
 import java.time.Instant
 import java.time.OffsetDateTime
+import com.abodenestly.sync.SyncEngine
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
+
+/** Records what the screen asked for (TESTING §7): counts `kick()` calls. */
+class FakeSyncEngine : SyncEngine {
+    val kicks = AtomicInteger()
+    override fun kick() {
+        kicks.incrementAndGet()
+    }
+}
 
 object Fixtures {
     val userId: UUID = UUID.fromString("00000000-0000-4000-8000-0000000000aa")

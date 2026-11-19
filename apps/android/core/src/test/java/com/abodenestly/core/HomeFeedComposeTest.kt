@@ -38,15 +38,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.time.Duration
-import java.util.concurrent.atomic.AtomicInteger
-
-/** Records what the screen asked for (TESTING §7): counts `kick()` calls. */
-private class FakeSyncEngine : SyncEngine {
-    val kicks = AtomicInteger()
-    override fun kick() {
-        kicks.incrementAndGet()
-    }
-}
 
 private val ALL_ON = HomeModules(shopping = true, pantry = true, maintenance = true)
 private val ALL_OFF = HomeModules(shopping = false, pantry = false, maintenance = false)

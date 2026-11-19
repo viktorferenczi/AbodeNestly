@@ -109,6 +109,7 @@ internal fun HomeContent(ui: HomeUiState, onEvent: (HomeEvent) -> Unit, modifier
                     HorizontalDivider(color = tokens.line)
                     FooterLink("Members", "home.members") { onEvent(HomeEvent.OpenMembers) }
                     FooterLink("Settings", "home.settings") { onEvent(HomeEvent.OpenSettings) }
+                    FooterLink("Recently deleted", "home.deleted") { onEvent(HomeEvent.OpenRecentlyDeleted) }
                     FooterLink("Profile", "home.profile") { onEvent(HomeEvent.OpenProfile) }
                 }
             }
