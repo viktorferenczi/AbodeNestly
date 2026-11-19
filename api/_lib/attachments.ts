@@ -20,6 +20,7 @@ export const ALLOWED_MIMES: readonly string[] = [
 ];
 export const MAX_SIZE = 25 * 1024 * 1024;
 const MAX_FILENAME = 100;
+const STORAGE_TIMEOUT_MS = 8000;
 
 // One path segment of [A-Za-z0-9._-]: the Storage insert policy and the attachment CHECK both
 // expect exactly one non-empty file segment under the entity folder.
@@ -41,7 +42,14 @@ export function validateSignRequest(body: SignAttachmentRequest): SignAttachment
   if (!isUuid(body.household_id) || !isUuid(body.entity_id)) {
     throw new ApiError(400, 'validation', 'household_id and entity_id must be UUIDs');
   }
-  return { ...body, safeName: sanitizeFilename(body.filename) };
+  // RFC 4122 hex is case-insensitive (Swift's uuidString is uppercase) but Postgres and the Storage
+  // policy compare lowercase text, so normalise once here.
+  return {
+    ...body,
+    household_id: body.household_id.toLowerCase(),
+    entity_id: body.entity_id.toLowerCase(),
+    safeName: sanitizeFilename(body.filename),
+  };
 }
 
 const hasCode = (e: unknown, code: string): boolean =>
@@ -52,18 +60,29 @@ export async function createSignedUploadUrl(token: string, storagePath: string):
   const base = process.env.SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY;
   if (!base || !anonKey) throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY must be set');
+  // The fetch runs inside the DB transaction (pool max 3), so a stalled Storage must not hold it.
   let res: Response;
   try {
     res = await fetch(`${base}/storage/v1/object/upload/sign/households/${storagePath}`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, apikey: anonKey, 'content-type': 'application/json' },
       body: '{}',
+      signal: AbortSignal.timeout(STORAGE_TIMEOUT_MS),
     });
   } catch {
     throw new ApiError(502, 'storage_unavailable', 'Storage is unreachable');
   }
+  // A policy refusal is the caller's problem, not an outage.
+  if (res.status === 401 || res.status === 403) {
+    throw new ApiError(403, 'forbidden', 'Storage refused the upload');
+  }
   if (!res.ok) throw new ApiError(502, 'storage_unavailable', `Storage refused the upload URL (${res.status})`);
-  const { url } = (await res.json()) as { url?: unknown };
+  let url: unknown;
+  try {
+    ({ url } = (await res.json()) as { url?: unknown });
+  } catch {
+    throw new ApiError(502, 'storage_unavailable', 'Storage returned an unreadable response');
+  }
   if (typeof url !== 'string') throw new ApiError(502, 'storage_unavailable', 'Storage returned no upload URL');
   return `${base}/storage/v1${url}`;
 }

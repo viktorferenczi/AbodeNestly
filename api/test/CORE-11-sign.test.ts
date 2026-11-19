@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isSignAttachmentRequest } from '@abodenestly/contract';
 
 vi.mock('../_lib/auth.ts', () => ({
@@ -7,7 +7,7 @@ vi.mock('../_lib/auth.ts', () => ({
 vi.mock('../_lib/db.ts', () => ({ withUser: vi.fn() }));
 
 import handler from '../attachments/sign.ts';
-import { sanitizeFilename, signAttachment, validateSignRequest } from '../_lib/attachments.ts';
+import { createSignedUploadUrl, sanitizeFilename, signAttachment, validateSignRequest } from '../_lib/attachments.ts';
 import { withUser } from '../_lib/db.ts';
 import { ApiError } from '../_lib/errors.ts';
 
@@ -90,6 +90,58 @@ describe('POST /attachments/sign validation', () => {
   it('405 for a non-POST', async () => {
     const res = await handler(new Request('http://x/attachments/sign', { method: 'GET' }));
     expect(res.status).toBe(405);
+  });
+});
+
+describe('uppercase UUIDs', () => {
+  it('are lowercased so the path and the household comparison match Postgres', async () => {
+    const input = validateSignRequest(
+      body({ household_id: HID.toUpperCase(), entity_id: EID.toUpperCase() }) as never,
+    );
+    expect(input.household_id).toBe(HID);
+    expect(input.entity_id).toBe(EID);
+    const client = fakeClient([{ reg: 'pantry_item' }], [{ household_id: HID }], [{ enabled: true }], []);
+    vi.stubEnv('SUPABASE_URL', 'http://storage.test');
+    vi.stubEnv('SUPABASE_ANON_KEY', 'anon');
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ url: '/object/upload/sign/x?token=t' })));
+    const out = await signAttachment(client, 'u', 't', input);
+    expect(out.storage_path.startsWith(`households/${HID}/pantry_item/${EID}/`)).toBe(true);
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+});
+
+describe('createSignedUploadUrl failures', () => {
+  const stub = (res: () => Promise<Response>) => {
+    vi.stubEnv('SUPABASE_URL', 'http://storage.test');
+    vi.stubEnv('SUPABASE_ANON_KEY', 'anon');
+    vi.stubGlobal('fetch', vi.fn(res));
+  };
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it.each([[401], [403]])('Storage %i maps to 403 forbidden', async (status) => {
+    stub(async () => new Response('{}', { status }));
+    await expect(createSignedUploadUrl('t', 'p')).rejects.toMatchObject({ status: 403, code: 'forbidden' });
+  });
+
+  it('a Storage 500 maps to 502 storage_unavailable', async () => {
+    stub(async () => new Response('{}', { status: 500 }));
+    await expect(createSignedUploadUrl('t', 'p')).rejects.toMatchObject({ status: 502, code: 'storage_unavailable' });
+  });
+
+  it('a timeout or network error maps to 502 storage_unavailable', async () => {
+    stub(async () => {
+      throw new DOMException('timed out', 'TimeoutError');
+    });
+    await expect(createSignedUploadUrl('t', 'p')).rejects.toMatchObject({ status: 502, code: 'storage_unavailable' });
+  });
+
+  it('a non-JSON success body maps to 502 storage_unavailable', async () => {
+    stub(async () => new Response('<html>', { status: 200 }));
+    await expect(createSignedUploadUrl('t', 'p')).rejects.toMatchObject({ status: 502, code: 'storage_unavailable' });
   });
 });
 

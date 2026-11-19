@@ -163,12 +163,27 @@ describe('POST /attachments/sign', () => {
   });
 
   it('module off: pantry disabled gives 403 module_disabled and no row', async () => {
-    const off = await call('PATCH', `/households/${aliceHousehold}/modules`, alice.token, { pantry: false });
-    expect(off.status).toBe(200);
-    const before = await attachmentCount();
-    const res = await sign(alice.token);
-    expect(res.status).toBe(403);
-    expect(await errCode(res)).toBe('module_disabled');
-    expect(await attachmentCount()).toBe(before);
+    const patch = (pantry: boolean) =>
+      call('PATCH', `/households/${aliceHousehold}/modules`, alice.token, { pantry });
+    expect((await patch(false)).status).toBe(200);
+    try {
+      const before = await attachmentCount();
+      const res = await sign(alice.token);
+      expect(res.status).toBe(403);
+      expect(await errCode(res)).toBe('module_disabled');
+      expect(await attachmentCount()).toBe(before);
+    } finally {
+      await patch(true);
+    }
+  });
+
+  it('an uppercase household and entity id sign the same as lowercase', async () => {
+    const res = await sign(alice.token, {
+      household_id: aliceHousehold.toUpperCase(),
+      entity_id: alicePantryItem.toUpperCase(),
+    });
+    expect(res.status).toBe(201);
+    const out = (await res.json()) as Signed;
+    expect(out.storage_path.startsWith(`households/${aliceHousehold}/pantry_item/${alicePantryItem}/`)).toBe(true);
   });
 });
