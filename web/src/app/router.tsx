@@ -3,6 +3,7 @@ import { HomeFeed } from '../core/HomeFeed.tsx';
 import { joinPath } from '../core/InviteSheet.ts';
 import { HouseholdSettings } from '../core/HouseholdSettings.tsx';
 import { Profile } from '../core/Profile.tsx';
+import { RecentlyDeleted } from '../core/RecentlyDeleted.tsx';
 import { Search } from '../core/Search.tsx';
 import { Members } from '../core/Members.tsx';
 import { Welcome } from '../core/Welcome.tsx';
@@ -42,6 +43,7 @@ export function createAppRouter() {
             { path: '/pantry', element: <Placeholder /> },
             { path: '/maintenance', element: <Placeholder /> },
             { path: '/search', element: <Search /> },
+            { path: '/deleted', element: <RecentlyDeleted /> },
             // Entity destinations of search rows (DESIGN B8); the module list stories replace these.
             ...[
               '/shopping/:listId',
