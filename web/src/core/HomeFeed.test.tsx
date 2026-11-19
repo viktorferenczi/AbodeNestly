@@ -155,11 +155,12 @@ describe('CORE-08: Home activity feed', () => {
     expect(router.state.location.pathname).toBe('/pantry');
   });
 
-  it('CORE-08: footer links go to Members, Settings and Profile', async () => {
+  it('CORE-08: footer links go to Members, Settings, Recently deleted and Profile', async () => {
     await renderHome();
     const footer = screen.getByRole('navigation', { name: 'Household' });
     expect(within(footer).getByRole('link', { name: 'Members' }).getAttribute('href')).toBe('/household/members');
     expect(within(footer).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/household');
+    expect(within(footer).getByRole('link', { name: 'Recently deleted' }).getAttribute('href')).toBe('/deleted');
     expect(within(footer).getByRole('link', { name: 'Profile' }).getAttribute('href')).toBe('/profile');
   });
 
