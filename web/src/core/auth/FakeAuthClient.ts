@@ -16,6 +16,7 @@ export class FakeAuthClient implements AuthClient {
   updateCalls: Array<{ userId: string; data: Partial<Pick<Profile, 'display_name' | 'avatar_path'>> }> = [];
   uploadCalls: Array<{ path: string; file: File }> = [];
   avatarUrlCalls: string[] = [];
+  attachmentUrlCalls: string[] = [];
   updateError: AuthError | null = null;
   uploadError: AuthError | null = null;
   /** Set to a pending promise to hold `uploadAvatar` in flight; resolve it to let the upload finish. */
@@ -78,6 +79,11 @@ export class FakeAuthClient implements AuthClient {
 
   avatarUrl(path: string): Promise<string | null> {
     this.avatarUrlCalls.push(path);
+    return Promise.resolve(`https://signed.test/${path}`);
+  }
+
+  attachmentUrl(path: string): Promise<string | null> {
+    this.attachmentUrlCalls.push(path);
     return Promise.resolve(`https://signed.test/${path}`);
   }
 }

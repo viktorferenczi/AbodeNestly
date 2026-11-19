@@ -70,6 +70,38 @@ enum Migrations {
             }
         }
 
+        // CORE-11: attachments of pantry items, assets and log entries (the server's columns), plus the offline upload
+        // queue. The queue is separate from `outbox` on purpose: /sync carries rows, not bytes, and nothing drains
+        // `outbox` yet (SHOP-08). `file_path` is relative to the app's root folder and holds the picked bytes.
+        migrator.registerMigration("v4") { db in
+            try db.create(table: "attachment") { t in
+                t.primaryKey("id", .text)
+                t.column("household_id", .text).notNull()
+                t.column("entity", .text).notNull()
+                t.column("entity_id", .text).notNull()
+                t.column("storage_path", .text).notNull()
+                t.column("mime", .text).notNull()
+                t.column("size_bytes", .integer).notNull()
+                t.column("created_by", .text)
+                t.column("created_at", .text).notNull()
+                t.column("updated_at", .text).notNull()
+                t.column("deleted_at", .text)
+                t.column("sync_seq", .integer).notNull()
+            }
+            try db.execute(sql: "CREATE INDEX attachment_entity_idx ON attachment (entity, entity_id)")
+            try db.create(table: "attachment_outbox") { t in
+                t.primaryKey("id", .text)
+                t.column("household_id", .text).notNull()
+                t.column("entity", .text).notNull()
+                t.column("entity_id", .text).notNull()
+                t.column("filename", .text).notNull()
+                t.column("mime", .text).notNull()
+                t.column("size", .integer).notNull()
+                t.column("file_path", .text).notNull()
+                t.column("created_at", .text).notNull()
+            }
+        }
+
         return migrator
     }
 }

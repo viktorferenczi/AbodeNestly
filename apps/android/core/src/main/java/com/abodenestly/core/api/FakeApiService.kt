@@ -28,6 +28,8 @@ class FakeApiService : ApiService {
         data class FetchActivity(val householdId: UUID, val since: OffsetDateTime, val limit: Int) : Call
         data class UpdateModules(val householdId: UUID, val shopping: Boolean?, val pantry: Boolean?, val maintenance: Boolean?) : Call
         data class UpdateHousehold(val householdId: UUID, val name: String?, val currency: String?) : Call
+        data class SignAttachment(val householdId: UUID, val entity: String, val entityId: UUID, val filename: String, val mime: String, val size: Int) : Call
+        data class Upload(val url: String, val byteCount: Int, val mime: String) : Call
     }
 
     private val recorded = CopyOnWriteArrayList<Call>()
@@ -50,6 +52,10 @@ class FakeApiService : ApiService {
     @Volatile var activityResult: ApiResult<List<Activity>> = ApiResult.Success(emptyList())
     @Volatile var updateModulesResult: ApiResult<Household> = ApiResult.Failure(ApiFailure.Unknown)
     @Volatile var updateHouseholdResult: ApiResult<Household> = ApiResult.Failure(ApiFailure.Unknown)
+    @Volatile var signResult: ApiResult<SignedUpload> = ApiResult.Success(SignedUpload(UUID.randomUUID(), "https://upload.test/object", "households/h/pantry_item/e/a.jpg"))
+    /** Queued results for `signAttachment`, consumed in order before falling back to [signResult]. */
+    val signResults = ConcurrentLinkedQueue<ApiResult<SignedUpload>>()
+    @Volatile var uploadResult: ApiResult<Unit> = ApiResult.Success(Unit)
 
     val calls: List<Call> get() = recorded.toList()
 
@@ -147,5 +153,19 @@ class FakeApiService : ApiService {
         recorded += Call.UpdateHousehold(householdId, name, currency)
         gate?.await()
         return updateHouseholdResult
+    }
+
+    override suspend fun signAttachment(
+        householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int,
+    ): ApiResult<SignedUpload> {
+        recorded += Call.SignAttachment(householdId, entity, entityId, filename, mime, size)
+        gate?.await()
+        return signResults.poll() ?: signResult
+    }
+
+    override suspend fun uploadToSignedUrl(url: String, bytes: ByteArray, mime: String): ApiResult<Unit> {
+        recorded += Call.Upload(url, bytes.size, mime)
+        gate?.await()
+        return uploadResult
     }
 }

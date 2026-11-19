@@ -1,4 +1,4 @@
-import type { Activity } from '@abodenestly/contract';
+import type { Activity, Attachment, AttachmentEntity } from '@abodenestly/contract';
 import Dexie, { type Table } from 'dexie';
 
 // The contract has no ShoppingList type yet; SHOP-01/08 replace this with it and add the other tables.
@@ -8,6 +8,22 @@ type NamedRow = { id: string; household_id: string; name: string; deleted_at: st
 export type ListItemRow = NamedRow & { list_id: string };
 export type MaintTaskRow = { id: string; household_id: string; title: string; deleted_at: string | null };
 export type OutboxRow = { seq?: number; table: string; op: string; payload: unknown };
+/**
+ * CORE-11: a pick made offline. Separate from `outbox` on purpose: /sync carries rows, not bytes, and nothing
+ * drains `outbox` yet (SHOP-08). The attachment control drains this queue itself when online.
+ */
+export type AttachmentOutboxRow = {
+  id: string;
+  household_id: string;
+  entity: AttachmentEntity;
+  entity_id: string;
+  filename: string;
+  mime: string;
+  size: number;
+  /** An ArrayBuffer, not a Blob: it clones under every IndexedDB implementation, fake-indexeddb included. */
+  bytes: ArrayBuffer;
+  created_at: string;
+};
 export type MetaRow = { key: string; value: number };
 
 /** One database per household (SPEC §6.1): own rows, own outbox, own pull cursor. */
@@ -22,6 +38,8 @@ export class HouseholdDb extends Dexie {
   store!: Table<NamedRow, string>;
   location!: Table<NamedRow, string>;
   contractor!: Table<NamedRow, string>;
+  attachment!: Table<Attachment, string>;
+  attachment_outbox!: Table<AttachmentOutboxRow, string>;
   outbox!: Table<OutboxRow, number>;
   meta!: Table<MetaRow, string>;
 
@@ -45,6 +63,11 @@ export class HouseholdDb extends Dexie {
       store: 'id, household_id',
       location: 'id, household_id',
       contractor: 'id, household_id',
+    });
+    // CORE-11: attachments of pantry items, assets and log entries, plus the offline upload queue.
+    this.version(4).stores({
+      attachment: 'id, [entity+entity_id]',
+      attachment_outbox: 'id, created_at',
     });
   }
 }

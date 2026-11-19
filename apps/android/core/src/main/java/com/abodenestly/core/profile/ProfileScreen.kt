@@ -94,7 +94,7 @@ fun rememberPhotoPicker(onPicked: (ByteArray?) -> Unit): () -> Unit {
 private const val MAX_PICK_BYTES = 40 * 1024 * 1024
 
 /** `null` for an image bigger than [limit], so a huge file cannot exhaust memory. */
-private fun java.io.InputStream.readCapped(limit: Int): ByteArray? {
+internal fun java.io.InputStream.readCapped(limit: Int): ByteArray? {
     val out = ByteArrayOutputStream()
     val buffer = ByteArray(64 * 1024)
     while (true) {

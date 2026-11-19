@@ -34,6 +34,8 @@ public final class FakeAuthService: AuthService {
         var holdUpload = false
         var heldUploads: [CheckedContinuation<Void, Never>] = []
         var avatarURL: URL?
+        var attachmentURL: URL?
+        var attachmentURLRequests: [String] = []
     }
 
     private let state: OSAllocatedUnfairLock<State>
@@ -58,6 +60,9 @@ public final class FakeAuthService: AuthService {
     public func queueUpdateProfileResults(_ results: [Result<Void, AuthError>]) { state.withLock { $0.updateProfileQueue = results } }
     public func setUploadResult(_ result: Result<Void, AuthError>) { state.withLock { $0.uploadResult = result } }
     public func setAvatarURL(_ url: URL?) { state.withLock { $0.avatarURL = url } }
+    public func setAttachmentURL(_ url: URL?) { state.withLock { $0.attachmentURL = url } }
+    /// The Storage path of every `attachmentURL` request, in order.
+    public var attachmentURLRequests: [String] { state.withLock { $0.attachmentURLRequests } }
 
     /// Makes `uploadAvatar` suspend until `releaseUpload()`, so tests can observe the uploading state.
     public func holdUpload() { state.withLock { $0.holdUpload = true } }
@@ -171,4 +176,11 @@ public final class FakeAuthService: AuthService {
     }
 
     public func avatarURL(path: String) async -> URL? { state.withLock { $0.avatarURL } }
+
+    public func attachmentURL(path: String) async -> URL? {
+        state.withLock { state in
+            state.attachmentURLRequests.append(path)
+            return state.attachmentURL
+        }
+    }
 }

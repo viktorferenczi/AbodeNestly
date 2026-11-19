@@ -197,6 +197,8 @@ public final class SupabaseAuthService: AuthService {
         }
     }
 
+    public func attachmentURL(path: String) async -> URL? { await avatarURL(path: path) }
+
     public func avatarURL(path: String) async -> URL? {
         struct Signed: Decodable { let signedURL: String }
         do {

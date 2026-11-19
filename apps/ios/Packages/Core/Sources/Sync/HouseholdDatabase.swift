@@ -53,6 +53,34 @@ public struct DeletedRow: Sendable, Equatable {
     }
 }
 
+/// A pick waiting to upload (CORE-11). The bytes live in a file under the app's root folder; `filePath` is relative to it.
+public struct AttachmentUpload: Sendable, Equatable, Identifiable {
+    public var id: UUID
+    public var householdId: UUID
+    public var entity: String
+    public var entityId: UUID
+    public var filename: String
+    public var mime: String
+    public var size: Int
+    public var filePath: String
+    public var createdAt: Date
+
+    public init(
+        id: UUID, householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int,
+        filePath: String = "", createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.householdId = householdId
+        self.entity = entity
+        self.entityId = entityId
+        self.filename = filename
+        self.mime = mime
+        self.size = size
+        self.filePath = filePath
+        self.createdAt = createdAt
+    }
+}
+
 /// The handle `open` returns: which household and file, and whether its pool still works.
 public struct OpenHousehold: Sendable {
     public let householdId: UUID
@@ -74,6 +102,7 @@ public struct OpenHousehold: Sendable {
 /// One SQLite file per household (SPEC §6.1): own rows, own outbox, own pull cursor. Switching closes the pool
 /// of the household being left before the next opens. Web twin: `web/src/sync/db.ts`.
 public actor HouseholdDatabase {
+    private let root: URL
     private let directory: URL
     private let seedLists: [UUID: String]
     private var pool: DatabasePool?
@@ -83,6 +112,7 @@ public actor HouseholdDatabase {
     /// one list to insert when a household is opened without any.
     public init(rootURL: URL, seedLists: [UUID: String] = [:]) {
         self.seedLists = seedLists
+        root = rootURL
         directory = rootURL.appendingPathComponent("households", isDirectory: true)
     }
 
@@ -356,6 +386,160 @@ public actor HouseholdDatabase {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encodeNil(forKey: .deletedAt)
         }
+    }
+
+    // MARK: Attachments (CORE-11)
+
+    /// Live attachments of one entity, re-emitted whenever they change. Finishes at once when that household is not open.
+    public func observeAttachments(householdId: UUID, entity: String, entityId: UUID) -> AsyncStream<[Attachment]> {
+        guard let pool, handle?.householdId == householdId else {
+            return AsyncStream { $0.finish() }
+        }
+        let key = householdId.uuidString.lowercased()
+        let entityKey = entityId.uuidString.lowercased()
+        let observation = ValueObservation.tracking { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM attachment WHERE household_id = ? AND entity = ? AND entity_id = ? AND deleted_at IS NULL
+                ORDER BY created_at, id
+                """,
+                arguments: [key, entity, entityKey]
+            ).compactMap(Self.attachment)
+        }
+        return AsyncStream { continuation in
+            let task = Task {
+                do {
+                    for try await rows in observation.values(in: pool) { continuation.yield(rows) }
+                } catch {
+                    // A closed pool ends the observation; the screen keeps its last rows.
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// The same rows `observeAttachments` emits, read once.
+    public func attachments(householdId: UUID, entity: String, entityId: UUID) throws -> [Attachment] {
+        let pool = try requirePool()
+        guard handle?.householdId == householdId else { throw HouseholdDatabaseError.notOpen }
+        return try pool.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM attachment WHERE household_id = ? AND entity = ? AND entity_id = ? AND deleted_at IS NULL
+                ORDER BY created_at, id
+                """,
+                arguments: [householdId.uuidString.lowercased(), entity, entityId.uuidString.lowercased()]
+            ).compactMap(Self.attachment)
+        }
+    }
+
+    /// Stores an attachment after its bytes reached Storage. A row of another household is dropped, like `upsertActivity`.
+    public func upsertAttachment(_ row: Attachment) throws {
+        let pool = try requirePool()
+        guard handle?.householdId == row.householdId else { return }
+        try pool.write { db in
+            try db.execute(
+                sql: """
+                INSERT OR REPLACE INTO attachment
+                  (id, household_id, entity, entity_id, storage_path, mime, size_bytes, created_by,
+                   created_at, updated_at, deleted_at, sync_seq)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    row.id.uuidString.lowercased(), row.householdId.uuidString.lowercased(), row.entity,
+                    row.entityId.uuidString.lowercased(), row.storagePath, row.mime, row.sizeBytes,
+                    row.createdBy?.uuidString.lowercased(), Self.text(row.createdAt), Self.text(row.updatedAt),
+                    row.deletedAt.map(Self.text), row.syncSeq,
+                ]
+            )
+        }
+    }
+
+    /// Writes the bytes under the app root and queues the pick, in that order, so a queued row always has its file.
+    @discardableResult
+    public func enqueueAttachmentUpload(_ upload: AttachmentUpload, bytes: Data) throws -> AttachmentUpload {
+        let pool = try requirePool()
+        guard handle?.householdId == upload.householdId else { throw HouseholdDatabaseError.notOpen }
+        var queued = upload
+        queued.filePath = "attachments/\(upload.householdId.uuidString.lowercased())/\(upload.id.uuidString.lowercased()).bin"
+        let file = root.appendingPathComponent(queued.filePath)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try bytes.write(to: file, options: .atomic)
+        try pool.write { db in
+            try db.execute(
+                sql: """
+                INSERT OR REPLACE INTO attachment_outbox
+                  (id, household_id, entity, entity_id, filename, mime, size, file_path, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    queued.id.uuidString.lowercased(), queued.householdId.uuidString.lowercased(), queued.entity,
+                    queued.entityId.uuidString.lowercased(), queued.filename, queued.mime, queued.size, queued.filePath,
+                    Self.text(queued.createdAt),
+                ]
+            )
+        }
+        return queued
+    }
+
+    /// Queued picks of the open household in creation order, optionally only one entity's.
+    public func pendingAttachmentUploads(householdId: UUID, entity: String? = nil, entityId: UUID? = nil) throws -> [AttachmentUpload] {
+        let pool = try requirePool()
+        guard handle?.householdId == householdId else { throw HouseholdDatabaseError.notOpen }
+        let key = householdId.uuidString.lowercased()
+        return try pool.read { db in
+            try Row.fetchAll(
+                db, sql: "SELECT * FROM attachment_outbox WHERE household_id = ? ORDER BY created_at, id", arguments: [key]
+            ).compactMap(Self.upload).filter { row in
+                (entity == nil || row.entity == entity) && (entityId == nil || row.entityId == entityId)
+            }
+        }
+    }
+
+    /// The bytes a queued pick was saved with.
+    public func attachmentBytes(of upload: AttachmentUpload) throws -> Data {
+        try Data(contentsOf: root.appendingPathComponent(upload.filePath))
+    }
+
+    /// Drops a queued pick and its file, after it uploaded.
+    public func removeAttachmentUpload(id: UUID) throws {
+        let pool = try requirePool()
+        let key = id.uuidString.lowercased()
+        let path = try pool.write { db -> String? in
+            let path = try String.fetchOne(db, sql: "SELECT file_path FROM attachment_outbox WHERE id = ?", arguments: [key])
+            try db.execute(sql: "DELETE FROM attachment_outbox WHERE id = ?", arguments: [key])
+            return path
+        }
+        if let path { try? FileManager.default.removeItem(at: root.appendingPathComponent(path)) }
+    }
+
+    private static func attachment(_ row: Row) -> Attachment? {
+        guard
+            let id = UUID(uuidString: row["id"]), let householdId = UUID(uuidString: row["household_id"]),
+            let entityId = UUID(uuidString: row["entity_id"]),
+            let created = date(row["created_at"]), let updated = date(row["updated_at"])
+        else { return nil }
+        let creator: String? = row["created_by"]
+        let deleted: String? = row["deleted_at"]
+        return Attachment(
+            id: id, householdId: householdId, entity: row["entity"], entityId: entityId, storagePath: row["storage_path"],
+            mime: row["mime"], sizeBytes: row["size_bytes"], createdBy: creator.flatMap { UUID(uuidString: $0) },
+            createdAt: created, updatedAt: updated, deletedAt: deleted.flatMap(date), syncSeq: row["sync_seq"]
+        )
+    }
+
+    private static func upload(_ row: Row) -> AttachmentUpload? {
+        guard
+            let id = UUID(uuidString: row["id"]), let householdId = UUID(uuidString: row["household_id"]),
+            let entityId = UUID(uuidString: row["entity_id"]), let created = date(row["created_at"])
+        else { return nil }
+        return AttachmentUpload(
+            id: id, householdId: householdId, entity: row["entity"], entityId: entityId, filename: row["filename"],
+            mime: row["mime"], size: row["size"], filePath: row["file_path"], createdAt: created
+        )
     }
 
     /// Test seam: the module stories own the real writes into these tables.

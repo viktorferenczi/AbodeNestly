@@ -8,12 +8,14 @@ import type {
   Member,
   Profile,
   Role,
+  SignAttachmentRequest,
+  SignAttachmentResponse,
   UpdateModulesRequest,
 } from '@abodenestly/contract';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type ApiFailure = {
-  code: 'validation' | 'invalid_code' | 'network' | 'unknown' | 'last_owner' | 'forbidden' | 'not_found';
+  code: 'validation' | 'invalid_code' | 'network' | 'unknown' | 'last_owner' | 'forbidden' | 'not_found' | 'module_disabled';
 };
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: ApiFailure };
 
@@ -47,6 +49,32 @@ export interface ApiClient {
   fetchActivity(householdId: string, sinceIso: string, limit: number): Promise<ApiResult<Activity[]>>;
   /** Promotes a member to owner. Direct write under RLS (SPEC §7: network-only core settings). */
   makeOwner(householdId: string, userId: string): Promise<ApiResult<null>>;
+  /** CORE-11: creates the attachment row and returns the Storage upload URL. 403 `module_disabled` when the entity's module is off. */
+  signAttachment(req: SignAttachmentRequest): Promise<ApiResult<SignAttachmentResponse>>;
+}
+
+/** PUTs the bytes to the signed `upload_url` (plain fetch, no bearer: the URL carries the token). */
+export type UploadFn = (url: string, blob: Blob, mime: string) => Promise<ApiResult<null>>;
+
+export const uploadToSignedUrl: UploadFn = async (url, blob, mime) => {
+  try {
+    const response = await fetch(url, { method: 'PUT', headers: { 'content-type': mime, 'x-upsert': 'false' }, body: blob });
+    return response.ok ? { ok: true, value: null } : { ok: false, error: { code: 'unknown' } };
+  } catch {
+    return { ok: false, error: { code: 'network' } };
+  }
+};
+
+/** Maps a sign error response to a failure; exported for the table test. */
+export function toSignFailure(status: number, body: ApiError | null): ApiFailure {
+  const code = body?.error?.code;
+  if (code === 'module_disabled') return { code: 'module_disabled' };
+  if (code === 'forbidden') return { code: 'forbidden' };
+  if (code === 'validation') return { code: 'validation' };
+  if (code) return { code: 'unknown' };
+  if (status === 403) return { code: 'forbidden' };
+  if (status === 400) return { code: 'validation' };
+  return { code: 'unknown' };
 }
 
 // CORE-03-api has not fixed its error code yet; the SQL raises `invalid_invite`. `not_found` and
@@ -303,6 +331,9 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
       } catch {
         return { ok: false, error: { code: 'network' } };
       }
+    },
+    signAttachment(req) {
+      return call<SignAttachmentResponse>('POST', '/attachments/sign', req, (s) => s === 200 || s === 201, toSignFailure);
     },
     acceptInvite(code) {
       return call<{ household_id: string }>(

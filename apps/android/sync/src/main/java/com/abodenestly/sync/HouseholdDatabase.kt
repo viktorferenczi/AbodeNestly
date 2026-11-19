@@ -132,6 +132,42 @@ data class ContractorEntity(
     @ColumnInfo(name = "deleted_at") val deletedAt: String? = null,
 )
 
+/**
+ * CORE-11: the server's `attachment` columns, so a household's photos and PDFs list offline. Web twin: Dexie `attachment`.
+ */
+@Entity(tableName = "attachment", indices = [Index(value = ["entity", "entity_id"])])
+data class AttachmentEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "household_id") val householdId: String,
+    val entity: String,
+    @ColumnInfo(name = "entity_id") val entityId: String,
+    @ColumnInfo(name = "storage_path") val storagePath: String,
+    val mime: String,
+    @ColumnInfo(name = "size_bytes") val sizeBytes: Int,
+    @ColumnInfo(name = "created_by") val createdBy: String?,
+    @ColumnInfo(name = "created_at") val createdAt: String,
+    @ColumnInfo(name = "updated_at") val updatedAt: String,
+    @ColumnInfo(name = "deleted_at") val deletedAt: String?,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Int,
+)
+
+/**
+ * CORE-11: a pick made offline, waiting to upload. Separate from `outbox` on purpose: /sync carries rows, not bytes,
+ * and nothing drains `outbox` yet (SHOP-08). `file_path` is relative to the app's files folder and holds the bytes.
+ */
+@Entity(tableName = "attachment_outbox")
+data class AttachmentOutboxEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "household_id") val householdId: String,
+    val entity: String,
+    @ColumnInfo(name = "entity_id") val entityId: String,
+    val filename: String,
+    val mime: String,
+    val size: Int,
+    @ColumnInfo(name = "file_path") val filePath: String,
+    @ColumnInfo(name = "created_at") val createdAt: String,
+)
+
 @Dao
 interface MetaDao {
     @Query("SELECT value FROM meta WHERE `key` = :key")
@@ -173,6 +209,30 @@ interface ActivityDao {
     /** Newest live rows of one household; the screen applies the 30-day / 20-row window, the cap only keeps the flow small. */
     @Query("SELECT * FROM activity WHERE household_id = :householdId AND deleted_at IS NULL ORDER BY created_at DESC, id DESC LIMIT :limit")
     fun observeFeed(householdId: String, limit: Int): Flow<List<ActivityEntity>>
+}
+
+@Dao
+interface AttachmentDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(row: AttachmentEntity)
+
+    @Query("SELECT * FROM attachment WHERE household_id = :householdId AND entity = :entity AND entity_id = :entityId AND deleted_at IS NULL ORDER BY created_at, id")
+    fun observe(householdId: String, entity: String, entityId: String): Flow<List<AttachmentEntity>>
+
+    @Query("SELECT * FROM attachment WHERE household_id = :householdId AND entity = :entity AND entity_id = :entityId AND deleted_at IS NULL ORDER BY created_at, id")
+    suspend fun list(householdId: String, entity: String, entityId: String): List<AttachmentEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun enqueue(row: AttachmentOutboxEntity)
+
+    @Query("SELECT * FROM attachment_outbox WHERE household_id = :householdId ORDER BY created_at, id")
+    suspend fun pending(householdId: String): List<AttachmentOutboxEntity>
+
+    @Query("SELECT file_path FROM attachment_outbox WHERE id = :id")
+    suspend fun filePath(id: String): String?
+
+    @Query("DELETE FROM attachment_outbox WHERE id = :id")
+    suspend fun remove(id: String)
 }
 
 /**
@@ -326,12 +386,27 @@ internal val MIGRATION_2_3_SQL = listOf(
     "CREATE INDEX IF NOT EXISTS `index_contractor_household_id` ON `contractor` (`household_id`)",
 )
 
+/** v4 adds the CORE-11 attachment table and its offline upload queue. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_3_4_SQL.forEach(db::execSQL)
+    }
+}
+
+// Same statements Room exports in schemas/…/4.json for the attachment tables.
+internal val MIGRATION_3_4_SQL = listOf(
+    "CREATE TABLE IF NOT EXISTS `attachment` (`id` TEXT NOT NULL, `household_id` TEXT NOT NULL, `entity` TEXT NOT NULL, `entity_id` TEXT NOT NULL, `storage_path` TEXT NOT NULL, `mime` TEXT NOT NULL, `size_bytes` INTEGER NOT NULL, `created_by` TEXT, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, `deleted_at` TEXT, `sync_seq` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+    "CREATE INDEX IF NOT EXISTS `index_attachment_entity_entity_id` ON `attachment` (`entity`, `entity_id`)",
+    "CREATE TABLE IF NOT EXISTS `attachment_outbox` (`id` TEXT NOT NULL, `household_id` TEXT NOT NULL, `entity` TEXT NOT NULL, `entity_id` TEXT NOT NULL, `filename` TEXT NOT NULL, `mime` TEXT NOT NULL, `size` INTEGER NOT NULL, `file_path` TEXT NOT NULL, `created_at` TEXT NOT NULL, PRIMARY KEY(`id`))",
+)
+
 /** One Room database per household (SPEC §6.1): own rows, own outbox, own pull cursor. */
 @Database(
     entities = [MetaEntity::class, OutboxEntity::class, ShoppingListEntity::class, ActivityEntity::class,
         ListItemEntity::class, PantryItemEntity::class, RecipeEntity::class, AssetEntity::class, MaintTaskEntity::class, StoreEntity::class, LocationEntity::class, ContractorEntity::class,
+        AttachmentEntity::class, AttachmentOutboxEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class HouseholdDatabase : RoomDatabase() {
@@ -341,4 +416,5 @@ abstract class HouseholdDatabase : RoomDatabase() {
     abstract fun activity(): ActivityDao
     abstract fun search(): SearchDao
     abstract fun deleted(): DeletedDao
+    abstract fun attachments(): AttachmentDao
 }

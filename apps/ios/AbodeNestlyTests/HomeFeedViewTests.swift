@@ -15,6 +15,13 @@ final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
     func kick() async { lock.withLock { count += 1 } }
 }
 
+/// Polls on the main actor until `condition` holds or 10 s pass. A bounded `Task.yield()` loop gave up too early on
+/// slow CI runners, where the database observation delivers a few scheduler turns later.
+@MainActor
+func waitUntil(_ condition: @MainActor () -> Bool) async {
+    for _ in 0..<1000 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
+}
+
 @MainActor
 private final class Taps {
     var modules: [AppTab] = []
@@ -43,7 +50,7 @@ private struct HomeHarness {
         )
         model = home
         reader = Task { await home.start() }
-        for _ in 0..<200 where !home.loaded { await Task.yield() }
+        await waitUntil { home.loaded }
     }
 
     func inspect() throws -> InspectableView<ViewType.ClassifiedView> {
@@ -153,7 +160,7 @@ struct HomeFeedViewTests {
         defer { h.stop() }
         #expect(h.model.state == .empty)
         try await h.db.upsertActivity([makeActivity("Cleo joined the household", ago: 5, household: h.household, module: .core)])
-        for _ in 0..<400 where h.model.rows.isEmpty { await Task.yield() }
+        await waitUntil { !h.model.rows.isEmpty }
         #expect(h.model.feed.map(\.summary) == ["Cleo joined the household"])
     }
 }
