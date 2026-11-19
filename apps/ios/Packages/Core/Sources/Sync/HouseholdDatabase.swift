@@ -20,6 +20,24 @@ public struct ShoppingListRow: Sendable, Equatable {
     }
 }
 
+/// One name that matched a search (CORE-09). `table` is the local table it came from.
+public struct SearchRow: Sendable, Equatable {
+    public var table: String
+    public var id: UUID
+    public var name: String
+    /// `list_item` only: the list the item sits on.
+    public var listId: UUID?
+    public var deletedAt: String?
+
+    public init(table: String, id: UUID, name: String, listId: UUID? = nil, deletedAt: String? = nil) {
+        self.table = table
+        self.id = id
+        self.name = name
+        self.listId = listId
+        self.deletedAt = deletedAt
+    }
+}
+
 /// The handle `open` returns: which household and file, and whether its pool still works.
 public struct OpenHousehold: Sendable {
     public let householdId: UUID
@@ -184,6 +202,90 @@ public actor HouseholdDatabase {
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    // MARK: Search (CORE-09)
+
+    /// Local tables search may read, with the column that holds the name. A closed set: table names go into SQL text.
+    public static let searchableTables: [String: String] = [
+        "list_item": "name", "store": "name", "pantry_item": "name", "location": "name", "recipe": "name",
+        "asset": "name", "maint_task": "title", "contractor": "name",
+    ]
+
+    /// Rows of `tables` whose name contains `query` (case-insensitive), re-emitted whenever they change. Soft-deleted
+    /// rows are not read. A blank query, no tables, or a household that is not open yields one empty emission or an
+    /// ended stream respectively, like `observeActivity`.
+    public func observeSearch(householdId: UUID, query: String, tables: [String]) -> AsyncStream<[SearchRow]> {
+        guard let pool, handle?.householdId == householdId else {
+            return AsyncStream { $0.finish() }
+        }
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let known = tables.filter { Self.searchableTables[$0] != nil }
+        guard !needle.isEmpty, !known.isEmpty else {
+            return AsyncStream { continuation in
+                continuation.yield([])
+                continuation.finish()
+            }
+        }
+        let key = householdId.uuidString.lowercased()
+        // `\` escapes LIKE wildcards so "50%" is searched literally.
+        let escaped = needle
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+        let observation = ValueObservation.tracking { db in
+            try known.flatMap { table -> [SearchRow] in
+                let column = Self.searchableTables[table] ?? "name"
+                let listColumn = table == "list_item" ? "list_id" : "NULL"
+                return try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT id, \(column) AS name, \(listColumn) AS list_id, deleted_at FROM \(table)
+                    WHERE household_id = ? AND deleted_at IS NULL
+                      AND \(column) LIKE '%' || ? || '%' ESCAPE '\\' COLLATE NOCASE
+                    """,
+                    arguments: [key, escaped]
+                ).compactMap { row -> SearchRow? in
+                    guard let id = UUID(uuidString: row["id"]) else { return nil }
+                    let list: String? = row["list_id"]
+                    return SearchRow(
+                        table: table, id: id, name: row["name"], listId: list.flatMap { UUID(uuidString: $0) },
+                        deletedAt: row["deleted_at"]
+                    )
+                }
+            }
+        }
+        return AsyncStream { continuation in
+            let task = Task {
+                do {
+                    for try await rows in observation.values(in: pool) { continuation.yield(rows) }
+                } catch {
+                    // A closed pool ends the observation; the screen keeps its last rows.
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Test seam: the module stories own the real writes into these tables.
+    func insertSearchRowForTesting(_ row: SearchRow, householdId: UUID) throws {
+        let pool = try requirePool()
+        guard let column = Self.searchableTables[row.table] else { return }
+        try pool.write { db in
+            if row.table == "list_item" {
+                try db.execute(
+                    sql: "INSERT OR REPLACE INTO list_item (id, household_id, name, list_id, deleted_at) VALUES (?, ?, ?, ?, ?)",
+                    arguments: [row.id.uuidString.lowercased(), householdId.uuidString.lowercased(), row.name,
+                                row.listId?.uuidString.lowercased(), row.deletedAt]
+                )
+            } else {
+                try db.execute(
+                    sql: "INSERT OR REPLACE INTO \(row.table) (id, household_id, \(column), deleted_at) VALUES (?, ?, ?, ?)",
+                    arguments: [row.id.uuidString.lowercased(), householdId.uuidString.lowercased(), row.name, row.deletedAt]
+                )
+            }
         }
     }
 

@@ -32,6 +32,8 @@ public final class SessionModel {
     public private(set) var householdName: String?
     /// A long-press in the switcher asks Home to push Settings (DESIGN B3 → B5); Home clears it.
     public var settingsRequested = false
+    /// The TopBar magnifier was tapped (CORE-09): the shell shows Search on the Home tab.
+    public var searchRequested = false
     /// The module flags of the household in `destination`, for tab filtering.
     public private(set) var household: LandingHousehold?
     /// Online, memberships could not be read: a blocking error with retry.

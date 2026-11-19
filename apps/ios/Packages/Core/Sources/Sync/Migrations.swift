@@ -53,6 +53,23 @@ enum Migrations {
                 """)
         }
 
+        // CORE-09: the name columns search reads, so it works offline. Minimal on purpose: the module stories (SHOP-01,
+        // PANT-01, MAINT-01, ...) widen these tables to the server's full columns. `maint_task` names its text `title`
+        // on the server; the search maps it to a name.
+        migrator.registerMigration("v3") { db in
+            for table in ["list_item", "pantry_item", "recipe", "asset", "maint_task", "store", "location", "contractor"] {
+                try db.create(table: table) { t in
+                    t.primaryKey("id", .text)
+                    t.column("household_id", .text).notNull()
+                    t.column(table == "maint_task" ? "title" : "name", .text).notNull()
+                    if table == "list_item" { t.column("list_id", .text) }
+                    t.column("deleted_at", .text)
+                }
+                try db.execute(sql: "CREATE INDEX \(table)_household_idx ON \(table) (household_id)")
+                try db.execute(sql: "CREATE INDEX \(table)_live_idx ON \(table) (household_id) WHERE deleted_at IS NULL")
+            }
+        }
+
         return migrator
     }
 }
