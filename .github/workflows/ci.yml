@@ -34,7 +34,7 @@ jobs:
           pnpm --filter @abodenestly/contract swift
           pnpm --filter @abodenestly/contract kotlin
           git diff --exit-code docs/openapi.yaml apps/ios/Packages/Contract apps/android/contract
-  # API integration tests hit a real local Supabase (auth + rest + db only; the rest is excluded to start faster).
+  # API integration tests hit a real local Supabase (auth + rest + db + storage; the rest is excluded to start faster).
   api-int:
     runs-on: ubuntu-latest
     steps:
@@ -43,7 +43,7 @@ jobs:
         with:
           version: 3.1.0
       - name: start Supabase (applies migrations)
-        run: supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,vector,logflare,postgres-meta,mailpit
+        run: supabase start -x studio,imgproxy,realtime,edge-runtime,vector,logflare,postgres-meta,mailpit
       - name: export test env
         run: |
           supabase status -o env > "$RUNNER_TEMP/supabase.env"
