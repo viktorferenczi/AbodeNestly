@@ -31,6 +31,7 @@ sealed interface HomeEvent {
     data class OpenModule(val tab: AppTab) : HomeEvent
     data object OpenSettings : HomeEvent
     data object OpenMembers : HomeEvent
+    data object OpenRecentlyDeleted : HomeEvent
     data object OpenProfile : HomeEvent
 }
 

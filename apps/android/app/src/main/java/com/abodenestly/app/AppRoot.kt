@@ -39,6 +39,7 @@ import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.members.MembersCache
 import com.abodenestly.core.search.RecentSearchStore
+import com.abodenestly.core.recentlydeleted.RecentlyDeletedScreen
 import com.abodenestly.core.search.SearchScreen
 import com.abodenestly.core.search.searchModules
 import com.abodenestly.core.search.tab
@@ -285,6 +286,7 @@ private fun Tabs(
     // No NavHost yet, so Members is a flag over the Home tab. The household may be unknown offline at launch; fall back to the last one used.
     var showMembers by rememberSaveable(destination) { mutableStateOf(false) }
     var showSettings by rememberSaveable(destination) { mutableStateOf(false) }
+    var showDeleted by rememberSaveable(destination) { mutableStateOf(false) }
     var showProfile by rememberSaveable(destination) { mutableStateOf(false) }
     var householdId by remember { mutableStateOf<UUID?>(household?.id) }
     LaunchedEffect(household) { householdId = household?.id ?: lastHousehold.read() }
@@ -312,6 +314,15 @@ private fun Tabs(
                 meId, email, profile, profileDeps, isOnline,
                 onProfileChanged = onProfileChanged, onSignOut = onSignOut, modifier = Modifier.weight(1f),
             )
+        }
+        return
+    }
+    val deletedModules = (household?.let(HomeModules::of) ?: cachedModules)?.searchModules()
+    if (showDeleted && members != null && deletedModules != null) {
+        BackHandler { showDeleted = false }
+        Column(Modifier.fillMaxSize()) {
+            TextButton(onClick = { showDeleted = false }, modifier = Modifier.testTag("deleted.back")) { Text("Back") }
+            RecentlyDeletedScreen(members, deletedModules, database, sync, modifier = Modifier.weight(1f))
         }
         return
     }
@@ -350,6 +361,7 @@ private fun Tabs(
                             is HomeEvent.OpenModule -> onSelectTab(event.tab)
                             HomeEvent.OpenSettings -> if (meId != null) showSettings = true
                             HomeEvent.OpenMembers -> if (meId != null) showMembers = true
+                            HomeEvent.OpenRecentlyDeleted -> if (deletedModules != null) showDeleted = true
                             HomeEvent.OpenProfile -> if (meId != null) showProfile = true
                             HomeEvent.Refresh -> Unit
                         }

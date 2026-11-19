@@ -3,6 +3,7 @@ package com.abodenestly.sync
 import android.content.Context
 import com.abodenestly.contract.models.Activity
 import androidx.room.Room
+import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +39,9 @@ data class SearchRow(
     val listId: String? = null,
     val deletedAt: String? = null,
 )
+
+/** A soft-deleted row of a restorable table (CORE-10). [name] is `title` for `maint_task`. [deletedAt] is the stored text, ISO 8601. */
+data class DeletedRow(val table: String, val id: String, val name: String, val deletedAt: String)
 
 /** A read or write that needs the open household database, with none open. */
 class DatabaseNotOpenException : IllegalStateException("No household database is open")
@@ -189,6 +193,72 @@ open class DatabaseRegistry(
         }
     }
 
+    // Recently deleted (CORE-10)
+
+    /**
+     * The soft-deleted rows of [modules]' tables, re-emitted when those tables change. The 30-day cut-off is the
+     * caller's (`RecentlyDeleted.sections`), because the purge sends no tombstone. Follows the open database like [searchNames].
+     */
+    fun deletedRows(id: UUID, modules: Set<SearchModule>): Flow<List<DeletedRow>> {
+        if (modules.isEmpty()) return flowOf(emptyList())
+        return current.flatMapLatest { open ->
+            val db = database
+            if (open != id || db == null) emptyFlow()
+            else {
+                val dao = db.deleted()
+                val hid = id.toString()
+                val tables = modules.flatMap { it.tables }.toSet()
+                val flows = buildList<Flow<List<DeletedRow>>> {
+                    if ("list_item" in tables) add(dao.listItems(hid).map { r -> r.map { DeletedRow("list_item", it.id, it.name, it.deletedAt!!) } })
+                    if ("store" in tables) add(dao.stores(hid).map { r -> r.map { DeletedRow("store", it.id, it.name, it.deletedAt!!) } })
+                    if ("pantry_item" in tables) add(dao.pantryItems(hid).map { r -> r.map { DeletedRow("pantry_item", it.id, it.name, it.deletedAt!!) } })
+                    if ("location" in tables) add(dao.locations(hid).map { r -> r.map { DeletedRow("location", it.id, it.name, it.deletedAt!!) } })
+                    if ("recipe" in tables) add(dao.recipes(hid).map { r -> r.map { DeletedRow("recipe", it.id, it.name, it.deletedAt!!) } })
+                    if ("asset" in tables) add(dao.assets(hid).map { r -> r.map { DeletedRow("asset", it.id, it.name, it.deletedAt!!) } })
+                    if ("maint_task" in tables) add(dao.maintTasks(hid).map { r -> r.map { DeletedRow("maint_task", it.id, it.title, it.deletedAt!!) } })
+                    if ("contractor" in tables) add(dao.contractors(hid).map { r -> r.map { DeletedRow("contractor", it.id, it.name, it.deletedAt!!) } })
+                }
+                combine(flows) { parts -> parts.toList().flatten() }
+                    // The database may close under the collector during a switch.
+                    .catch { }
+            }
+        }
+    }
+
+    /**
+     * Restores one soft-deleted row of household [id]: clears `deleted_at` and queues the upsert in one transaction, so the
+     * two cannot diverge. `data` is partial on purpose (the server merges it, so a rename made elsewhere survives) and the
+     * null is written out: a missing key would mean "unchanged". Nothing is queued when no local row was restored. Throws [DatabaseNotOpenException] when [id] is not the open household.
+     */
+    suspend fun restore(id: UUID, table: String, rowId: String, now: Instant) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val db = database
+            if (db == null || mutableCurrent.value != id) throw DatabaseNotOpenException()
+            val dao = db.deleted()
+            db.withTransaction {
+                val changed = when (table) {
+                    "list_item" -> dao.clearListItem(rowId)
+                    "store" -> dao.clearStore(rowId)
+                    "pantry_item" -> dao.clearPantryItem(rowId)
+                    "location" -> dao.clearLocation(rowId)
+                    "recipe" -> dao.clearRecipe(rowId)
+                    "asset" -> dao.clearAsset(rowId)
+                    "maint_task" -> dao.clearMaintTask(rowId)
+                    "contractor" -> dao.clearContractor(rowId)
+                    else -> throw IllegalArgumentException("Not restorable: $table")
+                }
+                // Nothing matched (a second tap, or a row the local table no longer has): queuing the partial upsert would insert a bare row on the server.
+                if (changed == 0) return@withTransaction
+                db.outbox().insert(
+                    OutboxEntity(
+                        id = UUID.randomUUID().toString(), tableName = table, op = "upsert", rowId = rowId,
+                        data = RESTORE_DATA, clientTs = now.toString(),
+                    ),
+                )
+            }
+        }
+    }
+
     /** Test seam (and the future module stories' pull): runs [block] against the search DAO of the open household. */
     suspend fun <T> withSearchDao(block: suspend (SearchDao) -> T): T = withOpen { block(it.search()) }
 
@@ -206,6 +276,9 @@ open class DatabaseRegistry(
         it.shoppingLists().upsert(ShoppingListEntity(list.id.toString(), list.householdId.toString(), list.name))
     }
 
+    /** Test seam: the queued mutations in insertion order. */
+    suspend fun outboxForTesting(): List<OutboxEntity> = withOpen { it.outbox().all() }
+
     /** Test seam: queues one mutation so pending counts have something to count. */
     suspend fun enqueueForTesting(table: String = "shopping_list", rowId: UUID = UUID.randomUUID()) = withOpen {
         it.outbox().insert(
@@ -220,6 +293,7 @@ open class DatabaseRegistry(
     private companion object {
         const val CURSOR = "cursor"
         const val FEED_ROWS = 100
+        const val RESTORE_DATA = """{"deleted_at":null}"""
 
         /** Fixed width, so comparing the text compares the time. */
         val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)

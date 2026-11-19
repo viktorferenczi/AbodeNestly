@@ -2094,8 +2094,8 @@ Tables: the soft-deleted household rows  Endpoints: none  Types: none new
 Schema change: no  Contract change: no
 
 ## Tests required
-Unit: apps/android/core/src/test/java/app/abodenestly/core/RecentlyDeletedTest.kt → AC2 days left is 30 minus the age in days; AC3 the outbox payload has deleted_at null
-Component: apps/android/core/src/test/java/app/abodenestly/core/RecentlyDeletedComposeTest.kt → AC1 empty, AC2 populated; Restore tap. Also asserts AC4, AC5
+Unit: apps/android/core/src/test/java/com/abodenestly/core/RecentlyDeletedTest.kt → AC2 days left is 30 minus the age in days; AC3 the outbox payload has deleted_at null
+Component: apps/android/core/src/test/java/com/abodenestly/core/RecentlyDeletedComposeTest.kt → AC1 empty, AC2 populated; Restore tap. Also asserts AC4, AC5
 Integration: n/a (no API handler in this story)
 E2E: n/a
 Offline test: n/a (core; shopping restores still queue an outbox row, asserted in the unit test)
