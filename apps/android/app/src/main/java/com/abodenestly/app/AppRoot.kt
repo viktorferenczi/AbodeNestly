@@ -38,6 +38,14 @@ import com.abodenestly.core.auth.SessionState
 import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.members.MembersCache
+import com.abodenestly.core.search.RecentSearchStore
+import com.abodenestly.core.search.SearchScreen
+import com.abodenestly.core.search.searchModules
+import com.abodenestly.core.search.tab
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Profile
 import com.abodenestly.core.members.MembersScreen
@@ -85,6 +93,7 @@ fun AppRoot(
     database: DatabaseRegistry,
     householdsCache: HouseholdsCache,
     sync: SyncEngine,
+    recentSearches: RecentSearchStore,
 ) {
     val state by session.state.collectAsState()
     val online by network.isOnline.collectAsState()
@@ -94,7 +103,7 @@ fun AppRoot(
             SessionStatus.Loading -> Box(Modifier.fillMaxSize().testTag("session.loading"))
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = online)
             SessionStatus.SignedIn -> SignedInShell(
-                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, householdsCache, sync,
+                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, householdsCache, sync, recentSearches,
                 onSwitch = session::switchTo, onSelectTab = session::selectTab, onSettingsShown = session::settingsShown,
                 meId = session.userId, email = session.email, isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
                 onLeft = session::leftHousehold, onHouseholdChanged = session::updateHousehold,
@@ -117,6 +126,7 @@ private fun SignedInShell(
     database: DatabaseRegistry,
     householdsCache: HouseholdsCache,
     sync: SyncEngine,
+    recentSearches: RecentSearchStore,
     onSwitch: suspend (UUID, Boolean) -> Unit,
     onSelectTab: (AppTab) -> Unit,
     onSettingsShown: () -> Unit,
@@ -135,12 +145,34 @@ private fun SignedInShell(
     // "Create or join another" ends when a household was entered (created or joined), which changes the id.
     LaunchedEffect(currentHouseholdId) { showWelcome = false }
     val canSwitch = (state.destination is Destination.Household || state.destination == Destination.Home) && !state.loadFailed
+    // Search (CORE-09) is a flag over the shell like Members/Settings; the magnifier sits on Home's TopBar (DESIGN B8).
+    var showSearch by rememberSaveable(currentHouseholdId) { mutableStateOf(false) }
+    var searchHouseholdId by remember { mutableStateOf<UUID?>(state.household?.id) }
+    LaunchedEffect(state.household) { searchHouseholdId = state.household?.id ?: lastHousehold.read() }
+    // Offline at launch the landing read can fail; the cached households list still knows the module flags.
+    var cachedModules by remember { mutableStateOf<HomeModules?>(null) }
+    LaunchedEffect(state.household, searchHouseholdId, meId) {
+        cachedModules = null
+        val id = searchHouseholdId
+        if (state.household == null && id != null && meId != null) {
+            cachedModules = householdsCache.read(meId).firstOrNull { it.household.id == id }?.household?.let(HomeModules::of)
+        }
+    }
+    val searchModules = (state.household?.let(HomeModules::of) ?: cachedModules)?.searchModules()
+    val canSearch = canSwitch && searchHouseholdId != null && searchModules != null && !showWelcome
     // AC8: the TopBar shows the person's display name once the profile row is in. The title opens the switcher (B3).
     Scaffold(
         topBar = {
             TopBar(
                 state.householdName ?: "AbodeNestly", state.profile?.displayName,
                 onTitleClick = if (canSwitch && meId != null) ({ showSwitcher = true }) else null,
+                actions = if (canSearch && !showSearch && state.selectedTab == AppTab.Home) {
+                    {
+                        IconButton(onClick = { showSearch = true }, modifier = Modifier.testTag("topbar.search")) {
+                            Icon(Icons.Filled.Search, contentDescription = "Search")
+                        }
+                    }
+                } else null,
             )
         },
         containerColor = LocalTokens.current.bg,
@@ -154,6 +186,18 @@ private fun SignedInShell(
                 state.destination == null -> Centered { CircularProgressIndicator(Modifier.testTag("session.loading")) }
                 state.destination == Destination.Welcome ->
                     WelcomeScreen(welcome, displayName = state.profile?.displayName, isOnline = isOnline, onSignOut = onSignOut)
+                showSearch && canSearch -> {
+                    BackHandler { showSearch = false }
+                    Column(Modifier.fillMaxSize()) {
+                        TextButton(onClick = { showSearch = false }, modifier = Modifier.testTag("search.back")) { Text("Back") }
+                        SearchScreen(
+                            searchHouseholdId!!, searchModules!!, database, recentSearches,
+                            // No entity screens yet: a result opens its module's tab (DESIGN B8 deviation).
+                            onNavigate = { showSearch = false; onSelectTab(it.target.module.tab) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
                 showWelcome -> {
                     BackHandler { showWelcome = false }
                     Column(Modifier.fillMaxSize()) {

@@ -62,7 +62,8 @@ describe('Shell', () => {
     };
     writeLastHousehold('h1');
     await renderShell(new FakeAuthClient({ user: { id: 'u1' } }), api);
-    const links = screen.getAllByRole('link').map((a) => a.textContent);
+    // The TopBar magnifier (CORE-09) is a link too; this test is about the tab bar.
+    const links = screen.getAllByRole('link', { name: /^(?!Search$)/ }).map((a) => a.textContent);
     expect(links).toEqual(['Shopping', 'Maintenance', 'Home', 'Profile']);
   });
 

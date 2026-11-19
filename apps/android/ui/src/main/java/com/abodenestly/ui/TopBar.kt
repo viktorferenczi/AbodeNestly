@@ -3,7 +3,7 @@ package com.abodenestly.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -25,9 +25,13 @@ import androidx.compose.ui.text.style.TextOverflow
 /**
  * DESIGN A6 TopBar: title on the left, optional trailing text (the signed-in person's name for now). With
  * [onTitleClick] the title is the household switcher's entry (DESIGN B3): "<title> ▾" as a 48 dp target.
+ * [actions] are trailing icon buttons (DESIGN A6: up to 2), placed after the trailing text.
  */
 @Composable
-fun TopBar(title: String, trailing: String? = null, modifier: Modifier = Modifier, onTitleClick: (() -> Unit)? = null) {
+fun TopBar(title: String, trailing: String? = null, modifier: Modifier = Modifier,
+    onTitleClick: (() -> Unit)? = null,
+    actions: (@Composable RowScope.() -> Unit)? = null,
+) {
     val tokens = LocalTokens.current
     Row(
         modifier
@@ -38,9 +42,10 @@ fun TopBar(title: String, trailing: String? = null, modifier: Modifier = Modifie
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val titleModifier = if (onTitleClick == null) {
-            Modifier.testTag("topbar.title").semantics { heading() }
+            Modifier.weight(1f).testTag("topbar.title").semantics { heading() }
         } else {
             Modifier
+                .weight(1f)
                 .heightIn(min = Tokens.MinTouchTarget)
                 .clickable(role = Role.Button, onClick = onTitleClick)
                 .testTag("topbar.title")
@@ -54,9 +59,10 @@ fun TopBar(title: String, trailing: String? = null, modifier: Modifier = Modifie
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = tokens.text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         if (trailing != null) {
-            Spacer(Modifier.weight(1f))
             Text(
                 trailing,
                 modifier = Modifier.testTag("topbar.trailing"),
@@ -66,5 +72,6 @@ fun TopBar(title: String, trailing: String? = null, modifier: Modifier = Modifie
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        actions?.invoke(this)
     }
 }

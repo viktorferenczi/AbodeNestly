@@ -3,6 +3,10 @@ import Dexie, { type Table } from 'dexie';
 
 // The contract has no ShoppingList type yet; SHOP-01/08 replace this with it and add the other tables.
 export type ShoppingListRow = { id: string; household_id: string; name: string; deleted_at: string | null };
+// Minimal local rows for CORE-09 search; each module's list story appends columns with its own version bump.
+type NamedRow = { id: string; household_id: string; name: string; deleted_at: string | null };
+export type ListItemRow = NamedRow & { list_id: string };
+export type MaintTaskRow = { id: string; household_id: string; title: string; deleted_at: string | null };
 export type OutboxRow = { seq?: number; table: string; op: string; payload: unknown };
 export type MetaRow = { key: string; value: number };
 
@@ -10,6 +14,14 @@ export type MetaRow = { key: string; value: number };
 export class HouseholdDb extends Dexie {
   shopping_list!: Table<ShoppingListRow, string>;
   activity!: Table<Activity, string>;
+  list_item!: Table<ListItemRow, string>;
+  pantry_item!: Table<NamedRow, string>;
+  recipe!: Table<NamedRow, string>;
+  asset!: Table<NamedRow, string>;
+  maint_task!: Table<MaintTaskRow, string>;
+  store!: Table<NamedRow, string>;
+  location!: Table<NamedRow, string>;
+  contractor!: Table<NamedRow, string>;
   outbox!: Table<OutboxRow, number>;
   meta!: Table<MetaRow, string>;
 
@@ -23,6 +35,17 @@ export class HouseholdDb extends Dexie {
     });
     // CORE-08: the Home feed reads one household's rows by time.
     this.version(2).stores({ activity: 'id, household_id, created_at' });
+    // CORE-09: names that household-wide search reads, per module table.
+    this.version(3).stores({
+      list_item: 'id, household_id, list_id',
+      pantry_item: 'id, household_id',
+      recipe: 'id, household_id',
+      asset: 'id, household_id',
+      maint_task: 'id, household_id',
+      store: 'id, household_id',
+      location: 'id, household_id',
+      contractor: 'id, household_id',
+    });
   }
 }
 
