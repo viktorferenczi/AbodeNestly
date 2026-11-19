@@ -73,6 +73,7 @@ export function HomeFeed() {
         <nav className={styles.footer} aria-label="Household">
           <Link to="/household/members">Members</Link>
           <Link to="/household">Settings</Link>
+          <Link to="/deleted">Recently deleted</Link>
           <Link to="/profile">Profile</Link>
         </nav>
       </div>
