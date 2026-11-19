@@ -30,6 +30,10 @@ export type Route = {
 export const pathParams = (path: string): string[] =>
   [...path.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!);
 
+const uuid: JsonSchema = { type: 'string', format: 'uuid' };
+const dateTime: JsonSchema = { type: 'string', format: 'date-time' };
+const nullableDateTime: JsonSchema = { type: ['string', 'null'], format: 'date-time' };
+
 export const routes: Route[] = [
   {
     method: 'get',
@@ -115,6 +119,36 @@ export const routes: Route[] = [
     },
   },
   {
+    method: 'post',
+    path: '/attachments/sign',
+    summary: 'Signed upload URL for an attachment',
+    public: false,
+    requestBody: {
+      schemaName: 'SignAttachmentRequest',
+      schema: {
+        type: 'object',
+        properties: {
+          household_id: uuid,
+          entity: { type: 'string', enum: ['pantry_item', 'asset', 'maint_log'] },
+          entity_id: uuid,
+          filename: { type: 'string' },
+          mime: { type: 'string' },
+          size: { type: 'integer' },
+        },
+        required: ['household_id', 'entity', 'entity_id', 'filename', 'mime', 'size'],
+      },
+    },
+    response: {
+      status: 201,
+      schemaName: 'SignAttachmentResponse',
+      schema: {
+        type: 'object',
+        properties: { attachment_id: uuid, upload_url: { type: 'string' }, storage_path: { type: 'string' } },
+        required: ['attachment_id', 'upload_url', 'storage_path'],
+      },
+    },
+  },
+  {
     method: 'delete',
     path: '/households/{id}/members/{user_id}',
     summary: 'Remove a member or leave',
@@ -123,9 +157,6 @@ export const routes: Route[] = [
   },
 ];
 
-const uuid: JsonSchema = { type: 'string', format: 'uuid' };
-const dateTime: JsonSchema = { type: 'string', format: 'date-time' };
-const nullableDateTime: JsonSchema = { type: ['string', 'null'], format: 'date-time' };
 
 /**
  * Component schemas for shared entities in types.ts (SPEC §8); Swift/Kotlin models are generated from these.
@@ -216,5 +247,26 @@ export const componentSchemas: Record<string, JsonSchema> = {
       sync_seq: { type: 'integer' },
     },
     required: ['household_id', 'user_id', 'role', 'joined_at', 'left_at', 'updated_at', 'sync_seq'],
+  },
+  Attachment: {
+    type: 'object',
+    properties: {
+      id: uuid,
+      household_id: uuid,
+      entity: { type: 'string' },
+      entity_id: uuid,
+      storage_path: { type: 'string' },
+      mime: { type: 'string' },
+      size_bytes: { type: 'integer' },
+      created_by: { type: ['string', 'null'], format: 'uuid' },
+      created_at: dateTime,
+      updated_at: dateTime,
+      deleted_at: nullableDateTime,
+      sync_seq: { type: 'integer' },
+    },
+    required: [
+      'id', 'household_id', 'entity', 'entity_id', 'storage_path', 'mime', 'size_bytes', 'created_by',
+      'created_at', 'updated_at', 'deleted_at', 'sync_seq',
+    ],
   },
 };

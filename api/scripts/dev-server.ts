@@ -2,6 +2,7 @@
 // node:http to the Web Request/Response handlers. Used by `pnpm dev` and integration tests.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
+import attachmentSign from '../attachments/sign.ts';
 import health from '../health.ts';
 import households from '../households/index.ts';
 import householdModules from '../households/[id]/modules.ts';
@@ -14,6 +15,7 @@ type Handler = (req: Request) => Promise<Response>;
 const routes: Record<string, Handler> = {
   '/health': health,
   '/households': households,
+  '/attachments/sign': attachmentSign,
 };
 
 // Vercel's [param] routes, as path patterns.

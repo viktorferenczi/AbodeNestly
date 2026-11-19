@@ -2,6 +2,7 @@
 import type {
   CreateHouseholdRequest,
   CreateInviteRequest,
+  SignAttachmentRequest,
   UpdateModulesRequest,
 } from './types.ts';
 
@@ -32,5 +33,20 @@ export function isUpdateModulesRequest(v: unknown): v is UpdateModulesRequest {
     absentOrBoolean(v.shopping) &&
     absentOrBoolean(v.pantry) &&
     absentOrBoolean(v.maintenance)
+  );
+}
+
+const ATTACHMENT_ENTITIES: readonly unknown[] = ['pantry_item', 'asset', 'maint_log'];
+
+// Shape only; mime/size/UUID rules are the API's `validation` errors.
+export function isSignAttachmentRequest(v: unknown): v is SignAttachmentRequest {
+  return (
+    isRecord(v) &&
+    typeof v.household_id === 'string' &&
+    ATTACHMENT_ENTITIES.includes(v.entity) &&
+    typeof v.entity_id === 'string' &&
+    typeof v.filename === 'string' &&
+    typeof v.mime === 'string' &&
+    Number.isInteger(v.size)
   );
 }

@@ -21,13 +21,14 @@ const TOKEN_ERRORS = [
   errors.JOSEAlgNotAllowed,
 ];
 
-export async function verifyJwt(req: Request): Promise<{ sub: string; claims: JWTPayload }> {
+export async function verifyJwt(req: Request): Promise<{ sub: string; claims: JWTPayload; token: string }> {
   const header = req.headers.get('authorization') ?? '';
   const match = /^Bearer (\S+)$/i.exec(header);
   if (!match) throw new ApiError(401, 'unauthorized', 'Missing or malformed bearer token');
+  const token = match[1]!;
   let payload: JWTPayload;
   try {
-    ({ payload } = await jwtVerify(match[1]!, keys(), {
+    ({ payload } = await jwtVerify(token, keys(), {
       issuer: `${process.env.SUPABASE_URL}/auth/v1`,
     }));
   } catch (e) {
@@ -35,5 +36,5 @@ export async function verifyJwt(req: Request): Promise<{ sub: string; claims: JW
     throw e;
   }
   if (!payload.sub) throw new ApiError(401, 'unauthorized', 'Token has no subject');
-  return { sub: payload.sub, claims: payload };
+  return { sub: payload.sub, claims: payload, token };
 }
