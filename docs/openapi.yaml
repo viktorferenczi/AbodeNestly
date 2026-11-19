@@ -99,6 +99,22 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/AcceptInviteResponse"
+  /attachments/sign:
+    post:
+      summary: "Signed upload URL for an attachment"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/SignAttachmentRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/SignAttachmentResponse"
   "/households/{id}/members/{user_id}":
     delete:
       summary: "Remove a member or leave"
@@ -338,6 +354,57 @@ components:
         - left_at
         - updated_at
         - sync_seq
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        household_id:
+          type: string
+          format: uuid
+        entity:
+          type: string
+        entity_id:
+          type: string
+          format: uuid
+        storage_path:
+          type: string
+        mime:
+          type: string
+        size_bytes:
+          type: integer
+        created_by:
+          type:
+            - string
+            - "null"
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        sync_seq:
+          type: integer
+      required:
+        - id
+        - household_id
+        - entity
+        - entity_id
+        - storage_path
+        - mime
+        - size_bytes
+        - created_by
+        - created_at
+        - updated_at
+        - deleted_at
+        - sync_seq
     HealthResponse:
       type: object
       properties:
@@ -384,3 +451,45 @@ components:
           format: uuid
       required:
         - household_id
+    SignAttachmentRequest:
+      type: object
+      properties:
+        household_id:
+          type: string
+          format: uuid
+        entity:
+          type: string
+          enum:
+            - pantry_item
+            - asset
+            - maint_log
+        entity_id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        mime:
+          type: string
+        size:
+          type: integer
+      required:
+        - household_id
+        - entity
+        - entity_id
+        - filename
+        - mime
+        - size
+    SignAttachmentResponse:
+      type: object
+      properties:
+        attachment_id:
+          type: string
+          format: uuid
+        upload_url:
+          type: string
+        storage_path:
+          type: string
+      required:
+        - attachment_id
+        - upload_url
+        - storage_path

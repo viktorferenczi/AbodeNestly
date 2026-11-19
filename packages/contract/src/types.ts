@@ -86,3 +86,33 @@ export interface Activity extends Synced {
 
 /** `POST /invites/{code}/accept` response. */
 export type AcceptInviteResponse = { household_id: UUID };
+
+// ---------- attachments (CORE-11) ----------
+/** Entities that can carry an attachment (SPEC §4.1 CORE-11). Maps to a table in the API, never from input. */
+export type AttachmentEntity = 'pantry_item' | 'asset' | 'maint_log';
+
+export interface Attachment extends Synced {
+  entity: string;
+  entity_id: UUID;
+  storage_path: string;
+  mime: string;
+  size_bytes: number;
+  created_by: UUID | null;
+}
+
+/** `POST /attachments/sign` body. Mime and size limits are checked by the API (`validation`). */
+export type SignAttachmentRequest = {
+  household_id: UUID;
+  entity: AttachmentEntity;
+  entity_id: UUID;
+  filename: string;
+  mime: string;
+  size: number;
+};
+
+/** `POST /attachments/sign` response: the row exists; the client PUTs the bytes to `upload_url`. */
+export type SignAttachmentResponse = {
+  attachment_id: UUID;
+  upload_url: string;
+  storage_path: string;
+};
