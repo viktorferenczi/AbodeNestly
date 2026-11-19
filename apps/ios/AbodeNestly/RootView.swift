@@ -220,7 +220,7 @@ private struct MainTabs: View {
     let environment: AppEnvironment
     @State private var homePath: [HomeRoute] = []
 
-    fileprivate enum HomeRoute: Hashable { case settings, members, profile, search }
+    fileprivate enum HomeRoute: Hashable { case settings, members, profile, search, recentlyDeleted }
 
     init(session: SessionModel, profile: ProfileModel, household: LandingHousehold?, environment: AppEnvironment) {
         self.session = session
@@ -291,6 +291,14 @@ private struct MainTabs: View {
                             MembersScreen(householdId: householdId, session: session, environment: environment)
                         case .profile:
                             ProfileView(model: profile, isOnline: environment.network.isOnline)
+                        case .recentlyDeleted:
+                            RecentlyDeletedScreen(
+                                householdId: householdId, environment: environment,
+                                modules: Search.modules(
+                                    householdId: householdId, household: household,
+                                    cached: session.userId.map { HouseholdsCache().read(userId: $0) } ?? []
+                                )
+                            )
                         case .search:
                             SearchScreen(
                                 householdId: householdId, environment: environment,
@@ -376,7 +384,8 @@ private struct HomeScreen: View {
         HomeView(
             model: model, onOpenModule: onOpenModule,
             onInvite: { onOpenRoute(.members) }, onOpenMembers: { onOpenRoute(.members) },
-            onOpenSettings: { onOpenRoute(.settings) }, onOpenProfile: { onOpenRoute(.profile) }
+            onOpenSettings: { onOpenRoute(.settings) },
+            onOpenRecentlyDeleted: { onOpenRoute(.recentlyDeleted) }, onOpenProfile: { onOpenRoute(.profile) }
         )
         .onChange(of: household) { _, household in model.modules = household.map(HomeModules.init) }
         // The household file is open by now (the session opens it before publishing the destination), unlike
@@ -405,6 +414,28 @@ private struct SearchScreen: View {
         SearchView(model: model, onOpen: onOpen)
             .onChange(of: modules) { _, modules in model.modules = modules }
             .navigationTitle("Search")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Owns the `RecentlyDeletedModel` for the pushed screen, so a re-render of the tabs never resets it.
+private struct RecentlyDeletedScreen: View {
+    @State private var model: RecentlyDeletedModel
+    /// Settings can flip a module while this is up; the model follows.
+    let modules: HomeModules?
+
+    init(householdId: UUID, environment: AppEnvironment, modules: HomeModules?) {
+        self.modules = modules
+        let sync = environment.sync
+        _model = State(initialValue: RecentlyDeletedModel(
+            householdId: householdId, modules: modules, database: environment.database, kick: { await sync.kick() }
+        ))
+    }
+
+    var body: some View {
+        RecentlyDeletedView(model: model)
+            .onChange(of: modules) { _, modules in model.modules = modules }
+            .navigationTitle("Recently deleted")
             .navigationBarTitleDisplayMode(.inline)
     }
 }

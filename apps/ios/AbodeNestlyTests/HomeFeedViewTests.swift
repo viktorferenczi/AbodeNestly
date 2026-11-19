@@ -18,7 +18,7 @@ final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
 @MainActor
 private final class Taps {
     var modules: [AppTab] = []
-    var invite = 0, members = 0, settings = 0, profile = 0
+    var invite = 0, members = 0, settings = 0, deleted = 0, profile = 0
 }
 
 @MainActor
@@ -50,7 +50,7 @@ private struct HomeHarness {
         let taps = taps
         return try HomeView(
             model: model, onOpenModule: { taps.modules.append($0) }, onInvite: { taps.invite += 1 },
-            onOpenMembers: { taps.members += 1 }, onOpenSettings: { taps.settings += 1 }, onOpenProfile: { taps.profile += 1 }
+            onOpenMembers: { taps.members += 1 }, onOpenSettings: { taps.settings += 1 }, onOpenRecentlyDeleted: { taps.deleted += 1 }, onOpenProfile: { taps.profile += 1 }
         ).inspect()
     }
 
@@ -115,14 +115,15 @@ struct HomeFeedViewTests {
         #expect(h.taps.modules == [.pantry])
     }
 
-    @Test("CORE-08: footer links open Members, Settings and Profile")
+    @Test("CORE-08: footer links open Members, Settings, Recently deleted and Profile")
     func footer() async throws {
         let h = try await HomeHarness(modules: modulesOn)
         defer { h.stop() }
         try h.inspect().find(viewWithAccessibilityIdentifier: "home.members").button().tap()
         try h.inspect().find(viewWithAccessibilityIdentifier: "home.settings").button().tap()
+        try h.inspect().find(viewWithAccessibilityIdentifier: "home.deleted").button().tap()
         try h.inspect().find(viewWithAccessibilityIdentifier: "home.profile").button().tap()
-        #expect((h.taps.members, h.taps.settings, h.taps.profile) == (1, 1, 1))
+        #expect((h.taps.members, h.taps.settings, h.taps.deleted, h.taps.profile) == (1, 1, 1, 1))
     }
 
     @Test("CORE-08: AC4 pull to refresh calls kick()")

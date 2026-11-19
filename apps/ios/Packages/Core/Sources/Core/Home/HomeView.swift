@@ -11,16 +11,19 @@ public struct HomeView: View {
     private let onOpenMembers: () -> Void
     private let onOpenSettings: () -> Void
     private let onOpenProfile: () -> Void
+    private let onOpenRecentlyDeleted: () -> Void
 
     public init(
         model: HomeModel, onOpenModule: @escaping (AppTab) -> Void, onInvite: @escaping () -> Void,
-        onOpenMembers: @escaping () -> Void, onOpenSettings: @escaping () -> Void, onOpenProfile: @escaping () -> Void
+        onOpenMembers: @escaping () -> Void, onOpenSettings: @escaping () -> Void, onOpenRecentlyDeleted: @escaping () -> Void,
+        onOpenProfile: @escaping () -> Void
     ) {
         self.model = model
         self.onOpenModule = onOpenModule
         self.onInvite = onInvite
         self.onOpenMembers = onOpenMembers
         self.onOpenSettings = onOpenSettings
+        self.onOpenRecentlyDeleted = onOpenRecentlyDeleted
         self.onOpenProfile = onOpenProfile
     }
 
@@ -116,6 +119,7 @@ public struct HomeView: View {
         Section {
             footerLink("Members", id: "home.members", action: onOpenMembers)
             footerLink("Settings", id: "home.settings", action: onOpenSettings)
+            footerLink("Recently deleted", id: "home.deleted", action: onOpenRecentlyDeleted)
             footerLink("Profile", id: "home.profile", action: onOpenProfile)
         }
     }

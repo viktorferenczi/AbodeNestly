@@ -38,6 +38,21 @@ public struct SearchRow: Sendable, Equatable {
     }
 }
 
+/// One soft-deleted row (CORE-10). `table` is the local table it came from.
+public struct DeletedRow: Sendable, Equatable {
+    public var table: String
+    public var id: UUID
+    public var name: String
+    public var deletedAt: Date
+
+    public init(table: String, id: UUID, name: String, deletedAt: Date) {
+        self.table = table
+        self.id = id
+        self.name = name
+        self.deletedAt = deletedAt
+    }
+}
+
 /// The handle `open` returns: which household and file, and whether its pool still works.
 public struct OpenHousehold: Sendable {
     public let householdId: UUID
@@ -269,6 +284,80 @@ public actor HouseholdDatabase {
         }
     }
 
+    // MARK: Recently deleted (CORE-10)
+
+    /// Soft-deleted rows of `tables` (same closed set as search), re-emitted whenever they change. Newest deleted
+    /// first. The screen applies the 30-day window. Finishes at once when the household is not open.
+    public func observeDeleted(householdId: UUID, tables: [String]) -> AsyncStream<[DeletedRow]> {
+        guard let pool, handle?.householdId == householdId else {
+            return AsyncStream { $0.finish() }
+        }
+        let known = tables.filter { Self.searchableTables[$0] != nil }
+        guard !known.isEmpty else {
+            return AsyncStream { continuation in
+                continuation.yield([])
+                continuation.finish()
+            }
+        }
+        let key = householdId.uuidString.lowercased()
+        let observation = ValueObservation.tracking { db in
+            try known.flatMap { table -> [DeletedRow] in
+                let column = Self.searchableTables[table] ?? "name"
+                return try Row.fetchAll(
+                    db,
+                    sql: "SELECT id, \(column) AS name, deleted_at FROM \(table) WHERE household_id = ? AND deleted_at IS NOT NULL",
+                    arguments: [key]
+                ).compactMap { row -> DeletedRow? in
+                    guard let id = UUID(uuidString: row["id"]), let deleted = Self.date(row["deleted_at"]) else { return nil }
+                    return DeletedRow(table: table, id: id, name: row["name"], deletedAt: deleted)
+                }
+            }
+        }
+        return AsyncStream { continuation in
+            let task = Task {
+                do {
+                    for try await rows in observation.values(in: pool) { continuation.yield(rows) }
+                } catch {
+                    // A closed pool ends the observation; the screen keeps its last rows.
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Puts a soft-deleted row back: clears `deleted_at` and queues the SPEC §6.2 upsert in one transaction, so the
+    /// outbox never misses a restore the screen already shows. `data` is partial on purpose and carries an explicit
+    /// null (a missing key would mean "unchanged").
+    public func restore(householdId: UUID, table: String, id: UUID, now: Date = Date()) throws {
+        let pool = try requirePool()
+        guard handle?.householdId == householdId else { throw HouseholdDatabaseError.notOpen }
+        guard Self.searchableTables[table] != nil else { return }
+        let key = householdId.uuidString.lowercased()
+        let rowId = id.uuidString.lowercased()
+        try pool.write { db in
+            try db.execute(
+                sql: "UPDATE \(table) SET deleted_at = NULL WHERE id = ? AND household_id = ? AND deleted_at IS NOT NULL",
+                arguments: [rowId, key]
+            )
+            // Nothing was deleted (already restored, or purged): queue nothing.
+            guard db.changesCount > 0 else { return }
+            let data = String(decoding: try JSONEncoder().encode(RestoreData()), as: UTF8.self)
+            try db.execute(
+                sql: "INSERT INTO outbox (id, table_name, op, row_id, data, client_ts) VALUES (?, ?, 'upsert', ?, ?, ?)",
+                arguments: [UUID().uuidString.lowercased(), table, rowId, data, Self.text(now)]
+            )
+        }
+    }
+
+    private struct RestoreData: Encodable {
+        enum CodingKeys: String, CodingKey { case deletedAt = "deleted_at" }
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeNil(forKey: .deletedAt)
+        }
+    }
+
     /// Test seam: the module stories own the real writes into these tables.
     func insertSearchRowForTesting(_ row: SearchRow, householdId: UUID) throws {
         let pool = try requirePool()
@@ -343,6 +432,16 @@ public actor HouseholdDatabase {
                 sql: "INSERT INTO outbox (id, table_name, op, row_id, data, client_ts) VALUES (?, ?, 'upsert', ?, '{}', ?)",
                 arguments: [UUID().uuidString.lowercased(), table, rowId.uuidString.lowercased(), ISO8601DateFormatter().string(from: Date())]
             )
+        }
+    }
+
+    /// Test seam: the queued writes, oldest first.
+    func outboxForTesting() throws -> [(id: String, table: String, op: String, rowId: String, data: String)] {
+        let pool = try requirePool()
+        return try pool.read { db in
+            try Row.fetchAll(db, sql: "SELECT id, table_name, op, row_id, data FROM outbox ORDER BY seq").map {
+                (id: $0["id"], table: $0["table_name"], op: $0["op"], rowId: $0["row_id"], data: $0["data"])
+            }
         }
     }
 
