@@ -1,4 +1,4 @@
-import type { Activity, Household, Invite, Role, UpdateModulesRequest } from '@abodenestly/contract';
+import type { Activity, Household, Invite, Role, SignAttachmentRequest, SignAttachmentResponse, UpdateModulesRequest } from '@abodenestly/contract';
 import type { ApiClient, ApiResult, MemberRow } from './apiClient.ts';
 
 // Hand-written fake (TESTING §2 forbids mocking libraries). Records calls, returns what the test sets.
@@ -29,6 +29,11 @@ export class FakeApiClient implements ApiClient {
   fetchMembersResult: ApiResult<MemberRow[]> = { ok: true, value: [] };
   removeResult: ApiResult<null> = { ok: true, value: null };
   makeOwnerResult: ApiResult<null> = { ok: true, value: null };
+  signAttachmentCalls: SignAttachmentRequest[] = [];
+  signAttachmentResult: ApiResult<SignAttachmentResponse> = {
+    ok: true,
+    value: { attachment_id: 'a1', upload_url: 'https://upload.test/a1', storage_path: 'h1/pantry_item/e1/a1.jpg' },
+  };
   /** When true, calls return a promise that only settles via `resolvePending`. */
   pending = false;
   private waiting: Array<() => void> = [];
@@ -96,6 +101,11 @@ export class FakeApiClient implements ApiClient {
   makeOwner(householdId: string, userId: string) {
     this.makeOwnerCalls.push({ householdId, userId });
     return this.respond(() => this.makeOwnerResult);
+  }
+
+  signAttachment(req: SignAttachmentRequest) {
+    this.signAttachmentCalls.push(req);
+    return this.respond(() => this.signAttachmentResult);
   }
 
   resolvePending() {

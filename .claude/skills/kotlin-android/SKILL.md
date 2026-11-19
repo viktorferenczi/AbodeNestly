@@ -34,6 +34,7 @@ Rule: `:shopping`, `:pantry`, `:maintenance` depend on `:core`, `:sync`, `:ui`, 
 - One Room database per household: `HouseholdDatabase` built with name `household-<household_id>.db`. A `DatabaseRegistry` opens/closes on household switch.
 - Entities mirror server tables (same names/columns via `@ColumnInfo`), plus `OutboxEntity` and `MetaEntity`.
 - Migrations with `Migration(from, to)` objects, append-only, mirroring server migrations. `exportSchema = true`, schemas committed.
+- `attachment_outbox` (CORE-11) is a second, separate queue for picked files (bytes saved under `filesDir/attachments/<household_id>/`, path in the row). `/sync` and `outbox` carry rows, not bytes, so SHOP-08 must not drain it.
 - DAOs return `Flow<List<T>>` for screens. Composables never trigger network to render.
 
 ## Writes: always through the outbox

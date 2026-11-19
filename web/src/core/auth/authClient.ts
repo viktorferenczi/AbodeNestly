@@ -26,6 +26,8 @@ export interface AuthClient {
   uploadAvatar(path: string, file: File): Promise<Result<void>>;
   /** A short-lived signed URL, or `null` when it cannot be created (offline, object missing). */
   avatarUrl(path: string): Promise<string | null>;
+  /** CORE-11: signed read URL of an attachment in the same bucket, same lifetime as `avatarUrl`. */
+  attachmentUrl(path: string): Promise<string | null>;
 }
 
 type ErrorLike = { name?: string; code?: string; status?: number };
@@ -115,6 +117,10 @@ export function createSupabaseAuthClient(sb: SupabaseClient): AuthClient {
       }
     },
     async avatarUrl(path) {
+      const { data } = await sb.storage.from('households').createSignedUrl(path, 3600);
+      return data?.signedUrl ?? null;
+    },
+    async attachmentUrl(path) {
       const { data } = await sb.storage.from('households').createSignedUrl(path, 3600);
       return data?.signedUrl ?? null;
     },

@@ -39,6 +39,7 @@ Rule: `Shopping`, `Pantry`, `Maintenance` packages depend on `Core`, `Sync`, `UI
 - One SQLite file per household: `Application Support/households/<household_id>.sqlite`. `DatabasePool` per open household; switching households closes the pool.
 - Tables mirror the server (same names/columns, `snake_case` columns mapped via `CodingKeys`), plus `outbox` and `meta`.
 - Migrations in `Sync/Migrations.swift` with `DatabaseMigrator`, append-only, mirroring server migrations.
+- `attachment_outbox` (CORE-11) is a second, separate queue for picked files (bytes saved under Application Support, path in the row). `/sync` and `outbox` carry rows, not bytes, so SHOP-08 must not drain it.
 - Reads via `ValueObservation` → `AsyncSequence` feeding view models. Views never hit the network to render.
 
 ## Writes: always through the outbox

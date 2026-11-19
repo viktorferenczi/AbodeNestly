@@ -19,6 +19,8 @@ const CREATE_MESSAGES: Record<ApiFailure['code'], string> = {
   last_owner: 'Something went wrong. Try again.',
   forbidden: 'Something went wrong. Try again.',
   not_found: 'Something went wrong. Try again.',
+  // Attachment code; never returned by create or join.
+  module_disabled: 'Something went wrong. Try again.',
 };
 
 const JOIN_MESSAGES: Record<ApiFailure['code'], string> = {
@@ -30,6 +32,8 @@ const JOIN_MESSAGES: Record<ApiFailure['code'], string> = {
   last_owner: 'Something went wrong. Try again.',
   forbidden: 'Something went wrong. Try again.',
   not_found: 'Something went wrong. Try again.',
+  // Attachment code; never returned by create or join.
+  module_disabled: 'Something went wrong. Try again.',
 };
 
 export function Welcome() {

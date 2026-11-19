@@ -29,6 +29,7 @@ Rule: `shopping/`, `pantry/`, `maintenance/` never import from each other. They 
 - Tables mirror the server tables with the same names and columns, plus `outbox` and `meta` (`{ key: 'cursor', value: number }`).
 - Indexes: `id` primary, plus what the screens query (`list_id`, `[household_id+expires_at]`, `next_due`).
 - Dexie `version()` bumps are append-only and mirror server migrations.
+- `attachment_outbox` (CORE-11) is a second, separate queue: it holds picked file bytes (as `ArrayBuffer`) until the attachment control uploads them. `/sync` and `outbox` carry rows, not bytes, so SHOP-08 must not drain it.
 
 ## Writes: always through the outbox
 ```ts

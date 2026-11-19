@@ -278,6 +278,77 @@ public final class HttpApiService: ApiService {
         }
     }
 
+    public func signAttachment(
+        householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int
+    ) async -> Result<SignedUpload, ApiFailure> {
+        // `SignAttachmentRequest` / `SignAttachmentResponse` are not in the generated Swift models (the generator emits
+        // only the entities), so the bodies are hand-built like `createHousehold`'s.
+        struct Body: Encodable {
+            let householdId: UUID
+            let entity: String
+            let entityId: UUID
+            let filename: String
+            let mime: String
+            let size: Int
+            enum CodingKeys: String, CodingKey {
+                case householdId = "household_id", entity, entityId = "entity_id", filename, mime, size
+            }
+        }
+        struct Response: Decodable {
+            let attachmentId: UUID
+            let uploadUrl: String
+            let storagePath: String
+            enum CodingKeys: String, CodingKey {
+                case attachmentId = "attachment_id", uploadUrl = "upload_url", storagePath = "storage_path"
+            }
+        }
+        do {
+            let body = Body(
+                householdId: householdId, entity: entity, entityId: entityId, filename: filename, mime: mime, size: size
+            )
+            let (data, status) = try await post("attachments/sign", body: try JSONEncoder().encode(body))
+            guard (200..<300).contains(status) else {
+                return .failure(Self.signFailure(status: status, code: Self.errorCode(in: data)))
+            }
+            guard let response = try? JSONDecoder().decode(Response.self, from: data), let url = URL(string: response.uploadUrl) else {
+                return .failure(.unknown)
+            }
+            return .success(SignedUpload(attachmentId: response.attachmentId, uploadURL: url, storagePath: response.storagePath))
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
+    public func upload(to url: URL, data: Data, mime: String) async -> Result<Void, ApiFailure> {
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue(mime, forHTTPHeaderField: "Content-Type")
+        request.setValue("false", forHTTPHeaderField: "x-upsert")
+        do {
+            let (_, response) = try await urlSession.upload(for: request, from: data)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return .failure(.unknown) }
+            return .success(())
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
+    /// The API's own error code wins; with no parseable body the status decides.
+    static func signFailure(status: Int, code: String?) -> ApiFailure {
+        switch code {
+        case "module_disabled": return .moduleDisabled
+        case "forbidden": return .forbidden
+        case "validation": return .validation
+        case .some: return .unknown
+        case nil:
+            switch status {
+            case 403: return .forbidden
+            case 400: return .validation
+            default: return .unknown
+            }
+        }
+    }
+
     private func restURL(table: String, query: [(String, String)]) throws -> URL {
         var components = URLComponents(
             url: supabaseURL.appendingPathComponent("rest/v1/\(table)"), resolvingAgainstBaseURL: false

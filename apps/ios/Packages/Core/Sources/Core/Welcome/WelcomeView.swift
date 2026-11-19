@@ -22,7 +22,7 @@ public struct WelcomeView: View {
         switch failure {
         case .validation: "Enter a name for your household."
         case .network: "Couldn't reach the server. Check your connection and try again."
-        case .invalidCode, .unknown, .lastOwner, .forbidden, .notFound: "Something went wrong. Try again."
+        case .invalidCode, .unknown, .lastOwner, .forbidden, .notFound, .moduleDisabled: "Something went wrong. Try again."
         }
     }
 
@@ -31,7 +31,7 @@ public struct WelcomeView: View {
         case .validation: "Enter your invite code."
         case .invalidCode: "That code isn't valid or has expired. Check it and try again."
         case .network: "Couldn't reach the server. Check your connection and try again."
-        case .unknown, .lastOwner, .forbidden, .notFound: "Something went wrong. Try again."
+        case .unknown, .lastOwner, .forbidden, .notFound, .moduleDisabled: "Something went wrong. Try again."
         }
     }
 

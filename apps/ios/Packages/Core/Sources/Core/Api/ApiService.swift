@@ -12,6 +12,21 @@ public enum ApiFailure: Error, Sendable, Equatable {
     case lastOwner
     case forbidden
     case notFound
+    /// Attachment sign only: the entity's module is off (403 `module_disabled`).
+    case moduleDisabled
+}
+
+/// `POST /attachments/sign` response: the attachment row exists; the bytes go to `uploadURL` (CORE-11).
+public struct SignedUpload: Sendable, Equatable {
+    public var attachmentId: UUID
+    public var uploadURL: URL
+    public var storagePath: String
+
+    public init(attachmentId: UUID, uploadURL: URL, storagePath: String) {
+        self.attachmentId = attachmentId
+        self.uploadURL = uploadURL
+        self.storagePath = storagePath
+    }
 }
 
 /// The `profile` columns the Members screen shows; like web's `Pick<Profile, …>`. The read selects only these,
@@ -88,4 +103,11 @@ public protocol ApiService: Sendable {
     func updateModules(householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?) async -> Result<Household, ApiFailure>
     /// Name and/or currency: a direct `household` update under RLS (SPEC §7); a non-owner gets `.forbidden`.
     func updateHousehold(householdId: UUID, name: String?, currency: String?) async -> Result<Household, ApiFailure>
+    /// `POST /attachments/sign` (CORE-11): creates the attachment row and returns where to PUT the bytes.
+    /// 403 `module_disabled` → `.moduleDisabled`, other 403 → `.forbidden`, 400 → `.validation`.
+    func signAttachment(
+        householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int
+    ) async -> Result<SignedUpload, ApiFailure>
+    /// PUTs the bytes to a signed `uploadURL` (no bearer: the URL carries the token). `.network` when it cannot be reached.
+    func upload(to url: URL, data: Data, mime: String) async -> Result<Void, ApiFailure>
 }

@@ -23,7 +23,13 @@ sealed class ApiFailure {
     data object LastOwner : ApiFailure()
     data object Forbidden : ApiFailure()
     data object NotFound : ApiFailure()
+
+    /** Attachment sign only: the entity's module is off (403 `module_disabled`). */
+    data object ModuleDisabled : ApiFailure()
 }
+
+/** `POST /attachments/sign` response: the attachment row exists; the bytes go to [uploadUrl] (CORE-11). */
+data class SignedUpload(val attachmentId: UUID, val uploadUrl: String, val storagePath: String)
 
 /**
  * The `profile` columns the Members screen shows. Hand-written because the read selects only these, so the
@@ -91,4 +97,10 @@ interface ApiService {
 
     /** `PATCH household` through PostgREST (owners only, by RLS). A non-owner is `Forbidden`; a row RLS hides is `Unknown`. */
     suspend fun updateHousehold(householdId: UUID, name: String? = null, currency: String? = null): ApiResult<Household>
+
+    /** `POST /attachments/sign` (CORE-11): creates the attachment row and returns where to PUT the bytes. 403 `module_disabled` → `ModuleDisabled`, other 403 → `Forbidden`, 400 → `Validation`. */
+    suspend fun signAttachment(householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int): ApiResult<SignedUpload>
+
+    /** PUTs the bytes to a signed [url] (no bearer: the URL carries the token). `Network` when it cannot be reached. */
+    suspend fun uploadToSignedUrl(url: String, bytes: ByteArray, mime: String): ApiResult<Unit>
 }

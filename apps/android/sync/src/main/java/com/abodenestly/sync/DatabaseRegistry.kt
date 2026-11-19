@@ -2,6 +2,7 @@ package com.abodenestly.sync
 
 import android.content.Context
 import com.abodenestly.contract.models.Activity
+import com.abodenestly.contract.models.Attachment
 import androidx.room.Room
 import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
@@ -18,11 +19,25 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+
+/** A pick waiting to upload (CORE-11). The bytes are a file under the app's files folder; [filePath] is relative to it. */
+data class AttachmentUpload(
+    val id: UUID,
+    val householdId: UUID,
+    val entity: String,
+    val entityId: UUID,
+    val filename: String,
+    val mime: String,
+    val size: Int,
+    val filePath: String = "",
+    val createdAt: OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC),
+)
 
 /** The modules whose names CORE-09 searches, with the local tables each owns (SPEC §4 CORE-09; open question in the story). */
 enum class SearchModule(val key: String, val tables: List<String>) {
@@ -75,7 +90,7 @@ open class DatabaseRegistry(
     open suspend fun open(id: UUID, isCurrent: () -> Boolean = { true }): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
             if (mutableCurrent.value == id && database != null) return@withLock isCurrent()
-            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
             try {
                 db.meta().putIfAbsent(MetaEntity(CURSOR, "0"))
                 val seed = seedLists[id]
@@ -157,6 +172,67 @@ open class DatabaseRegistry(
             .map { rows -> rows.mapNotNull(::toActivity) }
             // The database may close under the collector during a switch.
             .catch { }
+    }
+
+    // Attachments (CORE-11)
+
+    /** Live attachments of one entity, re-emitted when they change; follows the open database like [activityFeed]. */
+    fun observeAttachments(id: UUID, entity: String, entityId: UUID): Flow<List<Attachment>> = current.flatMapLatest { open ->
+        val db = database
+        if (open != id || db == null) emptyFlow()
+        else db.attachments().observe(id.toString(), entity, entityId.toString())
+            .map { rows -> rows.mapNotNull(::toAttachment) }
+            .catch { }
+    }
+
+    /** The rows [observeAttachments] emits, read once. */
+    suspend fun attachments(id: UUID, entity: String, entityId: UUID): List<Attachment> = withOpenFor(id) {
+        it.attachments().list(id.toString(), entity, entityId.toString()).mapNotNull(::toAttachment)
+    }
+
+    /** Stores an attachment after its bytes reached Storage. Dropped when its household is not the open one. */
+    suspend fun upsertAttachment(row: Attachment) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val open = database
+            if (open == null || mutableCurrent.value != row.householdId) return@withLock
+            open.attachments().upsert(toEntity(row))
+        }
+    }
+
+    /** Writes the bytes under the files folder, then queues the pick, so a queued row always has its file. */
+    suspend fun enqueueAttachmentUpload(upload: AttachmentUpload, bytes: ByteArray): AttachmentUpload = withOpenFor(upload.householdId) { db ->
+        val relative = "attachments/${upload.householdId}/${upload.id}.bin"
+        val file = File(context.applicationContext.filesDir, relative)
+        file.parentFile?.mkdirs()
+        file.writeBytes(bytes)
+        val queued = upload.copy(filePath = relative)
+        db.attachments().enqueue(
+            AttachmentOutboxEntity(
+                id = queued.id.toString(), householdId = queued.householdId.toString(), entity = queued.entity,
+                entityId = queued.entityId.toString(), filename = queued.filename, mime = queued.mime, size = queued.size,
+                filePath = relative, createdAt = stamp(queued.createdAt),
+            ),
+        )
+        queued
+    }
+
+    /** Queued picks of the open household in creation order, optionally only one entity's. */
+    suspend fun pendingAttachmentUploads(id: UUID, entity: String? = null, entityId: UUID? = null): List<AttachmentUpload> = withOpenFor(id) { db ->
+        db.attachments().pending(id.toString())
+            .mapNotNull(::toUpload)
+            .filter { (entity == null || it.entity == entity) && (entityId == null || it.entityId == entityId) }
+    }
+
+    /** The bytes a queued pick was saved with. */
+    suspend fun attachmentBytes(upload: AttachmentUpload): ByteArray = withContext(Dispatchers.IO) {
+        File(context.applicationContext.filesDir, upload.filePath).readBytes()
+    }
+
+    /** Drops a queued pick and its file, after it uploaded. */
+    suspend fun removeAttachmentUpload(id: UUID, uploadId: UUID) = withOpenFor(id) { db ->
+        val path = db.attachments().filePath(uploadId.toString())
+        db.attachments().remove(uploadId.toString())
+        if (path != null) File(context.applicationContext.filesDir, path).delete()
     }
 
     // Search (CORE-09)
@@ -286,6 +362,14 @@ open class DatabaseRegistry(
         )
     }
 
+    /** Like [withOpen], but only when [id] is the open household; another household's rows are not this file's. */
+    private suspend fun <T> withOpenFor(id: UUID, block: suspend (HouseholdDatabase) -> T): T = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            if (mutableCurrent.value != id) throw DatabaseNotOpenException()
+            block(database ?: throw DatabaseNotOpenException())
+        }
+    }
+
     private suspend fun <T> withOpen(block: suspend (HouseholdDatabase) -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock { block(database ?: throw DatabaseNotOpenException()) }
     }
@@ -306,6 +390,29 @@ open class DatabaseRegistry(
             summary = a.summary, createdAt = stamp(a.createdAt), updatedAt = stamp(a.updatedAt),
             deletedAt = a.deletedAt?.let(::stamp), syncSeq = a.syncSeq,
         )
+
+        fun toEntity(a: Attachment) = AttachmentEntity(
+            id = a.id.toString(), householdId = a.householdId.toString(), entity = a.entity, entityId = a.entityId.toString(),
+            storagePath = a.storagePath, mime = a.mime, sizeBytes = a.sizeBytes, createdBy = a.createdBy?.toString(),
+            createdAt = stamp(a.createdAt), updatedAt = stamp(a.updatedAt), deletedAt = a.deletedAt?.let(::stamp), syncSeq = a.syncSeq,
+        )
+
+        fun toAttachment(e: AttachmentEntity): Attachment? = runCatching {
+            Attachment(
+                id = UUID.fromString(e.id), householdId = UUID.fromString(e.householdId), entity = e.entity,
+                entityId = UUID.fromString(e.entityId), storagePath = e.storagePath, mime = e.mime, sizeBytes = e.sizeBytes,
+                createdBy = e.createdBy?.let(UUID::fromString), createdAt = OffsetDateTime.parse(e.createdAt),
+                updatedAt = OffsetDateTime.parse(e.updatedAt), deletedAt = e.deletedAt?.let(OffsetDateTime::parse), syncSeq = e.syncSeq,
+            )
+        }.getOrNull()
+
+        fun toUpload(e: AttachmentOutboxEntity): AttachmentUpload? = runCatching {
+            AttachmentUpload(
+                id = UUID.fromString(e.id), householdId = UUID.fromString(e.householdId), entity = e.entity,
+                entityId = UUID.fromString(e.entityId), filename = e.filename, mime = e.mime, size = e.size,
+                filePath = e.filePath, createdAt = OffsetDateTime.parse(e.createdAt),
+            )
+        }.getOrNull()
 
         fun toActivity(e: ActivityEntity): Activity? = runCatching {
             Activity(

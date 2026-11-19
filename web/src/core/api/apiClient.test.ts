@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toAcceptFailure, toRemoveFailure } from './apiClient.ts';
+import { toAcceptFailure, toRemoveFailure, toSignFailure } from './apiClient.ts';
 
 const body = (code: string) => ({ error: { code, message: 'x' } });
 
@@ -32,5 +32,22 @@ describe('CORE-04: toRemoveFailure', () => {
     [502, null, 'unknown'],
   ])('%s %j -> %s', (status, json, code) => {
     expect(toRemoveFailure(status, json)).toEqual({ code });
+  });
+});
+
+describe('CORE-11: toSignFailure', () => {
+  it.each([
+    [403, 'module_disabled', 'module_disabled'],
+    [403, 'forbidden', 'forbidden'],
+    [400, 'validation', 'validation'],
+    [500, 'internal', 'unknown'],
+  ])('%i %s → %s', (status, code, expected) => {
+    expect(toSignFailure(status, { error: { code, message: '' } } as never)).toEqual({ code: expected });
+  });
+
+  it('falls back to the status when there is no error body', () => {
+    expect(toSignFailure(403, null)).toEqual({ code: 'forbidden' });
+    expect(toSignFailure(400, null)).toEqual({ code: 'validation' });
+    expect(toSignFailure(502, null)).toEqual({ code: 'unknown' });
   });
 });

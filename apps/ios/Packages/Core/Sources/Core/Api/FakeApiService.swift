@@ -18,6 +18,8 @@ public final class FakeApiService: ApiService {
         case fetchActivity(householdId: UUID, since: Date, limit: Int)
         case updateModules(householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?)
         case updateHousehold(householdId: UUID, name: String?, currency: String?)
+        case signAttachment(householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int)
+        case upload(url: URL, byteCount: Int, mime: String)
     }
 
     private struct State {
@@ -36,6 +38,10 @@ public final class FakeApiService: ApiService {
         var activityResult: Result<[Activity], ApiFailure> = .success([])
         var updateModulesResult: Result<Household, ApiFailure> = .failure(.unknown)
         var updateHouseholdResult: Result<Household, ApiFailure> = .failure(.unknown)
+        var signResult: Result<SignedUpload, ApiFailure> = .success(SignedUpload(
+            attachmentId: UUID(), uploadURL: URL(string: "https://upload.test/object")!, storagePath: "h/pantry_item/e/a.jpg"
+        ))
+        var uploadResult: Result<Void, ApiFailure> = .success(())
         var held: [CheckedContinuation<Void, Never>] = []
         var hold = false
     }
@@ -71,6 +77,9 @@ public final class FakeApiService: ApiService {
     public func setActivityResult(_ result: Result<[Activity], ApiFailure>) { state.withLock { $0.activityResult = result } }
     public func setUpdateModulesResult(_ result: Result<Household, ApiFailure>) { state.withLock { $0.updateModulesResult = result } }
     public func setUpdateHouseholdResult(_ result: Result<Household, ApiFailure>) { state.withLock { $0.updateHouseholdResult = result } }
+
+    public func setSignResult(_ result: Result<SignedUpload, ApiFailure>) { state.withLock { $0.signResult = result } }
+    public func setUploadResult(_ result: Result<Void, ApiFailure>) { state.withLock { $0.uploadResult = result } }
 
     /// Makes calls suspend until `release()`, so tests can observe `creating` / `joining`.
     public func hold() { state.withLock { $0.hold = true } }
@@ -177,5 +186,23 @@ public final class FakeApiService: ApiService {
         state.withLock { $0.calls.append(.updateHousehold(householdId: householdId, name: name, currency: currency)) }
         await suspendIfHeld()
         return state.withLock { $0.updateHouseholdResult }
+    }
+
+    public func signAttachment(
+        householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int
+    ) async -> Result<SignedUpload, ApiFailure> {
+        state.withLock {
+            $0.calls.append(.signAttachment(
+                householdId: householdId, entity: entity, entityId: entityId, filename: filename, mime: mime, size: size
+            ))
+        }
+        await suspendIfHeld()
+        return state.withLock { $0.signResult }
+    }
+
+    public func upload(to url: URL, data: Data, mime: String) async -> Result<Void, ApiFailure> {
+        state.withLock { $0.calls.append(.upload(url: url, byteCount: data.count, mime: mime)) }
+        await suspendIfHeld()
+        return state.withLock { $0.uploadResult }
     }
 }

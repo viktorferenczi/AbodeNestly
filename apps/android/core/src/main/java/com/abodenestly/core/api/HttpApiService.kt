@@ -219,6 +219,31 @@ class HttpApiService(
         }.fold({ ApiResult.Success(it) }, { ApiResult.Failure(ApiFailure.Unknown) })
     }
 
+    override suspend fun signAttachment(
+        householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int,
+    ): ApiResult<SignedUpload> = guarded {
+        // `SignAttachmentRequest` / `SignAttachmentResponse` are not in the generated models (the generator emits only the
+        // entities), so the bodies are hand-built like createHousehold's.
+        val body = sparse.encodeToString(SignBody.serializer(), SignBody(householdId, entity, entityId, filename, mime, size))
+        val reply = post(url { addPathSegment("attachments"); addPathSegment("sign") }, body)
+        if (reply.status !in 200..299) return@guarded ApiResult.Failure(signFailure(reply.status, errorCode(reply.body)))
+        runCatching { lenient.decodeFromString(SignResponse.serializer(), reply.body) }
+            .fold(
+                { ApiResult.Success(SignedUpload(it.attachmentId, it.uploadUrl, it.storagePath)) },
+                { ApiResult.Failure(ApiFailure.Unknown) },
+            )
+    }
+
+    override suspend fun uploadToSignedUrl(url: String, bytes: ByteArray, mime: String): ApiResult<Unit> = guarded {
+        val target = runCatching { url.toHttpUrl() }.getOrNull() ?: return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        val request = Request.Builder().url(target)
+            .put(bytes.toRequestBody(mime.toMediaType()))
+            .header("x-upsert", "false")
+            .build()
+        val ok = withContext(Dispatchers.IO) { http.newCall(request).execute().use { it.isSuccessful } }
+        if (ok) ApiResult.Success(Unit) else ApiResult.Failure(ApiFailure.Unknown)
+    }
+
     private fun decodeHousehold(body: String): ApiResult<Household> =
         runCatching { Serializer.kotlinxSerializationJson.decodeFromString(Household.serializer(), body) }
             .fold({ ApiResult.Success(it) }, { ApiResult.Failure(ApiFailure.Unknown) })
@@ -286,6 +311,23 @@ class HttpApiService(
     private data class PostgrestError(val code: String? = null)
 
     @Serializable
+    private data class SignBody(
+        @Contextual @SerialName("household_id") val householdId: UUID,
+        val entity: String,
+        @Contextual @SerialName("entity_id") val entityId: UUID,
+        val filename: String,
+        val mime: String,
+        val size: Int,
+    )
+
+    @Serializable
+    private data class SignResponse(
+        @Contextual @SerialName("attachment_id") val attachmentId: UUID,
+        @SerialName("upload_url") val uploadUrl: String,
+        @SerialName("storage_path") val storagePath: String,
+    )
+
+    @Serializable
     private data class Accepted(@Contextual @SerialName("household_id") val householdId: UUID)
 
     /** `{ "error": { "code": … } }`, the contract's `ApiError` shape. */
@@ -308,6 +350,19 @@ class HttpApiService(
             code == "forbidden" || status == 403 -> ApiFailure.Forbidden
             code == "not_found" || status == 404 -> ApiFailure.NotFound
             code == "validation" || status == 400 -> ApiFailure.Validation
+            else -> ApiFailure.Unknown
+        }
+
+        /** The API's own error code wins; with no parseable body the status decides. */
+        internal fun signFailure(status: Int, code: String?): ApiFailure = when (code) {
+            "module_disabled" -> ApiFailure.ModuleDisabled
+            "forbidden" -> ApiFailure.Forbidden
+            "validation" -> ApiFailure.Validation
+            null -> when (status) {
+                403 -> ApiFailure.Forbidden
+                400 -> ApiFailure.Validation
+                else -> ApiFailure.Unknown
+            }
             else -> ApiFailure.Unknown
         }
 

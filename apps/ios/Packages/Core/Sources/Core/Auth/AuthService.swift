@@ -46,4 +46,6 @@ public protocol AuthService: Sendable {
     func uploadAvatar(path: String, data: Data) async -> Result<Void, AuthError>
     /// A one-hour signed URL for a Storage avatar path; `nil` when it cannot be signed (offline, missing object).
     func avatarURL(path: String) async -> URL?
+    /// CORE-11: a one-hour signed read URL for an attachment in the same bucket; `nil` when it cannot be signed.
+    func attachmentURL(path: String) async -> URL?
 }
