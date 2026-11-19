@@ -875,9 +875,11 @@ begin
   foreach t in array array['list_item','shopping_list','pantry_item','maint_task','maint_log','asset',
                            'store','location','category','recipe','contractor','house','attachment']
   loop
+    continue when to_regclass(t) is null;  -- tables added by later stories are purged once they exist
     execute format('delete from %I where deleted_at < now() - interval ''30 days''', t);
   end loop;
 end $$;
+revoke execute on function purge_soft_deleted() from public, anon, authenticated;
 select cron.schedule('purge-soft-deleted', '0 3 * * *', $$select purge_soft_deleted()$$);
 
 -- ---------------------------------------------------------------------------
