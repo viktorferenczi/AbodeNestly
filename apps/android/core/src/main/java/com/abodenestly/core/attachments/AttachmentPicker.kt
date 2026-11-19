@@ -82,14 +82,17 @@ class AttachmentPicker(
     suspend fun pick(bytes: ByteArray, filename: String, mime: String) {
         if (!isAllowed(mime, bytes.size)) {
             lastPick = null
+            retryDrain = false
             mutableState.value = AttachmentPickerState.Error(REJECTED)
             return
         }
         val pending = Pending(filename, mime, bytes)
         lastPick = pending
         retryDrain = false
-        mutableState.value = AttachmentPickerState.Uploading
-        when (val outcome = if (isOnline()) send(pending, entity.value, entityId) else Outcome.Network) {
+        // Offline goes straight to the queue; "uploading" would flash for nothing.
+        val online = isOnline()
+        if (online) mutableState.value = AttachmentPickerState.Uploading
+        when (val outcome = if (online) send(pending, entity.value, entityId) else Outcome.Network) {
             Outcome.Uploaded -> Unit
             // Offline, or the network dropped mid-way: keep the pick for the drain.
             Outcome.Network -> {
@@ -113,6 +116,9 @@ class AttachmentPicker(
         settle()
     }
 
+    /** Whether Retry has something to re-run: a failed pick or a stopped drain. A rejected file has nothing. */
+    val canRetry: Boolean get() = lastPick != null || retryDrain
+
     /** Re-runs the pick that failed, or the drain that stopped. */
     suspend fun retry() {
         val pending = lastPick
@@ -132,6 +138,7 @@ class AttachmentPicker(
             }
             mutableState.value = AttachmentPickerState.Uploading
             retryDrain = false
+            var firstFailure: ApiFailure? = null
             for (next in waiting) {
                 if (!isOnline()) break
                 val bytes = runCatching { registry.attachmentBytes(next) }.getOrNull()
@@ -141,16 +148,21 @@ class AttachmentPicker(
                     continue
                 }
                 val outcome = send(Pending(next.filename, next.mime, bytes), next.entity, next.entityId)
-                if (outcome is Outcome.Failed) {
-                    retryDrain = true
-                    reload()
-                    mutableState.value = AttachmentPickerState.Error(messageFor(outcome.failure))
-                    return
+                when (outcome) {
+                    // A permanent failure (module off, entity gone) must not hold up the picks behind it: the row stays
+                    // for Retry, the rest of the queue goes on, and the error is shown when the pass ends.
+                    is Outcome.Failed -> if (firstFailure == null) firstFailure = outcome.failure
+                    Outcome.Network -> break
+                    Outcome.Uploaded -> registry.removeAttachmentUpload(householdId, next.id)
                 }
-                if (outcome == Outcome.Network) break
-                registry.removeAttachmentUpload(householdId, next.id)
             }
-            settle()
+            if (firstFailure != null) {
+                retryDrain = true
+                reload()
+                mutableState.value = AttachmentPickerState.Error(messageFor(firstFailure))
+            } else {
+                settle()
+            }
         } finally {
             draining = false
         }

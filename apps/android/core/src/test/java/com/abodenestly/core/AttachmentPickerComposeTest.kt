@@ -177,6 +177,7 @@ class AttachmentPickerComposeTest {
         rule.onNodeWithTag("attachments.photo").performClick()
         until { exists("attachments.error") }
         rule.onNodeWithTag("attachments.error").assert(hasText(AttachmentPicker.REJECTED))
+        assertEquals(0, count("attachments.retry"))
         assertTrue(api.calls.isEmpty())
     }
 

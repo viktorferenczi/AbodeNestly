@@ -53,6 +53,8 @@ class FakeApiService : ApiService {
     @Volatile var updateModulesResult: ApiResult<Household> = ApiResult.Failure(ApiFailure.Unknown)
     @Volatile var updateHouseholdResult: ApiResult<Household> = ApiResult.Failure(ApiFailure.Unknown)
     @Volatile var signResult: ApiResult<SignedUpload> = ApiResult.Success(SignedUpload(UUID.randomUUID(), "https://upload.test/object", "households/h/pantry_item/e/a.jpg"))
+    /** Queued results for `signAttachment`, consumed in order before falling back to [signResult]. */
+    val signResults = ConcurrentLinkedQueue<ApiResult<SignedUpload>>()
     @Volatile var uploadResult: ApiResult<Unit> = ApiResult.Success(Unit)
 
     val calls: List<Call> get() = recorded.toList()
@@ -158,7 +160,7 @@ class FakeApiService : ApiService {
     ): ApiResult<SignedUpload> {
         recorded += Call.SignAttachment(householdId, entity, entityId, filename, mime, size)
         gate?.await()
-        return signResult
+        return signResults.poll() ?: signResult
     }
 
     override suspend fun uploadToSignedUrl(url: String, bytes: ByteArray, mime: String): ApiResult<Unit> {

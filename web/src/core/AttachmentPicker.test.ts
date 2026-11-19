@@ -107,13 +107,21 @@ describe('CORE-11: drainAttachmentOutbox', () => {
     expect(await db.attachment_outbox.count()).toBe(0);
   });
 
-  it('CORE-11: a non-network failure leaves the row and stops', async () => {
+  it('CORE-11: a permanent failure leaves its row but does not block the picks behind it', async () => {
     online = false;
-    await pickAttachment(deps(), input());
+    let tick = 0;
+    const d = { ...deps(), now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++)) };
+    await pickAttachment(d, input(new File(['a'], 'stuck.jpg', { type: 'image/jpeg' })));
+    await pickAttachment(d, input(new File(['b'], 'fine.jpg', { type: 'image/jpeg' })));
     online = true;
-    api.signAttachmentResult = { ok: false, error: { code: 'validation' } };
-    expect(await drainAttachmentOutbox(deps())).toEqual({ status: 'error', code: 'validation' });
-    expect(await db.attachment_outbox.count()).toBe(1);
+    const ok = api.signAttachmentResult;
+    api.signAttachment = (req) => {
+      api.signAttachmentCalls.push(req);
+      return Promise.resolve(req.filename === 'stuck.jpg' ? { ok: false, error: { code: 'module_disabled' } } : ok);
+    };
+    expect(await drainAttachmentOutbox(d)).toEqual({ status: 'error', code: 'module_disabled' });
+    expect((await db.attachment_outbox.toArray()).map((r) => r.filename)).toEqual(['stuck.jpg']);
+    expect(await db.attachment.count()).toBe(1);
   });
 
   it('CORE-11: a network failure leaves the row and reports offline', async () => {

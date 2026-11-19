@@ -69,9 +69,11 @@ public struct AttachmentPickerView: View {
             HStack {
                 Text(message).font(.footnote).foregroundStyle(Tokens.danger)
                     .accessibilityIdentifier("attachments.error")
-                Button("Retry") { Task { await model.retry() } }
-                    .frame(minHeight: Tokens.minTouchTarget)
-                    .accessibilityIdentifier("attachments.retry")
+                if model.canRetry {
+                    Button("Retry") { Task { await model.retry() } }
+                        .frame(minHeight: Tokens.minTouchTarget)
+                        .accessibilityIdentifier("attachments.retry")
+                }
             }
         }
     }
@@ -101,36 +103,33 @@ public struct AttachmentPickerView: View {
                 }
                 .frame(width: 96, height: 96)
                 .clipShape(RoundedRectangle(cornerRadius: Tokens.cardRadius))
+                .accessibilityLabel(name(of: attachment))
             } else {
                 Tokens.surface2
                     .frame(width: 96, height: 96)
                     .clipShape(RoundedRectangle(cornerRadius: Tokens.cardRadius))
+                    .accessibilityLabel(name(of: attachment))
             }
         } else {
-            Text(attachment.storagePath.split(separator: "/").last.map(String.init) ?? attachment.storagePath)
+            Text(name(of: attachment))
                 .font(.body)
         }
     }
 
+    private func name(of attachment: Attachment) -> String {
+        attachment.storagePath.split(separator: "/").last.map(String.init) ?? "Photo"
+    }
+
     private func pickPhoto(_ item: PhotosPickerItem) async {
-        guard let data = try? await item.loadTransferable(type: Data.self) else {
-            await model.pick(data: Data(), filename: "photo", mime: "image/jpeg")
-            return
-        }
+        let data = try? await item.loadTransferable(type: Data.self)
         let type = item.supportedContentTypes.first { $0.conforms(to: .image) }
-        let mime = type?.preferredMIMEType ?? "image/jpeg"
-        let ext = type?.preferredFilenameExtension ?? "jpg"
-        await model.pick(data: data, filename: "photo-\(UUID().uuidString.prefix(8).lowercased()).\(ext)", mime: mime)
+        await model.pickPhoto(data: data, mime: type?.preferredMIMEType, fileExtension: type?.preferredFilenameExtension)
     }
 
     private func pickPDF(_ url: URL) async {
         // The importer hands over a security-scoped URL.
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? Data(contentsOf: url) else {
-            await model.pick(data: Data(), filename: url.lastPathComponent, mime: "application/pdf")
-            return
-        }
-        await model.pick(data: data, filename: url.lastPathComponent, mime: "application/pdf")
+        await model.pickPDF(at: url)
     }
 }

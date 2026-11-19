@@ -224,14 +224,10 @@ class HttpApiService(
     ): ApiResult<SignedUpload> = guarded {
         // `SignAttachmentRequest` / `SignAttachmentResponse` are not in the generated models (the generator emits only the
         // entities), so the bodies are hand-built like createHousehold's.
-        val body = sparse.encodeToString(SignBody.serializer(), SignBody(householdId, entity, entityId, filename, mime, size))
+        val body = signRequestBody(householdId, entity, entityId, filename, mime, size)
         val reply = post(url { addPathSegment("attachments"); addPathSegment("sign") }, body)
         if (reply.status !in 200..299) return@guarded ApiResult.Failure(signFailure(reply.status, errorCode(reply.body)))
-        runCatching { lenient.decodeFromString(SignResponse.serializer(), reply.body) }
-            .fold(
-                { ApiResult.Success(SignedUpload(it.attachmentId, it.uploadUrl, it.storagePath)) },
-                { ApiResult.Failure(ApiFailure.Unknown) },
-            )
+        parseSignResponse(reply.body)
     }
 
     override suspend fun uploadToSignedUrl(url: String, bytes: ByteArray, mime: String): ApiResult<Unit> = guarded {
@@ -352,6 +348,17 @@ class HttpApiService(
             code == "validation" || status == 400 -> ApiFailure.Validation
             else -> ApiFailure.Unknown
         }
+
+        // The ids are `@Contextual`, and only the generated `Serializer` Json has the UUID adapter, so the sign bodies use it.
+        internal fun signRequestBody(householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int): String =
+            Serializer.kotlinxSerializationJson.encodeToString(SignBody.serializer(), SignBody(householdId, entity, entityId, filename, mime, size))
+
+        internal fun parseSignResponse(body: String): ApiResult<SignedUpload> =
+            runCatching { Serializer.kotlinxSerializationJson.decodeFromString(SignResponse.serializer(), body) }
+                .fold(
+                    { ApiResult.Success(SignedUpload(it.attachmentId, it.uploadUrl, it.storagePath)) },
+                    { ApiResult.Failure(ApiFailure.Unknown) },
+                )
 
         /** The API's own error code wins; with no parseable body the status decides. */
         internal fun signFailure(status: Int, code: String?): ApiFailure = when (code) {

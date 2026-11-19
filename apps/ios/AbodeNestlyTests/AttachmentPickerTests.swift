@@ -192,4 +192,81 @@ struct AttachmentPickerTests {
         #expect(h.api.calls.isEmpty)
         #expect(h.model.state == .queued)
     }
+
+    @Test("CORE-11: a permanent failure on one queued pick does not block the picks behind it")
+    func failureDoesNotBlockQueue() async throws {
+        let h = try await AttachmentHarness(online: false)
+        await h.model.pick(data: jpeg, filename: "stuck.jpg", mime: "image/jpeg")
+        await h.model.pick(data: jpeg, filename: "fine.jpg", mime: "image/jpeg")
+        h.online.value = true
+        let ok = SignedUpload(attachmentId: UUID(), uploadURL: URL(string: "https://upload.test/o")!, storagePath: "p/fine.jpg")
+        h.api.queueSignResults([.failure(.moduleDisabled), .success(ok)])
+        await h.model.drain()
+
+        #expect(h.model.state == .error(AttachmentPicker.moduleOffMessage))
+        #expect(h.model.canRetry)
+        let left = try await h.database.pendingAttachmentUploads(householdId: h.householdId)
+        #expect(left.map(\.filename) == ["stuck.jpg"])
+        #expect(try await h.stored().count == 1)
+    }
+
+    @Test("CORE-11: Retry is offered for a failed pick, not for a rejected file")
+    func canRetryRules() async throws {
+        let h = try await AttachmentHarness()
+        await h.model.pick(data: jpeg, filename: "a.gif", mime: "image/gif")
+        #expect(!h.model.canRetry)
+        h.api.setSignResult(.failure(.unknown))
+        await h.model.pick(data: jpeg, filename: "milk.jpg", mime: "image/jpeg")
+        #expect(h.model.canRetry)
+    }
+
+    @Test("CORE-11: a picked photo gets a name and type from the picker, with a JPEG fallback")
+    func pickPhotoMapping() async throws {
+        let h = try await AttachmentHarness()
+        await h.model.pickPhoto(data: jpeg, mime: "image/heic", fileExtension: "heic")
+        await h.model.pickPhoto(data: jpeg, mime: nil, fileExtension: nil)
+        let signs = h.api.calls.compactMap { call -> (String, String)? in
+            if case .signAttachment(_, _, _, let name, let mime, _) = call { (name, mime) } else { nil }
+        }
+        #expect(signs.count == 2)
+        #expect(signs[0].0.hasSuffix(".heic") && signs[0].1 == "image/heic")
+        #expect(signs[1].0.hasSuffix(".jpg") && signs[1].1 == "image/jpeg")
+    }
+
+    @Test("CORE-11: a photo that cannot be read is an error without a request")
+    func pickPhotoUnreadable() async throws {
+        let h = try await AttachmentHarness()
+        await h.model.pickPhoto(data: nil, mime: nil, fileExtension: nil)
+        #expect(h.model.state == .error(AttachmentPicker.unreadableMessage))
+        #expect(!h.model.canRetry)
+        #expect(h.api.calls.isEmpty)
+    }
+
+    @Test("CORE-11: a picked PDF is read and sent with its file name")
+    func pickPDF() async throws {
+        let h = try await AttachmentHarness()
+        let file = h.root.appendingPathComponent("manual.pdf")
+        try FileManager.default.createDirectory(at: h.root, withIntermediateDirectories: true)
+        try Data("%PDF".utf8).write(to: file)
+        await h.model.pickPDF(at: file)
+        #expect(h.model.state == .idle)
+        #expect(h.api.calls.contains(.signAttachment(
+            householdId: h.householdId, entity: "pantry_item", entityId: h.entityId, filename: "manual.pdf",
+            mime: "application/pdf", size: 4
+        )))
+    }
+
+    @Test("CORE-11: a PDF over the limit is refused from its size, before it is read")
+    func pickPDFTooBig() async throws {
+        let h = try await AttachmentHarness()
+        try FileManager.default.createDirectory(at: h.root, withIntermediateDirectories: true)
+        let file = h.root.appendingPathComponent("huge.pdf")
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.truncate(atOffset: UInt64(AttachmentPicker.maxBytes + 1))
+        try handle.close()
+        await h.model.pickPDF(at: file)
+        #expect(h.model.state == .error(AttachmentPicker.rejectedMessage))
+        #expect(h.api.calls.isEmpty)
+    }
 }

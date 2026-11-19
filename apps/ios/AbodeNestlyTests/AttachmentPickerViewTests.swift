@@ -89,6 +89,14 @@ struct AttachmentPickerViewTests {
         #expect(h.has("attachments.idle") && !h.has("attachments.retry"))
     }
 
+    @Test("CORE-11: a rejected file shows the error without a Retry button")
+    func rejectedHasNoRetry() async throws {
+        let h = try await ViewHarness()
+        await h.model.pick(data: jpeg, filename: "a.gif", mime: "image/gif")
+        #expect(h.has("attachments.error"))
+        #expect(!h.has("attachments.retry"))
+    }
+
     @Test("CORE-11: module off renders nothing")
     func moduleOff() async throws {
         let h = try await ViewHarness()

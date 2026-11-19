@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.abodenestly.core.api.ApiFailure
 import com.abodenestly.core.api.ApiResult
 import com.abodenestly.core.api.FakeApiService
+import com.abodenestly.core.api.HttpApiService
 import com.abodenestly.core.api.FakeApiService.Call
 import com.abodenestly.core.api.SignedUpload
 import com.abodenestly.core.attachments.AttachmentEntity
@@ -193,5 +194,41 @@ class AttachmentPickerTest {
         picker.drain()
         assertTrue(api.calls.isEmpty())
         assertEquals(AttachmentPickerState.Queued, picker.state.value)
+    }
+
+    @Test
+    fun `CORE-11 a permanent failure on one queued pick does not block the picks behind it`() = runBlocking {
+        online = false
+        picker.pick(JPEG, "stuck.jpg", "image/jpeg")
+        picker.pick(JPEG, "fine.jpg", "image/jpeg")
+        online = true
+        api.signResults.add(ApiResult.Failure(ApiFailure.ModuleDisabled))
+        api.signResults.add(signed())
+        picker.drain()
+
+        assertEquals(AttachmentPickerState.Error(AttachmentPicker.MODULE_OFF), picker.state.value)
+        assertTrue(picker.canRetry)
+        assertEquals(listOf("stuck.jpg"), pending().map { it.filename })
+        assertEquals(1, stored().size)
+    }
+
+    @Test
+    fun `CORE-11 Retry is offered for a failed pick, not for a rejected file`() = runBlocking {
+        picker.pick(JPEG, "a.gif", "image/gif")
+        assertFalse(picker.canRetry)
+        api.signResult = ApiResult.Failure(ApiFailure.Unknown)
+        picker.pick(JPEG, "milk.jpg", "image/jpeg")
+        assertTrue(picker.canRetry)
+    }
+
+    @Test
+    fun `CORE-11 the sign body and response go through the generated Json, which knows UUIDs`() {
+        val body = HttpApiService.signRequestBody(householdId, "pantry_item", entityId, "milk.jpg", "image/jpeg", 4)
+        assertTrue(body.contains("\"household_id\":\"$householdId\""))
+        assertTrue(body.contains("\"entity_id\":\"$entityId\""))
+        val id = UUID.randomUUID()
+        val parsed = HttpApiService.parseSignResponse("""{"attachment_id":"$id","upload_url":"https://u.test/x","storage_path":"households/a/b"}""")
+        assertEquals(ApiResult.Success(SignedUpload(id, "https://u.test/x", "households/a/b")), parsed)
+        assertEquals(ApiResult.Failure(ApiFailure.Unknown), HttpApiService.parseSignResponse("{}"))
     }
 }

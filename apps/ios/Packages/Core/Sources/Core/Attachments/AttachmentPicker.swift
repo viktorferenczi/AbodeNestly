@@ -26,6 +26,7 @@ public final class AttachmentPicker {
     public nonisolated static let allowedMimes: Set<String> = ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"]
     public nonisolated static let maxBytes = 25 * 1024 * 1024
     public static let rejectedMessage = "Choose a photo or a PDF up to 25 MB."
+    public static let unreadableMessage = "That file couldn't be read. Pick another."
     public static let failedMessage = "Could not attach the file."
     public static let moduleOffMessage = "Attachments are turned off for this household."
 
@@ -114,8 +115,10 @@ public final class AttachmentPicker {
         let pending = Pending(filename: filename, mime: mime, data: data)
         lastPick = pending
         retryDrains = false
-        state = .uploading
-        let outcome: Outcome = isOnline() ? await send(pending) : .network
+        // Offline goes straight to the queue; "uploading" would flash for nothing.
+        let online = isOnline()
+        if online { state = .uploading }
+        let outcome: Outcome = online ? await send(pending) : .network
         switch outcome {
         case .uploaded:
             break
@@ -140,6 +143,37 @@ public final class AttachmentPicker {
         await settle()
     }
 
+    /// What the file picker hands over, as one call so the mapping is testable: `nil` data is a photo that could not be read.
+    public func pickPhoto(data: Data?, mime: String?, fileExtension: String?) async {
+        guard let data else { return await rejectUnreadable() }
+        let ext = fileExtension ?? "jpg"
+        await pick(data: data, filename: "photo-\(UUID().uuidString.prefix(8).lowercased()).\(ext)", mime: mime ?? "image/jpeg")
+    }
+
+    /// A PDF from the document picker. The size is checked before the bytes are read, so a huge file is never loaded.
+    public func pickPDF(at url: URL) async {
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard size <= Self.maxBytes, let data = try? Data(contentsOf: url) else {
+            return size > Self.maxBytes ? await rejectTooBig() : await rejectUnreadable()
+        }
+        await pick(data: data, filename: url.lastPathComponent, mime: "application/pdf")
+    }
+
+    /// Whether Retry has something to re-run: a failed pick or a stopped drain. A rejected file has nothing.
+    public var canRetry: Bool { lastPick != nil || retryDrains }
+
+    private func rejectTooBig() async {
+        lastPick = nil
+        retryDrains = false
+        state = .error(Self.rejectedMessage)
+    }
+
+    private func rejectUnreadable() async {
+        lastPick = nil
+        retryDrains = false
+        state = .error(Self.unreadableMessage)
+    }
+
     /// Re-runs the pick that failed, or the drain that stopped.
     public func retry() async {
         if let pending = lastPick {
@@ -154,12 +188,14 @@ public final class AttachmentPicker {
         guard !draining else { return }
         draining = true
         defer { draining = false }
-        guard var pending = try? await database.pendingAttachmentUploads(householdId: householdId), !pending.isEmpty else {
+        // Nothing queued, or no network: show the settled state without flashing "uploading".
+        guard var pending = try? await database.pendingAttachmentUploads(householdId: householdId), !pending.isEmpty, isOnline() else {
             await settle()
             return
         }
         state = .uploading
         retryDrains = false
+        var firstFailure: ApiFailure?
         while !pending.isEmpty {
             guard isOnline() else { break }
             let next = pending.removeFirst()
@@ -174,13 +210,18 @@ public final class AttachmentPicker {
             case .network:
                 pending.removeAll()
             case .failed(let failure):
-                retryDrains = true
-                await reload()
-                state = .error(Self.message(for: failure))
-                return
+                // A permanent failure (module off, entity gone) must not hold up the picks behind it: the row stays
+                // for Retry, the rest of the queue goes on, and the error is shown when the pass ends.
+                firstFailure = firstFailure ?? failure
             }
         }
-        await settle()
+        if let firstFailure {
+            retryDrains = true
+            await reload()
+            state = .error(Self.message(for: firstFailure))
+        } else {
+            await settle()
+        }
     }
 
     // MARK: Internals

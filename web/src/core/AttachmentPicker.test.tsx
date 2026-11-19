@@ -118,6 +118,7 @@ describe('CORE-11: attachment control', () => {
     // Decorative thumbnails (alt="") have no img role, so read the element itself.
     await waitFor(() => expect(screen.getByTestId('attachments.item').querySelector('img')).toBeTruthy());
     expect(screen.getByTestId('attachments.idle')).toBeTruthy();
+    expect(screen.getByTestId('attachments.item').querySelector('img')!.getAttribute('alt')).toBe('a1.jpg');
     expect(screen.getByTestId('attachments.item').querySelector('img')!.getAttribute('src')).toBe('https://signed.test/h1/pantry_item/e1/a1.jpg');
   });
 

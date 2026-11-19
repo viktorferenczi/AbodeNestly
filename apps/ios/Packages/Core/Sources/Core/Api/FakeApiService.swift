@@ -42,6 +42,7 @@ public final class FakeApiService: ApiService {
             attachmentId: UUID(), uploadURL: URL(string: "https://upload.test/object")!, storagePath: "h/pantry_item/e/a.jpg"
         ))
         var uploadResult: Result<Void, ApiFailure> = .success(())
+        var signQueue: [Result<SignedUpload, ApiFailure>] = []
         var held: [CheckedContinuation<Void, Never>] = []
         var hold = false
     }
@@ -79,6 +80,8 @@ public final class FakeApiService: ApiService {
     public func setUpdateHouseholdResult(_ result: Result<Household, ApiFailure>) { state.withLock { $0.updateHouseholdResult = result } }
 
     public func setSignResult(_ result: Result<SignedUpload, ApiFailure>) { state.withLock { $0.signResult = result } }
+    /// Results for the next `signAttachment` calls, in order; `setSignResult` applies after they run out.
+    public func queueSignResults(_ results: [Result<SignedUpload, ApiFailure>]) { state.withLock { $0.signQueue = results } }
     public func setUploadResult(_ result: Result<Void, ApiFailure>) { state.withLock { $0.uploadResult = result } }
 
     /// Makes calls suspend until `release()`, so tests can observe `creating` / `joining`.
@@ -197,7 +200,7 @@ public final class FakeApiService: ApiService {
             ))
         }
         await suspendIfHeld()
-        return state.withLock { $0.signResult }
+        return state.withLock { $0.signQueue.isEmpty ? $0.signResult : $0.signQueue.removeFirst() }
     }
 
     public func upload(to url: URL, data: Data, mime: String) async -> Result<Void, ApiFailure> {

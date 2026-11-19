@@ -34,6 +34,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -142,10 +143,12 @@ fun AttachmentPickerSection(
             AttachmentPickerState.Queued -> StatusText("Will upload when you're online", tokens.text2, "attachments.queued")
             is AttachmentPickerState.Error -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatusText(current.message, tokens.danger, "attachments.error")
-                OutlinedButton(
-                    onClick = { scope.launch { picker.retry() } },
-                    modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("attachments.retry"),
-                ) { Text("Retry") }
+                if (picker.canRetry) {
+                    OutlinedButton(
+                        onClick = { scope.launch { picker.retry() } },
+                        modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("attachments.retry"),
+                    ) { Text("Retry") }
+                }
             }
         }
         attachments.forEach { AttachmentRow(it, loader) }
@@ -167,7 +170,7 @@ private fun AttachmentRow(attachment: Attachment, loader: AttachmentLoader) {
     if (attachment.mime.startsWith("image/")) {
         var bitmap by remember(attachment.storagePath) { mutableStateOf<Bitmap?>(null) }
         LaunchedEffect(attachment.storagePath, loader) { bitmap = loader.load(attachment.storagePath) }
-        Thumbnail(bitmap, "attachments.item")
+        Thumbnail(bitmap, "attachments.item", attachment.storagePath.substringAfterLast('/').ifEmpty { "Photo" })
     } else {
         Text(
             attachment.storagePath.substringAfterLast('/'), style = MaterialTheme.typography.bodyLarge, color = tokens.text,
@@ -182,20 +185,20 @@ private fun QueuedRow(upload: AttachmentUpload, registry: DatabaseRegistry, load
     if (upload.mime.startsWith("image/")) {
         var bitmap by remember(upload.id) { mutableStateOf<Bitmap?>(null) }
         LaunchedEffect(upload.id, loader) { bitmap = runCatching { loader.decode(registry.attachmentBytes(upload)) }.getOrNull() }
-        Thumbnail(bitmap, "attachments.queuedItem")
+        Thumbnail(bitmap, "attachments.queuedItem", upload.filename)
     } else {
         Text(upload.filename, style = MaterialTheme.typography.bodyLarge, color = tokens.text, modifier = Modifier.testTag("attachments.queuedItem"))
     }
 }
 
 @Composable
-private fun Thumbnail(bitmap: Bitmap?, tag: String) {
+private fun Thumbnail(bitmap: Bitmap?, tag: String, description: String) {
     val tokens = LocalTokens.current
     val shape = RoundedCornerShape(Tokens.CardRadius)
     if (bitmap != null) {
-        Image(bitmap.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(96.dp).clip(shape).testTag(tag))
+        Image(bitmap.asImageBitmap(), contentDescription = description, contentScale = ContentScale.Crop, modifier = Modifier.size(96.dp).clip(shape).testTag(tag))
     } else {
         // Same size while it loads, offline, or when the load fails.
-        Box(Modifier.size(96.dp).clip(shape).background(tokens.surface2).testTag(tag))
+        Box(Modifier.size(96.dp).clip(shape).background(tokens.surface2).semantics { contentDescription = description }.testTag(tag))
     }
 }

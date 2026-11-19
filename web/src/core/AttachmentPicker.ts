@@ -110,14 +110,19 @@ export type DrainOutcome = { status: 'done'; uploaded: number } | { status: 'off
 /** Step 4: queued picks in creation order. A row leaves the queue only after it was uploaded and recorded. */
 export async function drainAttachmentOutbox(deps: AttachmentDeps): Promise<DrainOutcome> {
   let uploaded = 0;
-  for (;;) {
+  let firstError: DrainOutcome | null = null;
+  for (const next of await deps.db.attachment_outbox.orderBy('created_at').toArray()) {
     if (!deps.online()) return { status: 'offline' };
-    const [next] = await deps.db.attachment_outbox.orderBy('created_at').limit(1).toArray();
-    if (!next) return { status: 'done', uploaded };
     const result = await signAndUpload(deps, next);
     if (result.status === 'network') return { status: 'offline' };
-    if (result.status === 'error') return result;
+    if (result.status === 'error') {
+      // A permanent failure (module off, entity gone) must not hold up the picks behind it: its row stays for
+      // Retry, the rest of the queue goes on, and the error is reported when the pass ends.
+      firstError ??= { status: 'error', code: result.code };
+      continue;
+    }
     await deps.db.attachment_outbox.delete(next.id);
     uploaded += 1;
   }
+  return firstError ?? { status: 'done', uploaded };
 }

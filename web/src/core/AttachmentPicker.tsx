@@ -35,7 +35,7 @@ function Thumb({ attachment }: { attachment: Attachment }) {
     };
   }, [client, attachment.storage_path, attachment.mime]);
   const name = attachment.storage_path.split('/').pop() ?? attachment.storage_path;
-  if (isImage(attachment.mime) && url) return <img src={url} alt="" className={styles.thumb} />;
+  if (isImage(attachment.mime) && url) return <img src={url} alt={name} className={styles.thumb} />;
   return <span className={styles.file}>{name}</span>;
 }
 
@@ -43,7 +43,7 @@ function QueuedThumb({ bytes, filename, mime }: { bytes: ArrayBuffer; filename: 
   // The local preview of a pick that has not uploaded yet.
   const url = useMemo(() => (isImage(mime) && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(new Blob([bytes], { type: mime })) : null), [bytes, mime]);
   useEffect(() => () => void (url && URL.revokeObjectURL?.(url)), [url]);
-  return url ? <img src={url} alt="" className={styles.thumb} /> : <span className={styles.file}>{filename}</span>;
+  return url ? <img src={url} alt={filename} className={styles.thumb} /> : <span className={styles.file}>{filename}</span>;
 }
 
 // CORE-11: the shared attachment control that pantry items, assets and log entries host.
@@ -113,7 +113,8 @@ export function AttachmentPicker({ householdId, entity, entityId, enabled, uploa
     async (file: File) => {
       const d = deps();
       if (!d) return;
-      setBusy(true);
+      // Offline goes straight to the queue; "uploading" would flash for nothing.
+      setBusy(onlineRef.current);
       setError(null);
       try {
         finish(await pickAttachment(d, { householdId, entity, entityId, file }), { kind: 'pick', file });
