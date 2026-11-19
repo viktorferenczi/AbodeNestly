@@ -369,7 +369,10 @@ create table attachment (
   deleted_at    timestamptz,
   sync_seq      bigint not null default nextval('sync_seq_global'),
   -- A row can never point at another household's object (nor at a different entity's folder).
-  check (storage_path like 'households/' || household_id::text || '/' || entity || '/' || entity_id::text || '/_%')
+  check (
+    starts_with(storage_path, 'households/' || household_id::text || '/' || entity || '/' || entity_id::text || '/')
+    -- exactly one non-empty file segment after the folder; LIKE would treat _ and % in entity as wildcards
+    and substr(storage_path, length('households/' || household_id::text || '/' || entity || '/' || entity_id::text || '/') + 1) ~ '^[^/]+$')
 );
 call setup_scoped('attachment');
 create index attachment_entity_idx on attachment(entity, entity_id);
@@ -377,6 +380,18 @@ create index attachment_entity_idx on attachment(entity, entity_id);
 drop policy attachment_insert on attachment;
 create policy attachment_insert on attachment for insert with check (
   is_member(household_id) and created_by = auth.uid());
+
+-- A WITH CHECK cannot see OLD, so a trigger keeps the uploader fixed for clients (same reason as guard_activity_update).
+-- Only created_by is frozen: deleted_at must stay writable for soft delete. Service-role writes are not restricted.
+create or replace function guard_attachment_update() returns trigger
+language plpgsql as $$
+begin
+  if current_user = 'authenticated' and new.created_by is distinct from old.created_by then
+    raise exception 'attachment_created_by_immutable' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+create trigger attachment_guard before update on attachment for each row execute function guard_attachment_update();
 
 create table device_token (
   id          uuid primary key default gen_random_uuid(),

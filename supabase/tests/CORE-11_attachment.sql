@@ -1,7 +1,7 @@
 -- CORE-11: attachment rows and household Storage policies.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(18);
+select plan(21);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'a1@example.com', 'authenticated', 'authenticated'),
@@ -41,6 +41,18 @@ select throws_ok($$insert into public.attachment (household_id, entity, entity_i
     'households/' || current_setting('test.home') || '/asset/' || current_setting('test.eid') || '/c.pdf',
     'application/pdf', 1, '00000000-0000-0000-0000-0000000000a2')$$,
   '42501', null, 'CORE-11: AC1 forged created_by rejected');
+select throws_ok($$insert into public.attachment (household_id, entity, entity_id, storage_path, mime, size_bytes, created_by)
+  values (current_setting('test.home')::uuid, 'pantry_item', current_setting('test.eid')::uuid,
+    'households/' || current_setting('test.home') || '/pantry/item/' || current_setting('test.eid') || '/e.pdf',
+    'application/pdf', 1, '00000000-0000-0000-0000-0000000000a1')$$,
+  '23514', null, 'CORE-11: AC1 underscore in entity is not a wildcard');
+select throws_ok($$insert into public.attachment (household_id, entity, entity_id, storage_path, mime, size_bytes, created_by)
+  values (current_setting('test.home')::uuid, 'asset', current_setting('test.eid')::uuid,
+    'households/' || current_setting('test.home') || '/asset/' || current_setting('test.eid') || '/sub/f.pdf',
+    'application/pdf', 1, '00000000-0000-0000-0000-0000000000a1')$$,
+  '23514', null, 'CORE-11: AC1 nested file path rejected');
+select throws_ok($$update public.attachment set created_by = '00000000-0000-0000-0000-0000000000a2'$$,
+  '42501', null, 'CORE-11: AC1 created_by is immutable for clients');
 
 -- AC2: non-members and former members see nothing and cannot write
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
