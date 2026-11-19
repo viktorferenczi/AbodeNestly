@@ -1236,14 +1236,24 @@ create policy device_token_self on device_token for all using (user_id = auth.ui
 create table notification_pref (
   user_id       uuid not null references auth.users(id) on delete cascade,
   household_id  uuid not null references household(id) on delete cascade,
-  type          text not null,  -- eat_soon | low_stock | task_due | warranty | activity
-  enabled       boolean not null default true,
+  type          text not null check (type in ('eat_soon','low_stock','task_due','warranty','activity')),
+  enabled       boolean not null default true,  -- a missing row means enabled
   updated_at    timestamptz not null default now(),
   sync_seq      bigint not null default nextval('sync_seq_global'),
   primary key (user_id, household_id, type)
 );
+-- Not setup_scoped: its member-wide policies would let any member write my row. No delete policy (no soft delete).
+create trigger notification_pref_sync before insert or update on notification_pref
+  for each row execute function set_sync_fields();
 alter table notification_pref enable row level security;
-create policy notification_pref_self on notification_pref for all using (user_id = auth.uid());
+create policy notification_pref_select on notification_pref for select
+  using (user_id = auth.uid() and is_member(household_id));
+create policy notification_pref_insert on notification_pref for insert
+  with check (user_id = auth.uid() and is_member(household_id));
+create policy notification_pref_update on notification_pref for update
+  using (user_id = auth.uid() and is_member(household_id))
+  with check (user_id = auth.uid() and is_member(household_id));
+create index notification_pref_sync_idx on notification_pref (household_id, sync_seq);
 
 create table notification (
   id            uuid primary key default gen_random_uuid(),
@@ -1736,7 +1746,7 @@ select cron.schedule('purge-soft-deleted', '0 3 * * *', $$select purge_soft_dele
 -- Realtime: publish household-scoped tables so clients can subscribe by household_id
 -- ---------------------------------------------------------------------------
 alter publication supabase_realtime add table
-  household, member, invite, activity, attachment,
+  household, member, invite, activity, attachment, notification_pref,
   store, shopping_list, list_item, store_item_order, item_price,
   location, category, pantry_item, pantry_movement, recipe, recipe_ingredient,
   house, contractor, asset, maint_task, task_consumable, maint_log;
