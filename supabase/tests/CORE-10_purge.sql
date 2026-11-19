@@ -2,7 +2,7 @@
 -- list_item does not exist yet, so shopping_list and location stand in for it; the function skips missing tables.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(10);
+select plan(11);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'anna@example.com', 'authenticated', 'authenticated');
@@ -50,6 +50,9 @@ select ok(not has_function_privilege('authenticated', 'public.purge_soft_deleted
   'authenticated cannot execute purge_soft_deleted()');
 select ok(not has_function_privilege('anon', 'public.purge_soft_deleted()', 'execute'),
   'anon cannot execute purge_soft_deleted()');
+
+select ok(not has_function_privilege('service_role', 'public.purge_soft_deleted()', 'execute'),
+  'service_role cannot execute purge_soft_deleted()');
 
 select * from finish();
 rollback;
