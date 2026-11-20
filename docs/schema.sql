@@ -473,12 +473,13 @@ create table store (
   sync_seq      bigint not null default nextval('sync_seq_global')
 );
 call setup_scoped('store');
+create index store_household_name_idx on store(household_id, name) where deleted_at is null;  -- stores list screen
 
 create table shopping_list (
   id            uuid primary key default gen_random_uuid(),
   household_id  uuid not null references household(id) on delete cascade,
   name          text not null,
-  store_id      uuid references store(id),
+  store_id      uuid references store(id) on delete set null,  -- purge of a soft-deleted store clears it
   is_template   boolean not null default false,   -- "weekly basics"
   share_token   text unique,                       -- read-only public link
   archived_at   timestamptz,
