@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate, useParams } from 'react-router';
 import { HomeFeed } from '../core/HomeFeed.tsx';
 import { joinPath } from '../core/InviteSheet.ts';
 import { HouseholdSettings } from '../core/HouseholdSettings.tsx';
+import { NotificationPrefs } from '../core/NotificationPrefs.tsx';
 import { Profile } from '../core/Profile.tsx';
 import { RecentlyDeleted } from '../core/RecentlyDeleted.tsx';
 import { Search } from '../core/Search.tsx';
@@ -55,8 +56,7 @@ export function createAppRouter() {
               '/maintenance/contractors',
             ].map((path) => ({ path, element: <Placeholder /> })),
             { path: '/profile', element: <Profile /> },
-            // B9 arrives with CORE-12; the link must not bounce to / before then.
-            { path: '/profile/notifications', element: <Placeholder /> },
+            { path: '/profile/notifications', element: <NotificationPrefs /> },
           ],
         },
       ],

@@ -1,4 +1,4 @@
-import type { Activity, Attachment, AttachmentEntity } from '@abodenestly/contract';
+import type { Activity, Attachment, AttachmentEntity, NotificationPref } from '@abodenestly/contract';
 import Dexie, { type Table } from 'dexie';
 
 // The contract has no ShoppingList type yet; SHOP-01/08 replace this with it and add the other tables.
@@ -40,6 +40,7 @@ export class HouseholdDb extends Dexie {
   contractor!: Table<NamedRow, string>;
   attachment!: Table<Attachment, string>;
   attachment_outbox!: Table<AttachmentOutboxRow, string>;
+  notification_pref!: Table<NotificationPref, [string, string, string]>;
   outbox!: Table<OutboxRow, number>;
   meta!: Table<MetaRow, string>;
 
@@ -69,6 +70,8 @@ export class HouseholdDb extends Dexie {
       attachment: 'id, [entity+entity_id]',
       attachment_outbox: 'id, created_at',
     });
+    // CORE-12: my switches for this household. Keyed by the server's PK; no `id`, no soft delete (a missing row means enabled).
+    this.version(5).stores({ notification_pref: '[user_id+household_id+type], household_id' });
   }
 }
 
