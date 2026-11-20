@@ -1,8 +1,8 @@
 -- CORE-10: purge_soft_deleted() removes rows deleted more than 30 days ago.
--- list_item does not exist yet, so shopping_list and location stand in for it; the function skips missing tables.
+-- list_item, shopping_list and location are exercised; the function skips §14 tables that do not exist yet.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(12);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'anna@example.com', 'authenticated', 'authenticated');
@@ -18,8 +18,12 @@ insert into public.shopping_list(id, household_id, name, deleted_at) values
   ('00000000-0000-0000-0000-00000000d000', current_setting('test.hid')::uuid, 'live', null);
 insert into public.location(id, household_id, name, deleted_at) values
   ('00000000-0000-0000-0000-00000000e031', current_setting('test.hid')::uuid, 'old shelf', now() - interval '31 days');
-
-select ok(to_regclass('list_item') is null, 'precondition: list_item does not exist yet (tests use shopping_list/location)');
+insert into public.list_item(id, household_id, list_id, name, deleted_at)
+  select v.id::uuid, current_setting('test.hid')::uuid, l.id, v.name, v.d
+  from public.shopping_list l,
+    (values ('00000000-0000-0000-0000-00000000f031', 'old item', now() - interval '31 days'),
+            ('00000000-0000-0000-0000-00000000f029', 'recent item', now() - interval '29 days')) v(id, name, d)
+  where l.id = '00000000-0000-0000-0000-00000000d000';
 
 select lives_ok($$select public.purge_soft_deleted()$$, 'missing tables from the §14 list are skipped');
 
@@ -29,7 +33,12 @@ select is_empty($$select 1 from public.shopping_list where id = '00000000-0000-0
 select is_empty($$select 1 from public.location where id = '00000000-0000-0000-0000-00000000e031'$$,
   'CORE-10: row deleted 31 days ago is purged (location)');
 
+select is_empty($$select 1 from public.list_item where id = '00000000-0000-0000-0000-00000000f031'$$,
+  'CORE-10: list_item deleted 31 days ago is purged');
+
 -- AC2
+select is((select count(*)::int from public.list_item where id = '00000000-0000-0000-0000-00000000f029'), 1,
+  'CORE-10: list_item deleted 29 days ago remains');
 select is(
   (select count(*)::int from public.shopping_list where id in
     ('00000000-0000-0000-0000-00000000d029', '00000000-0000-0000-0000-00000000d000')),
@@ -37,10 +46,10 @@ select is(
 
 -- AC3
 select set_config('test.before',
-  ((select count(*) from public.shopping_list) + (select count(*) from public.location))::text, true);
+  ((select count(*) from public.shopping_list) + (select count(*) from public.location) + (select count(*) from public.list_item))::text, true);
 select lives_ok($$select public.purge_soft_deleted()$$, 'CORE-10: second run is a no-op (no error)');
 select is(
-  ((select count(*) from public.shopping_list) + (select count(*) from public.location))::text,
+  ((select count(*) from public.shopping_list) + (select count(*) from public.location) + (select count(*) from public.list_item))::text,
   current_setting('test.before'), 'CORE-10: second run leaves the row count unchanged');
 
 -- Access
