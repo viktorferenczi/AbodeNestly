@@ -1,7 +1,7 @@
 -- SHOP-08: record_sync_mutation remembers applied mutation ids per user for 24 h.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(16);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'a1@example.com', 'authenticated', 'authenticated'),
@@ -53,6 +53,19 @@ select is(public.record_sync_mutation(current_setting('test.m1')::uuid), true,
 select throws_ok($$insert into public.sync_applied (user_id, mutation_id)
   values ('00000000-0000-0000-0000-0000000000a1', gen_random_uuid())$$,
   '42501', null, 'SHOP-08: RLS a2 cannot insert a row for a1');
+
+-- applied_at is server-owned: no direct writes, so it cannot be forged or backdated
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}', true);
+select throws_ok($$insert into public.sync_applied (mutation_id) values (gen_random_uuid())$$,
+  '42501', null, 'SHOP-08: authenticated cannot insert directly, even for itself');
+select throws_ok($$update public.sync_applied set applied_at = now() - interval '25 hours'
+  where mutation_id = current_setting('test.m3')::uuid$$,
+  '42501', null, 'SHOP-08: authenticated cannot backdate applied_at');
+
+-- no JWT: the function refuses
+select set_config('request.jwt.claims', '{}', true);
+select throws_ok($$select public.record_sync_mutation(gen_random_uuid())$$,
+  '42501', 'not_authenticated', 'SHOP-08: call without a JWT raises not_authenticated');
 
 select * from finish();
 rollback;
