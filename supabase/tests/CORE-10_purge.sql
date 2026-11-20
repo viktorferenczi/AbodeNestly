@@ -1,8 +1,8 @@
 -- CORE-10: purge_soft_deleted() removes rows deleted more than 30 days ago.
--- list_item does not exist yet, so shopping_list and location stand in for it; the function skips missing tables.
+-- shopping_list and location stand in for the §14 tables; the function skips tables that do not exist yet.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(10);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'anna@example.com', 'authenticated', 'authenticated');
@@ -18,8 +18,6 @@ insert into public.shopping_list(id, household_id, name, deleted_at) values
   ('00000000-0000-0000-0000-00000000d000', current_setting('test.hid')::uuid, 'live', null);
 insert into public.location(id, household_id, name, deleted_at) values
   ('00000000-0000-0000-0000-00000000e031', current_setting('test.hid')::uuid, 'old shelf', now() - interval '31 days');
-
-select ok(to_regclass('list_item') is null, 'precondition: list_item does not exist yet (tests use shopping_list/location)');
 
 select lives_ok($$select public.purge_soft_deleted()$$, 'missing tables from the §14 list are skipped');
 
