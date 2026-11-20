@@ -294,14 +294,15 @@ private struct MainTabs: View {
                                 model: profile, isOnline: environment.network.isOnline,
                                 notifications: {
                                     // Without a signed-in user (not reachable from here) there is nothing to write for.
-                                    guard let userId = session.userId else { return AnyView(EmptyView()) }
-                                    return AnyView(NotificationPrefsScreen(
-                                        householdId: householdId, userId: userId, environment: environment,
-                                        modules: Search.modules(
-                                            householdId: householdId, household: household,
-                                            cached: HouseholdsCache().read(userId: userId)
+                                    if let userId = session.userId {
+                                        NotificationPrefsScreen(
+                                            householdId: householdId, userId: userId, environment: environment,
+                                            modules: Search.modules(
+                                                householdId: householdId, household: household,
+                                                cached: HouseholdsCache().read(userId: userId)
+                                            )
                                         )
-                                    ))
+                                    }
                                 }
                             )
                         case .recentlyDeleted:

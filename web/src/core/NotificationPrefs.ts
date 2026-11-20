@@ -57,13 +57,18 @@ export type PrefEnvelope = {
   client_ts: string;
 };
 
+/** Ids are stored lowercase on every platform and hashed lowercase, so the row, `data` and `row_id` always agree. */
+export const normalizeId = (id: string) => id.toLowerCase();
+
 export async function prefEnvelope(key: PrefKey, on: boolean, deps: PrefDeps): Promise<PrefEnvelope> {
+  const userId = normalizeId(key.userId);
+  const householdId = normalizeId(key.householdId);
   return {
     id: deps.uuid(),
     table: 'notification_pref',
     op: 'upsert',
-    row_id: await prefRowId(key.userId, key.householdId, key.type),
-    data: { user_id: key.userId, household_id: key.householdId, type: key.type, enabled: on },
+    row_id: await prefRowId(userId, householdId, key.type),
+    data: { user_id: userId, household_id: householdId, type: key.type, enabled: on },
     client_ts: deps.now(),
   };
 }

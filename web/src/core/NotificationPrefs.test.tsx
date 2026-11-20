@@ -114,7 +114,9 @@ describe('CORE-12: Notification preferences screen', () => {
     const request = vi.fn(async () => 'granted' as NotificationPermission);
     stubPermission('granted', request);
     await renderPrefs();
-    fireEvent.click(await screen.findByTestId('notif.settings'));
+    await screen.findByTestId('notif.switch.activity');
+    expect(screen.queryByTestId('notif.settings.help')).toBeNull();
+    fireEvent.click(screen.getByTestId('notif.settings'));
     expect(screen.getByTestId('notif.settings.help').textContent).toMatch(/browser's site settings/);
     expect(request).not.toHaveBeenCalled();
   });
@@ -124,6 +126,17 @@ describe('CORE-12: Notification preferences screen', () => {
     await renderPrefs();
     await screen.findByTestId('notif.switch.activity');
     expect(screen.queryByTestId('notif.denied')).toBeNull();
+    fireEvent.click(screen.getByTestId('notif.settings'));
     expect(screen.getByTestId('notif.settings.help').textContent).toMatch(/does not support/);
+  });
+
+  it('re-reads the permission when the tab regains focus', async () => {
+    stubPermission('granted');
+    await renderPrefs();
+    await screen.findByTestId('notif.switch.activity');
+    expect(screen.queryByTestId('notif.denied')).toBeNull();
+    stubPermission('denied');
+    fireEvent.focus(window);
+    expect(await screen.findByTestId('notif.denied')).toBeTruthy();
   });
 });

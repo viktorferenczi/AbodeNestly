@@ -310,11 +310,12 @@ private fun Tabs(
     }
     val deletedModules = (household?.let(HomeModules::of) ?: cachedModules)?.searchModules()
     // Over Profile, so Back from it lands on Profile again.
-    if (showProfile && showNotifications && members != null && meId != null && deletedModules != null) {
+    if (showProfile && showNotifications && members != null && meId != null) {
         BackHandler { showNotifications = false }
         Column(Modifier.fillMaxSize()) {
             TextButton(onClick = { showNotifications = false }, modifier = Modifier.testTag("notif.back")) { Text("Back") }
-            NotificationPrefsScreen(members, meId, deletedModules, database, sync, modifier = Modifier.weight(1f))
+            // Unknown flags show only Activity, like iOS.
+            NotificationPrefsScreen(members, meId, deletedModules ?: emptySet(), database, sync, modifier = Modifier.weight(1f))
         }
         return
     }

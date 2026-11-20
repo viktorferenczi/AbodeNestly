@@ -81,4 +81,12 @@ describe('CORE-12: setPref', () => {
     expect(await db.outbox.count()).toBe(2);
     await db.close();
   });
+
+  it('mixed-case ids are stored and sent lowercase, matching the row_id hash', async () => {
+    const db = await openHouseholdDb(HOUSE);
+    await setPref(db, { userId: USER.toUpperCase(), householdId: HOUSE.toUpperCase(), type: 'eat_soon' }, false, deps);
+    expect(await db.notification_pref.toArray()).toEqual([{ user_id: USER, household_id: HOUSE, type: 'eat_soon', enabled: false }]);
+    expect((await db.outbox.toArray())[0]!.payload).toMatchObject({ row_id: GOLDEN_EAT_SOON, data: { user_id: USER, household_id: HOUSE } });
+    await db.close();
+  });
 });

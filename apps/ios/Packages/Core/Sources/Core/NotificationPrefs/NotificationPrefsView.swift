@@ -22,7 +22,9 @@ public struct NotificationPrefsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Tokens.bg)
+        .onAppear { model.start() }
         .task { await model.refreshAuthorization() }
+        .onDisappear { model.stop() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.refreshAuthorization() } }
         }

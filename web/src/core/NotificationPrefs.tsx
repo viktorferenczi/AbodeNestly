@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSync } from '../sync/SyncEngine.ts';
 import { useLiveQuery } from '../ui/useLiveQuery.ts';
 import { useAuth } from './auth/AuthProvider.tsx';
 import { useHousehold } from './household/HouseholdProvider.tsx';
-import { enabled, setPref, visibleTypes } from './NotificationPrefs.ts';
+import { enabled, normalizeId, setPref, visibleTypes } from './NotificationPrefs.ts';
 import type { NotificationPref, NotificationType } from '@abodenestly/contract';
 import styles from './NotificationPrefs.module.css';
 
@@ -20,13 +20,30 @@ export function NotificationPrefs() {
   const householdId = household?.id;
   const userId = session?.user.id;
   const [permission, setPermission] = useState<Permission>(readPermission);
+  // Shown as the result of pressing "System notification settings" once the browser will not ask again.
+  const [helpShown, setHelpShown] = useState(false);
+
+  // The person may change the site setting in the browser and come back (iOS re-reads on active, Android on resume).
+  useEffect(() => {
+    const reread = () => setPermission(readPermission());
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') reread();
+    };
+    window.addEventListener('focus', reread);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', reread);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   // `null` while there is nothing to read: a stale `[]` from before the database opened would otherwise render the
   // switches for one frame and then unmount them again when the subscription restarts.
   const rows = useLiveQuery<NotificationPref[] | null>(async () => {
     if (!db || !householdId || !userId) return null;
-    const all = await db.notification_pref.where('household_id').equals(householdId).toArray();
-    return all.filter((r) => r.user_id === userId);
+    const user = normalizeId(userId);
+    const all = await db.notification_pref.where('household_id').equals(normalizeId(householdId)).toArray();
+    return all.filter((r) => r.user_id === user);
   }, [db, householdId, userId]);
 
   if (status !== 'ready' || !rows || !db || !householdId || !userId) return null;
@@ -40,6 +57,7 @@ export function NotificationPrefs() {
   // otherwise explain where the user changes it.
   const onSettings = async () => {
     if (permission === 'default') setPermission(await Notification.requestPermission());
+    setHelpShown(true);
   };
 
   return (
@@ -71,7 +89,7 @@ export function NotificationPrefs() {
       <button type="button" className={styles.link} data-testid="notif.settings" onClick={() => void onSettings()}>
         System notification settings
       </button>
-      {permission === 'granted' || permission === 'denied' || permission === 'unsupported' ? (
+      {helpShown && permission !== 'default' ? (
         <p className={styles.hint} data-testid="notif.settings.help">
           {permission === 'unsupported'
             ? 'This browser does not support notifications.'

@@ -44,9 +44,44 @@
 }
 
 .switch {
-  width: 2.5rem;
-  height: 1.5rem;
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 2.75rem;
+  height: 1.625rem;
+  margin: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-surface);
   cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+  transition: transform 0.15s;
+}
+
+.switch:checked {
+  background: color-mix(in srgb, currentColor 25%, var(--color-surface));
+}
+
+.switch:checked::after {
+  transform: translateX(1.125rem);
+  opacity: 1;
+}
+
+.switch:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .link {

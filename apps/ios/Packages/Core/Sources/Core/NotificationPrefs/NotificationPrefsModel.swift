@@ -40,12 +40,18 @@ public final class NotificationPrefsModel {
         self.kick = kick
         self.authorization = authorization
         self.now = now
-        startObserving()
+        start()
     }
 
     public var types: [NotificationType] { NotificationPrefs.visibleTypes(modules) }
     public var permissionDenied: Bool { status == .denied }
     public func isOn(_ type: NotificationType) -> Bool { NotificationPrefs.enabled(rows, type) }
+
+    /// Starts the observation unless it is running; the view calls it on appear after `stop()`.
+    public func start() {
+        guard observeTask == nil else { return }
+        startObserving()
+    }
 
     private func startObserving() {
         let (householdId, userId, database) = (householdId, userId, database)
@@ -58,6 +64,12 @@ public final class NotificationPrefsModel {
             // A stream that ended at once (database not open): the defaults are all there is.
             self?.loaded = true
         }
+    }
+
+    /// Ends the database observation as soon as the screen goes away, rather than when the next row arrives.
+    public func stop() {
+        observeTask?.cancel()
+        observeTask = nil
     }
 
     /// The person may change the system setting and come back, so the view calls this on every foreground.

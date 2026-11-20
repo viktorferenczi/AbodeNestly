@@ -6,15 +6,15 @@ import UniformTypeIdentifiers
 
 /// DESIGN B7: avatar (tap to change), display name, read-only email, notification preferences link, sign out.
 /// Name edits and photos are saved locally first, so everything but the signed avatar image works offline.
-public struct ProfileView: View {
+public struct ProfileView<Destination: View>: View {
     private let model: ProfileModel
     private let isOnline: Bool
     /// The pushed notification preferences screen (B9); the app builds it because it owns the household and database.
-    private let notifications: () -> AnyView
+    private let notifications: () -> Destination
     @State private var pickerItem: PhotosPickerItem?
     @FocusState private var nameFocused: Bool
 
-    public init(model: ProfileModel, isOnline: Bool, notifications: @escaping () -> AnyView = { AnyView(EmptyView()) }) {
+    public init(model: ProfileModel, isOnline: Bool, @ViewBuilder notifications: @escaping () -> Destination) {
         self.model = model
         self.isOnline = isOnline
         self.notifications = notifications
@@ -176,5 +176,11 @@ struct PickedImage: Transferable {
 
     static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(importedContentType: .image) { PickedImage(data: $0) }
+    }
+}
+
+extension ProfileView where Destination == EmptyView {
+    public init(model: ProfileModel, isOnline: Bool) {
+        self.init(model: model, isOnline: isOnline, notifications: { EmptyView() })
     }
 }
