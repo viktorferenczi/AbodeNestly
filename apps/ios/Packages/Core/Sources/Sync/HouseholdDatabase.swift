@@ -1,4 +1,5 @@
 import Contract
+import CryptoKit
 import Foundation
 import GRDB
 
@@ -50,6 +51,40 @@ public struct DeletedRow: Sendable, Equatable {
         self.id = id
         self.name = name
         self.deletedAt = deletedAt
+    }
+}
+
+/// One notification switch of one person in one household (CORE-12). `type` is the contract's NotificationType raw value.
+public struct NotificationPrefRow: Sendable, Equatable {
+    public var userId: UUID
+    public var householdId: UUID
+    public var type: String
+    public var enabled: Bool
+
+    public init(userId: UUID, householdId: UUID, type: String, enabled: Bool) {
+        self.userId = userId
+        self.householdId = householdId
+        self.type = type
+        self.enabled = enabled
+    }
+}
+
+/// UUID v5 (RFC 4122 §4.3) of a switch: the outbox `row_id`, identical on web, iOS and Android because the table has no
+/// `id`. Lives here because `setNotificationPref` derives it; Core's `NotificationPrefs` forwards to it.
+public enum NotificationPrefId {
+    private static let urlNamespace: [UInt8] = [
+        0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
+    ]
+
+    public static func rowId(userId: UUID, householdId: UUID, type: String) -> UUID {
+        let name = "abodenestly:notification_pref:\(userId.uuidString):\(householdId.uuidString):\(type)".lowercased()
+        var bytes = Array(Insecure.SHA1.hash(data: Data(urlNamespace) + Data(name.utf8))).prefix(16).map { $0 }
+        bytes[6] = (bytes[6] & 0x0f) | 0x50
+        bytes[8] = (bytes[8] & 0x3f) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
     }
 }
 
@@ -385,6 +420,74 @@ public actor HouseholdDatabase {
         func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encodeNil(forKey: .deletedAt)
+        }
+    }
+
+    // MARK: Notification preferences (CORE-12)
+
+    /// My switches in this household, re-emitted whenever they change. A type with no row is enabled (the caller
+    /// applies that default). Finishes at once when the household is not open.
+    public func observeNotificationPrefs(householdId: UUID, userId: UUID) -> AsyncStream<[NotificationPrefRow]> {
+        guard let pool, handle?.householdId == householdId else {
+            return AsyncStream { $0.finish() }
+        }
+        let household = householdId.uuidString.lowercased()
+        let user = userId.uuidString.lowercased()
+        let observation = ValueObservation.tracking { db in
+            try Row.fetchAll(
+                db,
+                sql: "SELECT type, enabled FROM notification_pref WHERE household_id = ? AND user_id = ?",
+                arguments: [household, user]
+            ).map { NotificationPrefRow(userId: userId, householdId: householdId, type: $0["type"], enabled: $0["enabled"]) }
+        }
+        return AsyncStream { continuation in
+            let task = Task {
+                do {
+                    for try await rows in observation.values(in: pool) { continuation.yield(rows) }
+                } catch {
+                    // A closed pool ends the observation; the screen keeps its last rows.
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// One local transaction: upsert my row and queue the SPEC §6.2 upsert, so the two cannot diverge. The caller kicks
+    /// sync. `notification_pref` is not in SPEC's SyncTable yet; SHOP-08-api is to accept it and key the row off `data`.
+    public func setNotificationPref(userId: UUID, householdId: UUID, type: String, enabled: Bool, now: Date = Date()) throws {
+        let pool = try requirePool()
+        guard handle?.householdId == householdId else { throw HouseholdDatabaseError.notOpen }
+        let user = userId.uuidString.lowercased()
+        let household = householdId.uuidString.lowercased()
+        let rowId = NotificationPrefId.rowId(userId: userId, householdId: householdId, type: type).uuidString.lowercased()
+        let data = String(
+            decoding: try JSONEncoder().encode(PrefData(userId: user, householdId: household, type: type, enabled: enabled)),
+            as: UTF8.self
+        )
+        let stamp = Self.text(now)
+        try pool.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO notification_pref (user_id, household_id, type, enabled) VALUES (?, ?, ?, ?)
+                ON CONFLICT (user_id, household_id, type) DO UPDATE SET enabled = excluded.enabled
+                """,
+                arguments: [user, household, type, enabled]
+            )
+            try db.execute(
+                sql: "INSERT INTO outbox (id, table_name, op, row_id, data, client_ts) VALUES (?, 'notification_pref', 'upsert', ?, ?, ?)",
+                arguments: [UUID().uuidString.lowercased(), rowId, data, stamp]
+            )
+        }
+    }
+
+    private struct PrefData: Encodable {
+        let userId: String
+        let householdId: String
+        let type: String
+        let enabled: Bool
+        enum CodingKeys: String, CodingKey {
+            case userId = "user_id", householdId = "household_id", type, enabled
         }
     }
 

@@ -102,6 +102,21 @@ enum Migrations {
             }
         }
 
+        // CORE-12: my switches for this household. The server's PK is (user_id, household_id, type); there is no `id`, no
+        // soft delete and no row until the first change (a missing row means enabled). `sync_seq` stays for the pull.
+        migrator.registerMigration("v5") { db in
+            try db.create(table: "notification_pref") { t in
+                t.column("user_id", .text).notNull()
+                t.column("household_id", .text).notNull()
+                t.column("type", .text).notNull()
+                t.column("enabled", .boolean).notNull().defaults(to: true)
+                t.column("updated_at", .text)
+                t.column("sync_seq", .integer)
+                t.primaryKey(["user_id", "household_id", "type"])
+            }
+            try db.execute(sql: "CREATE INDEX notification_pref_household_idx ON notification_pref (household_id)")
+        }
+
         return migrator
     }
 }

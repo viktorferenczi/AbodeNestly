@@ -9,12 +9,15 @@ import UniformTypeIdentifiers
 public struct ProfileView: View {
     private let model: ProfileModel
     private let isOnline: Bool
+    /// The pushed notification preferences screen (B9); the app builds it because it owns the household and database.
+    private let notifications: () -> AnyView
     @State private var pickerItem: PhotosPickerItem?
     @FocusState private var nameFocused: Bool
 
-    public init(model: ProfileModel, isOnline: Bool) {
+    public init(model: ProfileModel, isOnline: Bool, notifications: @escaping () -> AnyView = { AnyView(EmptyView()) }) {
         self.model = model
         self.isOnline = isOnline
+        self.notifications = notifications
     }
 
     private var name: String { model.profile?.displayName ?? "" }
@@ -29,7 +32,7 @@ public struct ProfileView: View {
                 nameSection
                 emailSection
                 NavigationLink {
-                    NotificationPreferencesPlaceholder()
+                    notifications()
                 } label: {
                     HStack {
                         Text("Notification preferences").foregroundStyle(Tokens.text)
@@ -173,17 +176,5 @@ struct PickedImage: Transferable {
 
     static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(importedContentType: .image) { PickedImage(data: $0) }
-    }
-}
-
-/// B9 arrives with CORE-12; the link exists now so B7 matches its plan.
-private struct NotificationPreferencesPlaceholder: View {
-    var body: some View {
-        Text("Notification preferences are coming soon.")
-            .foregroundStyle(Tokens.text2)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Tokens.bg)
-            .navigationTitle("Notifications")
-            .navigationBarTitleDisplayMode(.inline)
     }
 }
