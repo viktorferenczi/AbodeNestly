@@ -2,7 +2,7 @@
 -- No module-flag test here: module_disabled is enforced by /sync (X7-api), not by a trigger on this table.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(10);
+select plan(11);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'a1@example.com', 'authenticated', 'authenticated'),
@@ -50,6 +50,8 @@ select is((select count(*)::int from public.list_item where id = current_setting
 
 -- AC3: a non-member cannot change or add items
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+select is_empty($$select 1 from public.list_item where id = current_setting('test.i1')::uuid$$,
+  'SHOP-03: AC3 non-member sees no items of Home');
 select is_empty($$with u as (update public.list_item set quantity = 99
   where id = current_setting('test.i1')::uuid returning 1) select * from u$$,
   'SHOP-03: AC3 non-member update matches 0 rows');
