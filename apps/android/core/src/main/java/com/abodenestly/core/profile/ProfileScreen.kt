@@ -41,7 +41,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -107,8 +106,7 @@ internal fun java.io.InputStream.readCapped(limit: Int): ByteArray? {
 }
 
 /**
- * DESIGN B7: avatar (tap to change), display name, read-only email, notification preferences (disabled until
- * CORE-12) and sign out. Name and photo edits are local first, so everything works offline.
+ * DESIGN B7: avatar (tap to change), display name, read-only email, a link to notification preferences (B9) and sign out. Name and photo edits are local first, so everything works offline.
  * [picker] is injected so tests can drive it.
  */
 @Composable
@@ -120,6 +118,7 @@ fun ProfileScreen(
     isOnline: Boolean,
     onProfileChanged: (Profile) -> Unit,
     onSignOut: () -> Unit,
+    onOpenNotifications: () -> Unit,
     modifier: Modifier = Modifier,
     picker: @Composable (onPicked: (ByteArray?) -> Unit) -> (() -> Unit) = { onPicked -> rememberPhotoPicker(onPicked) },
 ) {
@@ -203,13 +202,13 @@ fun ProfileScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth().heightIn(min = Tokens.MinTouchTarget).testTag("profile.email"),
         )
-        // CORE-12 provides the route; until then the row is shown, disabled.
         Box(
             Modifier.fillMaxWidth().heightIn(min = Tokens.MinTouchTarget)
-                .semantics(mergeDescendants = true) { disabled(); contentDescription = "Notification preferences, not available yet" }
+                .clickable(role = Role.Button, onClick = onOpenNotifications)
+                .semantics(mergeDescendants = true) { contentDescription = "Notification preferences" }
                 .testTag("profile.notifications"),
             contentAlignment = Alignment.CenterStart,
-        ) { Text("Notification preferences", color = tokens.text2) }
+        ) { Text("Notification preferences", color = tokens.text) }
         OutlinedButton(
             onClick = onSignOut,
             modifier = Modifier.fillMaxWidth().heightIn(min = Tokens.MinTouchTarget)

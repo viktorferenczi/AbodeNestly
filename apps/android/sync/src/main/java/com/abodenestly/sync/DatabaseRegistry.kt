@@ -20,6 +20,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.ByteBuffer
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -58,6 +60,27 @@ data class SearchRow(
 /** A soft-deleted row of a restorable table (CORE-10). [name] is `title` for `maint_task`. [deletedAt] is the stored text, ISO 8601. */
 data class DeletedRow(val table: String, val id: String, val name: String, val deletedAt: String)
 
+/** One notification switch (CORE-12). [type] is the contract's `NotificationType` value. */
+data class NotificationPrefRow(val userId: UUID, val householdId: UUID, val type: String, val enabled: Boolean)
+
+/**
+ * UUID v5 (RFC 4122 §4.3) of a switch: the outbox `row_id`, identical on web, iOS and Android because the table has no
+ * `id`. Lives here because [DatabaseRegistry.setNotificationPref] derives it; core's `NotificationPrefs` forwards to it.
+ */
+object NotificationPrefId {
+    private val URL_NAMESPACE = UUID.fromString("6ba7b811-9dad-11d1-80b4-00c04fd430c8")
+
+    fun rowId(userId: UUID, householdId: UUID, type: String): UUID {
+        val name = "abodenestly:notification_pref:$userId:$householdId:$type".lowercase()
+        val ns = ByteBuffer.allocate(16).putLong(URL_NAMESPACE.mostSignificantBits).putLong(URL_NAMESPACE.leastSignificantBits).array()
+        val hash = MessageDigest.getInstance("SHA-1").digest(ns + name.toByteArray(Charsets.UTF_8))
+        hash[6] = ((hash[6].toInt() and 0x0f) or 0x50).toByte()
+        hash[8] = ((hash[8].toInt() and 0x3f) or 0x80).toByte()
+        val buf = ByteBuffer.wrap(hash, 0, 16)
+        return UUID(buf.long, buf.long)
+    }
+}
+
 /** A read or write that needs the open household database, with none open. */
 class DatabaseNotOpenException : IllegalStateException("No household database is open")
 
@@ -90,7 +113,7 @@ open class DatabaseRegistry(
     open suspend fun open(id: UUID, isCurrent: () -> Boolean = { true }): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
             if (mutableCurrent.value == id && database != null) return@withLock isCurrent()
-            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
             try {
                 db.meta().putIfAbsent(MetaEntity(CURSOR, "0"))
                 val seed = seedLists[id]
@@ -137,7 +160,7 @@ open class DatabaseRegistry(
             val open = database
             if (open != null && mutableCurrent.value == id) return@withLock open.outbox().count()
             if (!context.applicationContext.getDatabasePath(fileName(id)).exists()) return@withLock 0
-            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
             try {
                 db.outbox().count()
             } finally {
@@ -233,6 +256,43 @@ open class DatabaseRegistry(
         val path = db.attachments().filePath(uploadId.toString())
         db.attachments().remove(uploadId.toString())
         if (path != null) File(context.applicationContext.filesDir, path).delete()
+    }
+
+    // Notification preferences (CORE-12)
+
+    /** My switches in household [id], re-emitted when they change; follows the open database like [activityFeed]. A type with no row is enabled (the caller applies that default). */
+    fun observeNotificationPrefs(id: UUID, userId: UUID): Flow<List<NotificationPrefRow>> = current.flatMapLatest { open ->
+        val db = database
+        if (open != id || db == null) emptyFlow()
+        else db.notificationPrefs().observe(id.toString(), userId.toString())
+            .map { rows -> rows.mapNotNull { r -> runCatching { NotificationPrefRow(UUID.fromString(r.userId), UUID.fromString(r.householdId), r.type, r.enabled) }.getOrNull() } }
+            .catch { }
+    }
+
+    /**
+     * One local transaction: upsert my row and queue the SPEC §6.2 upsert, so the two cannot diverge. The caller kicks sync.
+     * `notification_pref` is not in SPEC's SyncTable yet; SHOP-08-api is to accept it and key the row off `data`.
+     * Throws [DatabaseNotOpenException] when [householdId] is not the open household.
+     */
+    suspend fun setNotificationPref(userId: UUID, householdId: UUID, type: String, enabled: Boolean, now: Instant) = withContext(Dispatchers.IO) {
+        require(type.matches(Regex("[a-z_]+"))) { "Not a notification type: $type" }
+        mutex.withLock {
+            val db = database
+            if (db == null || mutableCurrent.value != householdId) throw DatabaseNotOpenException()
+            val user = userId.toString().lowercase()
+            val household = householdId.toString().lowercase()
+            db.withTransaction {
+                db.notificationPrefs().setEnabled(user, household, type, enabled)
+                db.outbox().insert(
+                    OutboxEntity(
+                        id = UUID.randomUUID().toString(), tableName = "notification_pref", op = "upsert",
+                        rowId = NotificationPrefId.rowId(userId, householdId, type).toString(),
+                        data = """{"user_id":"$user","household_id":"$household","type":"$type","enabled":$enabled}""",
+                        clientTs = now.toString(),
+                    ),
+                )
+            }
+        }
     }
 
     // Search (CORE-09)

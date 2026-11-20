@@ -72,6 +72,7 @@ class ProfileComposeTest {
     private var picks = 0
     private val changed = mutableListOf<Profile>()
     private var signedOut = 0
+    private var notificationsOpened = 0
 
     // Real dispatchers: the sync runs on its own thread, so tests wait with `waitUntil` instead of advancing time.
     private fun deps() = ProfileDeps(
@@ -94,7 +95,7 @@ class ProfileComposeTest {
                     TextField("", onValueChange = {}, modifier = Modifier.testTag("other").fillMaxWidth())
                     ProfileScreen(
                         userId, "ada@example.com", profile, deps, isOnline = online,
-                        onProfileChanged = { changed += it }, onSignOut = { signedOut++ },
+                        onProfileChanged = { changed += it }, onSignOut = { signedOut++ }, onOpenNotifications = { notificationsOpened++ },
                         modifier = Modifier.weight(1f), picker = picker,
                     )
                 }
@@ -117,10 +118,17 @@ class ProfileComposeTest {
         rule.onAllNodesWithText("AL", useUnmergedTree = true).assertCountEquals(1)
         rule.onNodeWithTag("profile.name").assert(hasText("Ada Lovelace"))
         rule.onNodeWithTag("profile.email").assert(hasText("ada@example.com"))
-        rule.onNodeWithTag("profile.notifications").assertIsNotEnabled()
+        rule.onNodeWithTag("profile.notifications").assertIsEnabled()
         rule.onNodeWithTag("profile.signout").assertIsEnabled()
         assertTrue(!exists("profile.uploading"))
         assertTrue(!exists("profile.offline"))
+    }
+
+    @Test
+    fun `CORE-12 - the notification preferences row opens B9`() {
+        show()
+        rule.onNodeWithTag("profile.notifications").performClick()
+        assertEquals(1, notificationsOpened)
     }
 
     @Test
@@ -223,7 +231,7 @@ class ProfileComposeTest {
                 if (state.status == SessionStatus.SignedOut) SignInScreen(signIn, isOnline = true)
                 else ProfileScreen(
                     userId, session.email, state.profile, deps, isOnline = true,
-                    onProfileChanged = session::updateProfile, onSignOut = session::signOut, picker = picker,
+                    onProfileChanged = session::updateProfile, onSignOut = session::signOut, onOpenNotifications = {}, picker = picker,
                 )
             }
         }

@@ -152,6 +152,24 @@ data class AttachmentEntity(
 )
 
 /**
+ * CORE-12: one notification switch of one person in one household. The server's PK is (user_id, household_id, type);
+ * there is no `id`, no soft delete and no row until the first change (a missing row means enabled). Web twin: Dexie `notification_pref`.
+ */
+@Entity(
+    tableName = "notification_pref",
+    primaryKeys = ["user_id", "household_id", "type"],
+    indices = [Index(value = ["household_id"])],
+)
+data class NotificationPrefEntity(
+    @ColumnInfo(name = "user_id") val userId: String,
+    @ColumnInfo(name = "household_id") val householdId: String,
+    val type: String,
+    val enabled: Boolean,
+    @ColumnInfo(name = "updated_at") val updatedAt: String? = null,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Int? = null,
+)
+
+/**
  * CORE-11: a pick made offline, waiting to upload. Separate from `outbox` on purpose: /sync carries rows, not bytes,
  * and nothing drains `outbox` yet (SHOP-08). `file_path` is relative to the app's files folder and holds the bytes.
  */
@@ -209,6 +227,19 @@ interface ActivityDao {
     /** Newest live rows of one household; the screen applies the 30-day / 20-row window, the cap only keeps the flow small. */
     @Query("SELECT * FROM activity WHERE household_id = :householdId AND deleted_at IS NULL ORDER BY created_at DESC, id DESC LIMIT :limit")
     fun observeFeed(householdId: String, limit: Int): Flow<List<ActivityEntity>>
+}
+
+@Dao
+interface NotificationPrefDao {
+    @Query("SELECT * FROM notification_pref WHERE household_id = :householdId AND user_id = :userId")
+    fun observe(householdId: String, userId: String): Flow<List<NotificationPrefEntity>>
+
+    /** An upsert that keeps the pulled `updated_at` / `sync_seq` of an existing row. */
+    @Query(
+        "INSERT INTO notification_pref (user_id, household_id, type, enabled) VALUES (:userId, :householdId, :type, :enabled) " +
+            "ON CONFLICT(user_id, household_id, type) DO UPDATE SET enabled = excluded.enabled",
+    )
+    suspend fun setEnabled(userId: String, householdId: String, type: String, enabled: Boolean)
 }
 
 @Dao
@@ -400,13 +431,26 @@ internal val MIGRATION_3_4_SQL = listOf(
     "CREATE TABLE IF NOT EXISTS `attachment_outbox` (`id` TEXT NOT NULL, `household_id` TEXT NOT NULL, `entity` TEXT NOT NULL, `entity_id` TEXT NOT NULL, `filename` TEXT NOT NULL, `mime` TEXT NOT NULL, `size` INTEGER NOT NULL, `file_path` TEXT NOT NULL, `created_at` TEXT NOT NULL, PRIMARY KEY(`id`))",
 )
 
+/** v5 adds the CORE-12 notification switches. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_4_5_SQL.forEach(db::execSQL)
+    }
+}
+
+// Same statements Room exports in schemas/…/5.json for `notification_pref`. Public so the core tests can run them.
+val MIGRATION_4_5_SQL = listOf(
+    "CREATE TABLE IF NOT EXISTS `notification_pref` (`user_id` TEXT NOT NULL, `household_id` TEXT NOT NULL, `type` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `updated_at` TEXT, `sync_seq` INTEGER, PRIMARY KEY(`user_id`, `household_id`, `type`))",
+    "CREATE INDEX IF NOT EXISTS `index_notification_pref_household_id` ON `notification_pref` (`household_id`)",
+)
+
 /** One Room database per household (SPEC §6.1): own rows, own outbox, own pull cursor. */
 @Database(
     entities = [MetaEntity::class, OutboxEntity::class, ShoppingListEntity::class, ActivityEntity::class,
         ListItemEntity::class, PantryItemEntity::class, RecipeEntity::class, AssetEntity::class, MaintTaskEntity::class, StoreEntity::class, LocationEntity::class, ContractorEntity::class,
-        AttachmentEntity::class, AttachmentOutboxEntity::class,
+        AttachmentEntity::class, AttachmentOutboxEntity::class, NotificationPrefEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class HouseholdDatabase : RoomDatabase() {
@@ -417,4 +461,5 @@ abstract class HouseholdDatabase : RoomDatabase() {
     abstract fun search(): SearchDao
     abstract fun deleted(): DeletedDao
     abstract fun attachments(): AttachmentDao
+    abstract fun notificationPrefs(): NotificationPrefDao
 }
