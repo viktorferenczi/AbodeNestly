@@ -208,7 +208,9 @@ struct ActivityPullTests {
         let other = UUID()
         api.hold()
         async let kicked: Void = pull.kick()
-        for _ in 0..<50 { await Task.yield() }
+        // Wait until the first read is in flight (the fake records the call before it holds).
+        for _ in 0..<10_000 where api.calls.isEmpty { await Task.yield() }
+        try #require(api.calls.count == 1)
         try await db.open(householdId: other)
         api.setActivityResult(.success([makeActivity("other", ago: 5, household: other)]))
         api.release()
