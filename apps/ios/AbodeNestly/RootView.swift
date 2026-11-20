@@ -290,7 +290,21 @@ private struct MainTabs: View {
                         case .members:
                             MembersScreen(householdId: householdId, session: session, environment: environment)
                         case .profile:
-                            ProfileView(model: profile, isOnline: environment.network.isOnline)
+                            ProfileView(
+                                model: profile, isOnline: environment.network.isOnline,
+                                notifications: {
+                                    // Without a signed-in user (not reachable from here) there is nothing to write for.
+                                    if let userId = session.userId {
+                                        NotificationPrefsScreen(
+                                            householdId: householdId, userId: userId, environment: environment,
+                                            modules: Search.modules(
+                                                householdId: householdId, household: household,
+                                                cached: HouseholdsCache().read(userId: userId)
+                                            )
+                                        )
+                                    }
+                                }
+                            )
                         case .recentlyDeleted:
                             RecentlyDeletedScreen(
                                 householdId: householdId, environment: environment,
@@ -436,6 +450,29 @@ private struct RecentlyDeletedScreen: View {
         RecentlyDeletedView(model: model)
             .onChange(of: modules) { _, modules in model.modules = modules }
             .navigationTitle("Recently deleted")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Owns the `NotificationPrefsModel` for the pushed screen, so a re-render of the tabs never resets it.
+private struct NotificationPrefsScreen: View {
+    @State private var model: NotificationPrefsModel
+    /// Settings can flip a module while this is up; the model follows.
+    let modules: HomeModules?
+
+    init(householdId: UUID, userId: UUID, environment: AppEnvironment, modules: HomeModules?) {
+        self.modules = modules
+        let sync = environment.sync
+        _model = State(initialValue: NotificationPrefsModel(
+            householdId: householdId, userId: userId, modules: modules, database: environment.database,
+            kick: { await sync.kick() }
+        ))
+    }
+
+    var body: some View {
+        NotificationPrefsView(model: model, openURL: { UIApplication.shared.open($0) })
+            .onChange(of: modules) { _, modules in model.modules = modules }
+            .navigationTitle("Notifications")
             .navigationBarTitleDisplayMode(.inline)
     }
 }

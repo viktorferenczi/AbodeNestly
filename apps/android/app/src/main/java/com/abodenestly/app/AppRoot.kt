@@ -39,6 +39,7 @@ import com.abodenestly.core.auth.SessionStatus
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.members.MembersCache
 import com.abodenestly.core.search.RecentSearchStore
+import com.abodenestly.core.notificationprefs.NotificationPrefsScreen
 import com.abodenestly.core.recentlydeleted.RecentlyDeletedScreen
 import com.abodenestly.core.search.SearchScreen
 import com.abodenestly.core.search.searchModules
@@ -287,6 +288,7 @@ private fun Tabs(
     var showMembers by rememberSaveable(destination) { mutableStateOf(false) }
     var showSettings by rememberSaveable(destination) { mutableStateOf(false) }
     var showDeleted by rememberSaveable(destination) { mutableStateOf(false) }
+    var showNotifications by rememberSaveable(destination) { mutableStateOf(false) }
     var showProfile by rememberSaveable(destination) { mutableStateOf(false) }
     var householdId by remember { mutableStateOf<UUID?>(household?.id) }
     LaunchedEffect(household) { householdId = household?.id ?: lastHousehold.read() }
@@ -306,18 +308,29 @@ private fun Tabs(
             cachedModules = householdsCache.read(meId).firstOrNull { it.household.id == members }?.household?.let(HomeModules::of)
         }
     }
+    val deletedModules = (household?.let(HomeModules::of) ?: cachedModules)?.searchModules()
+    // Over Profile, so Back from it lands on Profile again.
+    if (showProfile && showNotifications && members != null && meId != null) {
+        BackHandler { showNotifications = false }
+        Column(Modifier.fillMaxSize()) {
+            TextButton(onClick = { showNotifications = false }, modifier = Modifier.testTag("notif.back")) { Text("Back") }
+            // Unknown flags show only Activity, like iOS.
+            NotificationPrefsScreen(members, meId, deletedModules ?: emptySet(), database, sync, modifier = Modifier.weight(1f))
+        }
+        return
+    }
     if (showProfile && meId != null) {
         BackHandler { showProfile = false }
         Column(Modifier.fillMaxSize()) {
             TextButton(onClick = { showProfile = false }, modifier = Modifier.testTag("profile.back")) { Text("Back") }
             ProfileScreen(
                 meId, email, profile, profileDeps, isOnline,
-                onProfileChanged = onProfileChanged, onSignOut = onSignOut, modifier = Modifier.weight(1f),
+                onProfileChanged = onProfileChanged, onSignOut = onSignOut,
+                onOpenNotifications = { showNotifications = true }, modifier = Modifier.weight(1f),
             )
         }
         return
     }
-    val deletedModules = (household?.let(HomeModules::of) ?: cachedModules)?.searchModules()
     if (showDeleted && members != null && deletedModules != null) {
         BackHandler { showDeleted = false }
         Column(Modifier.fillMaxSize()) {

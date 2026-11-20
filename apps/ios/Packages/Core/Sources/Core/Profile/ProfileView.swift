@@ -6,15 +6,18 @@ import UniformTypeIdentifiers
 
 /// DESIGN B7: avatar (tap to change), display name, read-only email, notification preferences link, sign out.
 /// Name edits and photos are saved locally first, so everything but the signed avatar image works offline.
-public struct ProfileView: View {
+public struct ProfileView<Destination: View>: View {
     private let model: ProfileModel
     private let isOnline: Bool
+    /// The pushed notification preferences screen (B9); the app builds it because it owns the household and database.
+    private let notifications: () -> Destination
     @State private var pickerItem: PhotosPickerItem?
     @FocusState private var nameFocused: Bool
 
-    public init(model: ProfileModel, isOnline: Bool) {
+    public init(model: ProfileModel, isOnline: Bool, @ViewBuilder notifications: @escaping () -> Destination) {
         self.model = model
         self.isOnline = isOnline
+        self.notifications = notifications
     }
 
     private var name: String { model.profile?.displayName ?? "" }
@@ -29,7 +32,7 @@ public struct ProfileView: View {
                 nameSection
                 emailSection
                 NavigationLink {
-                    NotificationPreferencesPlaceholder()
+                    notifications()
                 } label: {
                     HStack {
                         Text("Notification preferences").foregroundStyle(Tokens.text)
@@ -176,14 +179,8 @@ struct PickedImage: Transferable {
     }
 }
 
-/// B9 arrives with CORE-12; the link exists now so B7 matches its plan.
-private struct NotificationPreferencesPlaceholder: View {
-    var body: some View {
-        Text("Notification preferences are coming soon.")
-            .foregroundStyle(Tokens.text2)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Tokens.bg)
-            .navigationTitle("Notifications")
-            .navigationBarTitleDisplayMode(.inline)
+extension ProfileView where Destination == EmptyView {
+    public init(model: ProfileModel, isOnline: Bool) {
+        self.init(model: model, isOnline: isOnline, notifications: { EmptyView() })
     }
 }

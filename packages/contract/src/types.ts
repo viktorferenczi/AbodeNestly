@@ -116,3 +116,14 @@ export type SignAttachmentResponse = {
   upload_url: string;
   storage_path: string;
 };
+
+// ---------- notification preferences (CORE-12) ----------
+export type NotificationType = 'eat_soon' | 'low_stock' | 'task_due' | 'warranty' | 'activity';
+
+/** One switch per (user, household, type). A missing row means enabled. */
+export interface NotificationPref {
+  user_id: UUID;
+  household_id: UUID;
+  type: NotificationType;
+  enabled: boolean;
+}
