@@ -899,6 +899,21 @@ begin
   execute format('create index %I_sync_idx on %s (household_id, sync_seq)', t, t);
 end $$;
 
+-- Add tables to the Realtime publication; skips tables already published or not created yet (SHOP-09).
+create or replace procedure publish_realtime(variadic p_tables text[])
+language plpgsql set search_path = public as $$
+declare t text;
+begin
+  foreach t in array p_tables loop
+    if to_regclass('public.' || quote_ident(t)) is not null and not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
+revoke execute on procedure publish_realtime(text[]) from public, anon, authenticated;
+
 -- ---------------------------------------------------------------------------
 -- Core
 -- ---------------------------------------------------------------------------
