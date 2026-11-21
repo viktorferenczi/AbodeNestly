@@ -3,7 +3,7 @@
 -- (it needs two connections); here we check the trigger still works on every kind of table.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(10);
+select plan(9);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'a1@example.com', 'authenticated', 'authenticated');
