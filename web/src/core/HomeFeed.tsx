@@ -24,7 +24,7 @@ export function HomeFeed() {
   const householdId = household?.id;
   const rows = useLiveQuery(
     // `undefined` until the database is open: an empty array would flash the empty-activity state over cached rows.
-    () => (db && householdId ? db.activity.where('household_id').equals(householdId).toArray() : undefined),
+    async () => (db && householdId ? await db.activity.where('household_id').equals(householdId).toArray() : undefined),
     [db, householdId],
   );
 
