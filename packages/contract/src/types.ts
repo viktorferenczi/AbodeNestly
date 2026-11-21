@@ -137,3 +137,57 @@ export interface NotificationPref {
   type: NotificationType;
   enabled: boolean;
 }
+
+// ---------- sync (SPEC §6.2, §6.3) ----------
+export type MovementReason = 'added' | 'used' | 'restocked' | 'discarded' | 'adjusted';
+
+export type SyncTable =
+  | 'household' | 'member' | 'invite' | 'activity' | 'attachment'
+  | 'store' | 'shopping_list' | 'list_item' | 'store_item_order' | 'item_price'
+  | 'location' | 'category' | 'pantry_item' | 'pantry_movement'
+  | 'unit_conversion' | 'recipe' | 'recipe_ingredient'
+  | 'house' | 'contractor' | 'asset' | 'maint_task' | 'task_consumable' | 'maint_log';
+
+export interface MutationUpsert {
+  id: UUID;
+  table: SyncTable;
+  op: 'upsert';
+  row_id: UUID;
+  data: Record<string, unknown>; // row fields minus server-owned columns
+  client_ts: ISODateTime;
+}
+export interface MutationDelete {
+  id: UUID;
+  table: SyncTable;
+  op: 'delete';
+  row_id: UUID;
+  client_ts: ISODateTime;
+}
+export interface MutationDelta {
+  id: UUID;
+  table: 'pantry_item';
+  op: 'delta';
+  row_id: UUID;
+  data: { field: 'quantity'; delta: number; reason: MovementReason };
+  client_ts: ISODateTime;
+}
+export type Mutation = MutationUpsert | MutationDelete | MutationDelta;
+
+export interface SyncPushRequest {
+  household_id: UUID;
+  mutations: Mutation[];
+}
+export interface SyncRejection {
+  id: UUID;
+  reason: 'rls_denied' | 'validation' | 'unknown_table' | 'module_disabled';
+  detail: string;
+}
+export interface SyncPushResponse {
+  applied: UUID[];
+  rejected: SyncRejection[];
+}
+export interface SyncPullResponse {
+  cursor: number;
+  has_more: boolean;
+  changes: Partial<Record<SyncTable, unknown[]>>;
+}

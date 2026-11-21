@@ -57,14 +57,22 @@ for (const route of routes) {
   paths[route.path] ??= {};
   paths[route.path]![route.method] = {
     summary: route.summary,
-    ...(pathParams(route.path).length
+    ...(pathParams(route.path).length || route.query?.length
       ? {
-          parameters: pathParams(route.path).map((name): Json => ({
-            name,
-            in: 'path',
-            required: true,
-            schema: name === 'id' || name === 'user_id' ? { type: 'string', format: 'uuid' } : { type: 'string' },
-          })),
+          parameters: [
+            ...pathParams(route.path).map((name): Json => ({
+              name,
+              in: 'path',
+              required: true,
+              schema: name === 'id' || name === 'user_id' ? { type: 'string', format: 'uuid' } : { type: 'string' },
+            })),
+            ...(route.query ?? []).map((q): Json => ({
+              name: q.name,
+              in: 'query',
+              required: q.required,
+              schema: q.schema as Json,
+            })),
+          ],
         }
       : {}),
     ...(route.public ? { security: [] } : {}),
