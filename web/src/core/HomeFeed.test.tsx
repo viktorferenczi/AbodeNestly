@@ -1,6 +1,6 @@
 import type { Activity, Household, Profile } from '@abodenestly/contract';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { Shell } from '../app/Shell.tsx';
 import { FakeSync } from '../sync/FakeSync.ts';
@@ -12,6 +12,20 @@ import { AuthProvider } from './auth/AuthProvider.tsx';
 import { FakeAuthClient } from './auth/FakeAuthClient.ts';
 import { writeLastHousehold } from './auth/lastHousehold.ts';
 import { HomeFeed } from './HomeFeed.tsx';
+
+// The household resolves before its database opens; a test can widen that gap to expose ordering assumptions.
+let dbOpenDelayMs = 0;
+vi.mock('../sync/db.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../sync/db.ts')>();
+  return {
+    ...original,
+    openHouseholdDb: async (id: string) => {
+      const db = await original.openHouseholdDb(id);
+      if (dbOpenDelayMs) await new Promise((r) => setTimeout(r, dbOpenDelayMs));
+      return db;
+    },
+  };
+});
 
 function setOnline(value: boolean) {
   Object.defineProperty(navigator, 'onLine', { value, configurable: true });
@@ -50,10 +64,14 @@ async function seed(rows: Activity[]) {
   db.close();
 }
 
-async function renderHome(opts: { household?: Household; rows?: Activity[] } = {}) {
+async function renderHome(opts: { household?: Household; rows?: Activity[]; serverRows?: Activity[]; dbOpenDelayMs?: number } = {}) {
   await seed(opts.rows ?? []);
+  dbOpenDelayMs = opts.dbOpenDelayMs ?? 0;
   const household = opts.household ?? house();
   const api = new FakeApiClient();
+  // Shell kicks a real activity pull that replaces the cached 30-day window with the server page. The fake server
+  // must serve the seeded rows, or that pull races the live query and sometimes wipes them (the flaky AC2/AC3).
+  api.fetchActivityResult = { ok: true, value: [...(opts.rows ?? []), ...(opts.serverRows ?? [])] };
   api.fetchHousehold = async () => ({ ok: true, value: { household, role: 'owner' } });
   api.fetchMyHouseholdsResult = { ok: true, value: [{ household, role: 'owner' }] };
   writeLastHousehold('h1');
@@ -107,7 +125,10 @@ beforeEach(async () => {
   const { default: Dexie } = await import('dexie');
   await Dexie.delete('abodenestly-h1');
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  dbOpenDelayMs = 0;
+});
 
 describe('CORE-08: Home activity feed', () => {
   it('CORE-08: AC1 no activity shows the empty-activity state with an invite button', async () => {
@@ -133,6 +154,12 @@ describe('CORE-08: Home activity feed', () => {
     expect(items[1]!.textContent).toContain('Ben added Eggs');
     expect(screen.queryByText('Too old')).toBeNull();
     expect(screen.queryByText('Deleted')).toBeNull();
+    expect(screen.queryByTestId('home.empty')).toBeNull();
+  });
+
+  it('CORE-08: a slow local database shows the cached feed, never the empty state first', async () => {
+    await renderHome({ rows: [row('Anna checked off Milk', 5_000)], dbOpenDelayMs: 150 });
+    expect(within(screen.getByTestId('home.feed')).getByText('Anna checked off Milk')).toBeTruthy();
     expect(screen.queryByTestId('home.empty')).toBeNull();
   });
 
@@ -185,10 +212,11 @@ describe('CORE-08: Home activity feed', () => {
   });
 
   it('CORE-08: a row pulled while the screen is open appears without a reload', async () => {
-    await renderHome();
-    expect(screen.getByTestId('home.empty')).toBeTruthy();
+    const cleo = row('Cleo joined the household', 100, { module: 'core' });
+    // Also on the fake server, so the mount-time pull cannot wipe it whichever side of the put it lands.
+    await renderHome({ serverRows: [cleo] });
     const db = await openHouseholdDb('h1');
-    await db.activity.put(row('Cleo joined the household', 100, { module: 'core' }));
+    await db.activity.put(cleo);
     db.close();
     await flush();
     expect(screen.getByText('Cleo joined the household')).toBeTruthy();

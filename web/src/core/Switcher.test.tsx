@@ -1,5 +1,5 @@
 import type { Household, Profile, Role } from '@abodenestly/contract';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { Shell } from '../app/Shell.tsx';
@@ -27,12 +27,6 @@ vi.mock('../sync/db.ts', async (importOriginal) => {
 function setOnline(value: boolean) {
   Object.defineProperty(navigator, 'onLine', { value, configurable: true });
 }
-async function flush() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 10));
-  });
-}
-
 const house = (id: string, name: string, over: Partial<Household> = {}) =>
   ({ id, name, currency: 'EUR', module_shopping: true, module_pantry: true, module_maintenance: true, ...over }) as Household;
 const H1 = house('h1', 'Home One');
@@ -77,14 +71,14 @@ async function renderApp(opts: { list?: Array<{ household: Household; role: Role
       </ApiProvider>
     </AuthProvider>,
   );
-  await flush();
+  // The title shows the household name once it has loaded.
+  await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home One ▾'));
   return { api, router };
 }
 
 const openSheet = async () => {
   fireEvent.click(screen.getByRole('button', { name: /▾/ }));
-  await flush();
-  return screen.getByRole('dialog', { name: 'Households' });
+  return screen.findByRole('dialog', { name: 'Households' });
 };
 const where = () => screen.getByTestId('where').textContent;
 
@@ -104,8 +98,7 @@ describe('CORE-07: switcher sheet', () => {
     const sheet = await openSheet();
     expect(within(sheet).getByText('Home One')).toBeTruthy();
     fireEvent.click(within(sheet).getByRole('button', { name: 'Create or join another' }));
-    await flush();
-    expect(where()).toBe('/welcome');
+    await waitFor(() => expect(where()).toBe('/welcome'));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
@@ -130,19 +123,19 @@ describe('CORE-07: switcher sheet', () => {
     await renderApp({ path: '/shopping' });
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home One ▾');
     const sheet = await openSheet();
-    fireEvent.click(within(sheet).getByRole('button', { name: /Home Two/ }));
-    await flush();
+    fireEvent.click(await within(sheet).findByRole('button', { name: /Home Two/ }));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home Two ▾'));
     expect(readLastHousehold()).toBe('h2');
     expect(where()).toBe('/shopping');
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home Two ▾');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('CORE-07: AC2 a tab whose module is off in the target falls back to its start tab', async () => {
     await renderApp({ path: '/pantry' });
-    fireEvent.click(within(await openSheet()).getByRole('button', { name: /Home Two/ }));
-    await flush();
-    expect(where()).toBe('/shopping');
+    fireEvent.click(await within(await openSheet()).findByRole('button', { name: /Home Two/ }));
+    // Pantry is off in Home Two, so the switch lands on the start tab.
+    await waitFor(() => expect(readLastHousehold()).toBe('h2'));
+    await waitFor(() => expect(where()).toBe('/shopping'));
   });
 
   it('CORE-07: AC3 shows the switching state until the target database is open', async () => {
@@ -150,15 +143,13 @@ describe('CORE-07: switcher sheet', () => {
     gate.hold = new Promise<void>((r) => (release = r));
     await renderApp();
     const sheet = await openSheet();
-    fireEvent.click(within(sheet).getByRole('button', { name: /Home Two/ }));
-    await flush();
-    const status = screen.getByRole('status');
+    fireEvent.click(await within(sheet).findByRole('button', { name: /Home Two/ }));
+    const status = await screen.findByRole('status');
     expect(status.textContent).toBe('Switching to Home Two…');
     expect(status.getAttribute('aria-busy')).toBe('true');
     expect(screen.getByRole('dialog')).toBeTruthy();
     release();
-    await flush();
-    expect(screen.queryByRole('status')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     expect(where()).toBe('/shopping');
   });
 
@@ -166,20 +157,19 @@ describe('CORE-07: switcher sheet', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     await renderApp();
     const sheet = await openSheet();
-    const row = within(sheet).getByRole('button', { name: /Home Two/ });
+    const row = await within(sheet).findByRole('button', { name: /Home Two/ });
     fireEvent.pointerDown(row);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
-    await flush();
+    await waitFor(() => expect(where()).toBe('/household'));
     expect(readLastHousehold()).toBe('h2');
-    expect(where()).toBe('/household');
   });
 
   it('CORE-07: a pointer move cancels the long-press and the tap still switches', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     await renderApp();
-    const row = within(await openSheet()).getByRole('button', { name: /Home Two/ });
+    const row = await within(await openSheet()).findByRole('button', { name: /Home Two/ });
     fireEvent.pointerDown(row, { clientX: 10, clientY: 10 });
     fireEvent.pointerMove(row, { clientX: 10, clientY: 40 });
     await act(async () => {
@@ -198,7 +188,7 @@ describe('CORE-07: switcher sheet', () => {
   it('CORE-07: a pixel of drift during the hold still counts as a long-press', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     await renderApp();
-    const row = within(await openSheet()).getByRole('button', { name: /Home Two/ });
+    const row = await within(await openSheet()).findByRole('button', { name: /Home Two/ });
     fireEvent.pointerDown(row, { clientX: 10, clientY: 10 });
     fireEvent.pointerMove(row, { clientX: 12, clientY: 11 });
     await act(async () => {
@@ -212,7 +202,7 @@ describe('CORE-07: switcher sheet', () => {
     const { router } = await renderApp();
     const visited: string[] = [];
     router.subscribe((st) => visited.push(st.location.pathname));
-    const row = within(await openSheet()).getByRole('button', { name: /Home Two/ });
+    const row = await within(await openSheet()).findByRole('button', { name: /Home Two/ });
     fireEvent.pointerDown(row);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
@@ -241,10 +231,9 @@ describe('CORE-07: switcher sheet', () => {
 
   it('CORE-07: the context-menu key does the same as a long-press', async () => {
     await renderApp();
-    fireEvent.contextMenu(within(await openSheet()).getByRole('button', { name: /Home Two/ }));
-    await flush();
+    fireEvent.contextMenu(await within(await openSheet()).findByRole('button', { name: /Home Two/ }));
+    await waitFor(() => expect(where()).toBe('/household'));
     expect(readLastHousehold()).toBe('h2');
-    expect(where()).toBe('/household');
   });
 
   it('CORE-07: AC5 offline with a failing API the switch completes from the cache', async () => {
@@ -254,10 +243,9 @@ describe('CORE-07: switcher sheet', () => {
     api.fetchHouseholdResult = { ok: false, error: { code: 'network' } };
     const sheet = await openSheet();
     expect(api.fetchMyHouseholdsCalls).toEqual([]);
-    fireEvent.click(within(sheet).getByRole('button', { name: /Home Two/ }));
-    await flush();
+    fireEvent.click(await within(sheet).findByRole('button', { name: /Home Two/ }));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home Two ▾'));
     expect(readLastHousehold()).toBe('h2');
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home Two ▾');
     expect(where()).toBe('/shopping');
   });
 });
