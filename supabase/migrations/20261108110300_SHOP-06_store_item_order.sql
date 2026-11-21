@@ -21,5 +21,7 @@ create table store_item_order (
 );
 call setup_scoped('store_item_order');
 
--- SHOP-09 asked for this table to be published; publish_realtime skips tables already published.
-call publish_realtime('store_item_order');
+-- Plain alter, not publish_realtime(): that procedure comes from SHOP-09 (20261108110500), which runs after
+-- this migration on a fresh database. The table is new here, so the alter cannot hit 42710, and SHOP-09's
+-- publish_realtime skips it as already published.
+alter publication supabase_realtime add table store_item_order;
