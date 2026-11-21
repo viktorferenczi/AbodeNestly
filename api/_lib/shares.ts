@@ -85,14 +85,19 @@ export async function loadShared(client: Queryable, token: string): Promise<Shar
   const row = list.rows[0];
   if (!row) throw new ApiError(404, 'not_found', 'Link not found');
   // Same order as the in-app list (SHOP-06): dragged rows first by manual_position, then learned
-  // aisle order for the list's store, unseen items last, insert order as the tiebreak.
+  // aisle order for the list's store, unseen items last, insert order as the tiebreak. The learned
+  // table arrives with SHOP-06-db; until then only the manual and insert order apply.
+  const learned = (await client.query("select to_regclass('public.store_item_order') as reg")).rows[0]?.reg;
   const items = await client.query(
     `select i.name, i.quantity, i.checked
        from list_item i
-       join shopping_list l on l.id = i.list_id
-       left join store_item_order o on o.store_id = l.store_id and o.name_key = i.name_key
+       ${
+         learned
+           ? 'join shopping_list l on l.id = i.list_id left join store_item_order o on o.store_id = l.store_id and o.name_key = i.name_key'
+           : ''
+       }
       where i.list_id = $1 and i.deleted_at is null and not i.checked
-      order by i.manual_position nulls last, o.mean_position nulls last, i.created_at, i.id`,
+      order by i.manual_position nulls last, ${learned ? 'o.mean_position nulls last, ' : ''}i.created_at, i.id`,
     [row.id],
   );
   return toPublicList(row.name, items.rows);

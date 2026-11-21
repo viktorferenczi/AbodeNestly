@@ -115,15 +115,17 @@ describe('share logic', () => {
     await expect(loadShared(fakeClient([]), TOKEN)).rejects.toMatchObject({ status: 404 });
   });
 
-  it('orders items by manual position, then learned aisle order, then insert order', async () => {
-    const client = fakeClient([{ id: 'l1', name: 'G' }], []);
-    await loadShared(client, TOKEN);
-    expect(client.queries[1]?.text).toMatch(/store_item_order/);
-    expect(client.queries[1]?.text).toMatch(/order by i\.manual_position nulls last, o\.mean_position nulls last/);
+  it('orders by manual position, then learned aisle order once store_item_order exists', async () => {
+    const withTable = fakeClient([{ id: 'l1', name: 'G' }], [{ reg: 'store_item_order' }], []);
+    await loadShared(withTable, TOKEN);
+    expect(withTable.queries[2]?.text).toMatch(/order by i\.manual_position nulls last, o\.mean_position nulls last/);
+    const without = fakeClient([{ id: 'l1', name: 'G' }], [{ reg: null }], []);
+    await loadShared(without, TOKEN);
+    expect(without.queries[2]?.text).not.toMatch(/store_item_order/);
   });
 
   it('AC4: a live token returns name and unchecked items', async () => {
-    const client = fakeClient([{ id: 'l1', name: 'Groceries' }], [{ name: 'Milk', quantity: '1.5', checked: false }]);
+    const client = fakeClient([{ id: 'l1', name: 'Groceries' }], [{ reg: null }], [{ name: 'Milk', quantity: '1.5', checked: false }]);
     expect(await loadShared(client, TOKEN)).toEqual({
       list: { name: 'Groceries' },
       items: [{ name: 'Milk', quantity: 1.5 }],

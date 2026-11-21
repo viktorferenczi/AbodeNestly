@@ -13,6 +13,7 @@ let alice: User;
 let bob: User;
 let household: string;
 let listId: string;
+let createdStub = false;
 
 async function signUp(): Promise<User> {
   const res = await fetch(`${process.env.SUPABASE_URL}/auth/v1/signup`, {
@@ -46,6 +47,13 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => server.listen(0, resolve));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   admin = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+  // store_item_order arrives with SHOP-06-db; stub just enough for the aisle-order case.
+  if (!(await admin.query("select to_regclass('public.store_item_order') as reg")).rows[0].reg) {
+    await admin.query(`create table store_item_order (
+      household_id uuid not null, store_id uuid not null references store(id) on delete cascade,
+      name_key text not null, mean_position numeric not null, primary key (store_id, name_key))`);
+    createdStub = true;
+  }
   alice = await signUp();
   bob = await signUp();
   household = ((await (await call('POST', '/households', alice.token, { name: 'Home' })).json()) as { id: string }).id;
@@ -62,6 +70,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (createdStub) await admin.query('drop table store_item_order');
   await admin.end();
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
