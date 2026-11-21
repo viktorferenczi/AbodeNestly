@@ -149,6 +149,53 @@ export const routes: Route[] = [
     },
   },
   {
+    method: 'post',
+    path: '/lists/{id}/share',
+    summary: 'Create or rotate the read-only share link',
+    public: false,
+    response: {
+      status: 200,
+      schemaName: 'ShareLinkResponse',
+      schema: {
+        type: 'object',
+        properties: { url: { type: 'string' } },
+        required: ['url'],
+      },
+    },
+  },
+  {
+    method: 'delete',
+    path: '/lists/{id}/share',
+    summary: 'Revoke the share link',
+    public: false,
+    response: { status: 204 },
+  },
+  {
+    method: 'get',
+    path: '/shared/{token}',
+    summary: 'Read-only list view for a share link',
+    public: true,
+    response: {
+      status: 200,
+      schemaName: 'SharedListResponse',
+      schema: {
+        type: 'object',
+        properties: {
+          list: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { name: { type: 'string' }, quantity: { type: ['number', 'null'] } },
+              required: ['name', 'quantity'],
+            },
+          },
+        },
+        required: ['list', 'items'],
+      },
+    },
+  },
+  {
     method: 'delete',
     path: '/households/{id}/members/{user_id}',
     summary: 'Remove a member or leave',

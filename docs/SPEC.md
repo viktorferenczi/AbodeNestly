@@ -311,7 +311,7 @@ Plain CRUD goes **through Supabase directly** from the clients (RLS enforces acc
 | POST | `/tasks/{id}/consumables-to-list` | Send consumables to a list | `{ list_id }` | `ListItem[]` |
 | POST | `/lists/{id}/share` | Create/rotate read-only share link | — | `{ url }` |
 | DELETE | `/lists/{id}/share` | Revoke share link | — | `204` |
-| GET | `/shared/{token}` **public** | Read-only list view data | — | `{ list: ShoppingList, items: ListItem[] }` |
+| GET | `/shared/{token}` **public** | Read-only list view data (§11: name and unchecked items only; 404 if shopping is off) | — | `{ list: { name }, items: { name, quantity }[] }` |
 | POST | `/templates/{id}/apply` | Create tasks from checklist template | `{ house_id? }` | `MaintTask[]` |
 | GET | `/export/maintenance.pdf` | Export maintenance log | `household_id`, `from?`, `to?` | `application/pdf` |
 | GET | `/reports/maintenance-costs` | Cost report | `household_id`, `year?`, `asset_id?` | `CostReport` |
@@ -768,7 +768,7 @@ Module disabled matrix — what still works:
 - `profile` readable by anyone sharing a household with the user. Rows are created by the `on_auth_user_created` trigger (security definer) on `auth.users`; clients only update their own row (a write to a peer's profile is rejected with 42501; clients cannot insert or delete profiles).
 - `product` readable by all authenticated users; written only by the API with the service role.
 - API runs with the **user's JWT** forwarded to Postgres (`set local role authenticated; set local request.jwt.claims`) so RLS applies to the sync layer too. The service role is used only for cron delivery and product cache writes.
-- Share links (`/shared/{token}`) are the one public read path and return only the list name and unchecked item names/quantities.
+- Share links (`/shared/{token}`) are the one public read path and return only the list name and unchecked item names/quantities. The API reads them by token with a non-RLS connection (no user JWT exists); this is the one read besides cron and product cache that skips RLS.
 - Storage policies mirror table RLS using the `households/{household_id}/…` path prefix. Avatars under `profiles/{user_id}/…`: write your own folder only, read your own and your household peers'.
 
 ---

@@ -9,6 +9,8 @@ import householdModules from '../households/[id]/modules.ts';
 import householdInvites from '../households/[id]/invites.ts';
 import householdMember from '../households/[id]/members/[user_id].ts';
 import acceptInvite from '../invites/[code]/accept.ts';
+import listShare from '../lists/[id]/share.ts';
+import sharedList from '../shared/[token].ts';
 
 type Handler = (req: Request) => Promise<Response>;
 
@@ -24,6 +26,8 @@ const patterns: Array<[RegExp, Handler]> = [
   [/^\/households\/[^/]+\/modules$/, householdModules],
   [/^\/households\/[^/]+\/members\/[^/]+$/, householdMember],
   [/^\/invites\/[^/]+\/accept$/, acceptInvite],
+  [/^\/lists\/[^/]+\/share$/, listShare],
+  [/^\/shared\/[^/]+$/, sharedList],
 ];
 
 async function toRequest(req: IncomingMessage): Promise<Request> {
