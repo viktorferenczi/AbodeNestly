@@ -121,6 +121,18 @@ describe('buildUpsert', () => {
   });
 });
 
+describe('buildUpsert deleted_at', () => {
+  it('stores server time for a non-null client value and keeps an existing tombstone', () => {
+    const { sql, values } = buildUpsert('store', ['name', 'deleted_at'], HID, id(5), {
+      deleted_at: '2020-01-01T00:00:00Z',
+    });
+    expect(values).toEqual([id(5), HID, '2020-01-01T00:00:00Z']);
+    expect(sql).toContain('case when $3::timestamptz is null then null else now() end');
+    expect(sql).toContain('coalesce(t.deleted_at, excluded.deleted_at)');
+    expect(sql).toContain('when excluded.deleted_at is null then null');
+  });
+});
+
 describe('pullChanges', () => {
   it('builds one ordered union over the allow-listed tables', () => {
     const sql = buildPullSql();

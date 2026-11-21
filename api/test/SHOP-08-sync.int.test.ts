@@ -152,6 +152,18 @@ describe('SHOP-08 sync', () => {
     expect(row).toEqual({ household_id: aliceHome, share_token: null });
   });
 
+  it('stores server time for a client deleted_at and keeps it on a later upsert', async () => {
+    const rowId = crypto.randomUUID();
+    await push(alice.token, aliceHome, [upsert('store', rowId, { name: 'Gone', deleted_at: '2020-01-01T00:00:00Z' })]);
+    const first = (await admin.query('select extract(year from deleted_at) as y, deleted_at from store where id = $1', [rowId])).rows[0];
+    expect(Number(first.y)).toBeGreaterThan(2020);
+    await push(alice.token, aliceHome, [upsert('store', rowId, { name: 'Gone', deleted_at: '2021-01-01T00:00:00Z' })]);
+    const second = (await admin.query('select deleted_at from store where id = $1', [rowId])).rows[0];
+    expect(second.deleted_at).toEqual(first.deleted_at);
+    await push(alice.token, aliceHome, [upsert('store', rowId, { name: 'Back', deleted_at: null })]);
+    expect((await admin.query('select deleted_at from store where id = $1', [rowId])).rows[0].deleted_at).toBeNull();
+  });
+
   it('rejects a push to a pull-only table as validation', async () => {
     const m = upsert('invite', crypto.randomUUID(), { code: 'x' });
     expect((await push(alice.token, aliceHome, [m])).rejected).toMatchObject([{ id: m.id, reason: 'validation' }]);

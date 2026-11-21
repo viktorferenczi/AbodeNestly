@@ -42,9 +42,18 @@ export function buildUpsert(
   }
   const cols = ['id', 'household_id', ...keys];
   const values = [rowId, householdId, ...keys.map((k) => data[k] ?? null)];
-  const placeholders = cols.map((_, i) => `$${i + 1}`);
+  // deleted_at is server-timed: a client time could already sit past the CORE-10 30-day purge window,
+  // which would hard-delete the tombstone before other devices pull it. Null still clears a tombstone.
+  const placeholders = cols.map((c, i) =>
+    c === 'deleted_at' ? `case when $${i + 1}::timestamptz is null then null else now() end` : `$${i + 1}`,
+  );
   // The household_id guard keeps an upsert from moving a row that belongs to another household.
-  const updates = ['household_id', ...keys].map((c) => `${c} = excluded.${c}`);
+  // An existing tombstone keeps its time so repeated full-row upserts don't slide the purge window.
+  const updates = ['household_id', ...keys].map((c) =>
+    c === 'deleted_at'
+      ? 'deleted_at = case when excluded.deleted_at is null then null else coalesce(t.deleted_at, excluded.deleted_at) end'
+      : `${c} = excluded.${c}`,
+  );
   return {
     sql:
       `insert into ${table} as t (${cols.join(', ')}) values (${placeholders.join(', ')}) ` +
