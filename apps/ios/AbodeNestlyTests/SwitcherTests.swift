@@ -239,9 +239,12 @@ struct SessionSwitchTests {
     func doubleSwitch() async throws {
         let h = SwitchHarness()
         let started = await h.start()
-        async let first: Void = h.session.switchTo(h.beta.id)
-        async let second: Void = h.session.switchTo(h.gamma.id)
-        _ = try await (first, second)
+        // `async let` children start in no guaranteed order, so gamma could win the race. Start the first
+        // switch explicitly, wait until it holds the guard, then try the second while it is still running.
+        let first = Task { try await h.session.switchTo(h.beta.id) }
+        while h.session.switching == nil { await Task.yield() }
+        try await h.session.switchTo(h.gamma.id)
+        try await first.value
         #expect(h.session.destination == .household(id: h.beta.id, tab: h.session.selectedTab))
         #expect(await h.db.current == h.beta.id)
         started.cancel()
