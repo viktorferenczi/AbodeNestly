@@ -1,6 +1,6 @@
 # AbodeNestly — Product & Technical Specification
 
-> Single source of truth for every agent (Claude, Cursor, Grok, humans).
+> Single source of truth for every agent (Claude, the Gemini reviewer) and every human.
 > If code and this document disagree, this document wins until it is amended by a PR.
 > Version 1.0 — 2026-11-08
 
@@ -783,6 +783,7 @@ abodenestly/
 │   ├── TESTING.md           ← test strategy and required tests
 │   ├── DESIGN.md            ← design system + per-screen plans
 │   ├── STORY-TEMPLATE.md    ← story format with full example
+│   ├── REVIEW.md            ← PR review guide for the Gemini reviewer
 │   └── stories/             ← generated stories, one file per module
 │   └── openapi.yaml         ← generated, do not edit
 ├── api/                     ← Vercel functions (Node/TS)
@@ -797,10 +798,10 @@ abodenestly/
 ├── supabase/
 │   ├── migrations/
 │   └── seed.sql             ← global categories, checklist templates
-├── .claude/skills/          ← agent skills (see AGENTS.md)
-├── .cursor/rules/
-├── AGENTS.md                ← shared agent instructions
-└── CLAUDE.md                ← points to AGENTS.md
+├── .claude/skills/          ← per-area development skills (see AGENTS.md)
+├── AGENTS.md                ← shared agent instructions and roles
+├── CLAUDE.md                ← planning and implementing agent; points to AGENTS.md
+└── GEMINI.md                ← reviewer agent; points to docs/REVIEW.md
 ```
 
 ---
@@ -818,7 +819,7 @@ A story is done when:
 6. Tests at the levels `docs/TESTING.md` requires for the story's layer: unit, component, integration (triggers/RLS), and e2e for every screen story.
 7. Module flag off → feature hidden and no errors.
 8. Screen stories match the screen's plan in `docs/DESIGN.md` (layout, states, components).
-9. PR reviewed by the `pr-review` skill with no open blocking findings.
+9. PR reviewed by the Gemini reviewer per `docs/REVIEW.md` with no open blocking findings.
 
 ---
 
