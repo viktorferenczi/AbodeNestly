@@ -83,7 +83,7 @@ export default async function handler(req: Request): Promise<Response> {
   6. RLS failure → `rls_denied` for that mutation; continue with the rest. Wrap each mutation in a savepoint.
   7. Record applied ids in `sync_applied`.
   8. Write `activity` rows for check-offs, task completions, member joins.
-- Pull: one query per allowed table: `select * from <t> where household_id = $1 and sync_seq > $2 order by sync_seq limit $3`. Cursor = max `sync_seq` seen. `has_more` when any table hit the limit. Membership tables (`member`) are included even though they have no `household_id` index named the same; use the explicit query.
+- Pull: one `union all` query across the allow-listed tables, `order by sync_seq limit $limit + 1` (the extra row sets `has_more`). Cursor = last returned `sync_seq`, or `since` when empty. Never one query per table: a table that hits the limit early would make the cursor skip its later rows. `household` filters on `id`, `member` and the rest on `household_id`. Non-members get 403 before any query.
 
 ## Auth
 `_lib/auth.ts` verifies the Supabase JWT with `jose.createRemoteJWKSet(SUPABASE_JWKS_URL)`. Cache the JWKS in module scope. Reject `exp` in the past, wrong `iss`. Return `{ sub, claims }`.

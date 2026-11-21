@@ -262,6 +262,8 @@ Response:
 ```
 Clients upsert every row by `id` (including deleted ones), then store `cursor`. If `has_more`, call again immediately.
 
+`since` is a non-negative integer (default 0) and `limit` is 1–500 (default 500); anything else is `400 validation`. A caller who is not a member of `household_id` gets `403 forbidden`, not an empty page. One query ordered by `sync_seq` serves all tables, so a page never skips rows. `household`, `member`, `invite`, `activity`, `attachment` and `store_item_order` are pull-only.
+
 **Push** — `POST /sync`
 ```jsonc
 { "household_id": "…", "mutations": [ ...envelopes ] }
@@ -274,6 +276,8 @@ Response:
 }
 ```
 Mutations are applied in order inside one transaction per push. Applied mutation ids are remembered for 24 h so a retried push is idempotent. After a successful push the client pulls.
+
+A push carries at most 500 mutations (`400 validation` above that) and a non-member gets `403 forbidden`. A mutation to a pull-only table, with a column outside the table's allow-list, or a `delete` that matches no row in the household is rejected per mutation (`validation` / `validation` / `rls_denied`); the rest still apply. Server-owned columns in an upsert are dropped silently.
 
 ### 6.4 Sync loop
 1. On app foreground, on network regained, on a Realtime event for the household, and every 5 minutes while in foreground: **push outbox, then pull**.

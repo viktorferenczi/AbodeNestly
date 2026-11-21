@@ -7,6 +7,51 @@ security:
   -
     bearerAuth: []
 paths:
+  /sync:
+    get:
+      summary: "Pull changes since a cursor"
+      parameters:
+        -
+          name: household_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        -
+          name: since
+          in: query
+          required: false
+          schema:
+            type: integer
+        -
+          name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/SyncPullResponse"
+    post:
+      summary: "Push outbox mutations"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/SyncPushRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/SyncPushResponse"
   /health:
     get:
       summary: Liveness
@@ -454,6 +499,68 @@ components:
         - updated_at
         - deleted_at
         - sync_seq
+    SyncPullResponse:
+      type: object
+      properties:
+        cursor:
+          type: integer
+        has_more:
+          type: boolean
+        changes:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: object
+      required:
+        - cursor
+        - has_more
+        - changes
+    SyncPushRequest:
+      type: object
+      properties:
+        household_id:
+          type: string
+          format: uuid
+        mutations:
+          type: array
+          items:
+            type: object
+      required:
+        - household_id
+        - mutations
+    SyncPushResponse:
+      type: object
+      properties:
+        applied:
+          type: array
+          items:
+            type: string
+            format: uuid
+        rejected:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              reason:
+                type: string
+                enum:
+                  - rls_denied
+                  - validation
+                  - unknown_table
+                  - module_disabled
+              detail:
+                type: string
+            required:
+              - id
+              - reason
+              - detail
+      required:
+        - applied
+        - rejected
     HealthResponse:
       type: object
       properties:
