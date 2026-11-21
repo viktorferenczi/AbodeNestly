@@ -2,7 +2,8 @@
 -- Conventions:
 --   * every household-scoped table has: id uuid (client-generated allowed),
 --     household_id, created_at, updated_at, deleted_at (soft delete), sync_seq
---   * sync_seq is a global monotonic sequence bumped on every write; clients
+--   * sync_seq is a global monotonic sequence bumped on every write, in commit
+--     order within a household (per-household advisory lock); clients
 --     pull with  WHERE household_id = $1 AND sync_seq > $cursor
 --   * RLS: a user can touch a row only if they are a member of its household
 
@@ -17,7 +18,18 @@ create sequence if not exists sync_seq_global;
 
 create or replace function set_sync_fields() returns trigger
 language plpgsql as $$
+declare
+  hid uuid;
 begin
+  -- A TG_TABLE_NAME branch, not a CASE: plpgsql only plans the branch that runs, and
+  -- household has no household_id field.
+  if tg_table_name = 'household' then
+    hid := new.id;
+  else
+    hid := new.household_id;
+  end if;
+  -- Serialise per household until commit so sync_seq order equals commit order (#514).
+  perform pg_advisory_xact_lock(hashtext('sync_seq:' || hid::text));
   new.updated_at := now();
   new.sync_seq := nextval('sync_seq_global');
   return new;
