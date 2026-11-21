@@ -91,16 +91,19 @@ export function AttachmentPicker({ householdId, entity, entityId, enabled, uploa
     const d = deps();
     if (!d || draining.current) return;
     draining.current = true;
+    let showedBusy = false;
     try {
       // Mount and reconnect always call this; an empty queue must not flash "uploading".
       if ((await d.db.attachment_outbox.count()) === 0) return;
       setBusy(true);
+      showedBusy = true;
       const result = await drainAttachmentOutbox(d);
       if (result.status === 'error') finish({ status: 'error', code: result.code }, { kind: 'drain' });
       else finish({ status: 'drained' }, { kind: 'drain' });
     } finally {
       draining.current = false;
-      setBusy(false);
+      // An empty pass never raised the flag; clearing it would cancel the "uploading" of a pick that started meanwhile.
+      if (showedBusy) setBusy(false);
     }
   }, [deps, finish]);
 
@@ -146,10 +149,10 @@ export function AttachmentPicker({ householdId, entity, entityId, enabled, uploa
   return (
     <section className={styles.root} aria-label="Attachments" data-testid={`attachments.${state}`}>
       <div className={styles.actions}>
-        <button type="button" className={styles.button} onClick={() => photoInput.current?.click()} disabled={busy}>
+        <button type="button" className={styles.button} onClick={() => photoInput.current?.click()} disabled={busy || !db}>
           Add photo
         </button>
-        <button type="button" className={styles.button} onClick={() => pdfInput.current?.click()} disabled={busy}>
+        <button type="button" className={styles.button} onClick={() => pdfInput.current?.click()} disabled={busy || !db}>
           Add PDF
         </button>
       </div>
