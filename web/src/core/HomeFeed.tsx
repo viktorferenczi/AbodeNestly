@@ -23,7 +23,8 @@ export function HomeFeed() {
   // Offline the pull is a no-op that keeps the cached rows; the screen reads the local database either way.
   const householdId = household?.id;
   const rows = useLiveQuery(
-    () => (db && householdId ? db.activity.where('household_id').equals(householdId).toArray() : []),
+    // `undefined` until the database is open: an empty array would flash the empty-activity state over cached rows.
+    () => (db && householdId ? db.activity.where('household_id').equals(householdId).toArray() : undefined),
     [db, householdId],
   );
 
