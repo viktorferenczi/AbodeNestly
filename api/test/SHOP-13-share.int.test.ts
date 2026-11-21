@@ -67,6 +67,30 @@ afterAll(async () => {
 });
 
 describe('share link', () => {
+  it('serves items in the learned aisle order of the list store, unseen last', async () => {
+    const store = (
+      await admin.query("insert into store (household_id, name) values ($1, 'Mart') returning id", [household])
+    ).rows[0].id;
+    const l2 = (
+      await admin.query("insert into shopping_list (household_id, name, store_id) values ($1, 'Ordered', $2) returning id", [
+        household,
+        store,
+      ])
+    ).rows[0].id;
+    await admin.query(
+      `insert into list_item (household_id, list_id, name) values ($1, $2, 'Zeta'), ($1, $2, 'Alpha'), ($1, $2, 'Mid')`,
+      [household, l2],
+    );
+    await admin.query(
+      `insert into store_item_order (household_id, store_id, name_key, mean_position)
+       select $1, $2, name_key, case name when 'Zeta' then 0 else 1 end from list_item where list_id = $3 and name in ('Zeta', 'Mid')`,
+      [household, store, l2],
+    );
+    const url = ((await (await call('POST', `/lists/${l2}/share`, alice.token)).json()) as { url: string }).url;
+    const body = (await (await call('GET', `/shared/${tokenOf(url)}`, null)).json()) as { items: Array<{ name: string }> };
+    expect(body.items.map((i) => i.name)).toEqual(['Zeta', 'Mid', 'Alpha']);
+  });
+
   it('AC2: POST and DELETE without a JWT give 401', async () => {
     for (const method of ['POST', 'DELETE']) {
       const res = await call(method, `/lists/${listId}/share`, null);

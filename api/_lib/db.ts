@@ -29,15 +29,3 @@ export async function withUser<T>(
     client.release();
   }
 }
-
-// For the one public read path (GET /shared/{token}, SPEC §11): there is no user, so RLS cannot
-// apply. DATABASE_URL connects as the owning role; callers must select by an unguessable token
-// and return only the public fields.
-export async function queryPublic<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
-  const client = await getPool().connect();
-  try {
-    return await fn(client);
-  } finally {
-    client.release();
-  }
-}

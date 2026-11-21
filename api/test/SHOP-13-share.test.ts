@@ -9,12 +9,14 @@ vi.mock('../_lib/auth.ts', async () => {
     }),
   };
 });
-vi.mock('../_lib/db.ts', () => ({ withUser: vi.fn(), queryPublic: vi.fn() }));
+vi.mock('../_lib/db.ts', () => ({ withUser: vi.fn() }));
+const connect = vi.fn();
+vi.mock('pg', () => ({ default: { Pool: vi.fn(() => ({ connect })) } }));
 
 import shareHandler from '../lists/[id]/share.ts';
 import sharedHandler from '../shared/[token].ts';
-import { queryPublic, withUser } from '../_lib/db.ts';
-import { createShare, readShared, revokeShare, toPublicList } from '../_lib/shares.ts';
+import { withUser } from '../_lib/db.ts';
+import { createShare, loadShared, readShared, revokeShare, toPublicList } from '../_lib/shares.ts';
 
 const LIST = '8f6f3b9e-1c1e-4a55-9a52-0d2c5d9f7a11';
 const TOKEN = 'A'.repeat(43);
@@ -34,7 +36,7 @@ function fakeClient(...answers: Array<Array<Record<string, unknown>>>) {
 
 beforeEach(() => {
   vi.mocked(withUser).mockClear();
-  vi.mocked(queryPublic).mockClear();
+  connect.mockClear();
   process.env.API_BASE_URL = 'https://app.example.com/';
 });
 
@@ -71,12 +73,13 @@ describe('share routes', () => {
     expect(withUser).not.toHaveBeenCalled();
   });
 
-  it('GET /shared/{token} needs no JWT; a malformed token is 404 with no DB call', async () => {
-    vi.mocked(queryPublic).mockImplementation(async (fn) => fn(fakeClient() as never));
+  it('GET /shared/{token} needs no JWT; a malformed token is 404 and takes no connection', async () => {
     const res = await sharedHandler(new Request('http://x/shared/short'));
     expect(res.status).toBe(404);
     expect(await errCode(res)).toBe('not_found');
-    expect((vi.mocked(queryPublic).mock.calls[0]?.[0] as unknown) !== undefined).toBe(true);
+    expect(connect).not.toHaveBeenCalled();
+    await expect(readShared('x'.repeat(44))).rejects.toMatchObject({ status: 404 });
+    expect(connect).not.toHaveBeenCalled();
   });
 });
 
@@ -108,16 +111,20 @@ describe('share logic', () => {
     expect(client.queries[1]?.text).toContain('share_token = null');
   });
 
-  it('AC3: an unknown token is 404; a malformed one makes no query', async () => {
-    await expect(readShared(fakeClient([]), TOKEN)).rejects.toMatchObject({ status: 404 });
-    const client = fakeClient();
-    await expect(readShared(client, 'x')).rejects.toMatchObject({ status: 404 });
-    expect(client.queries).toHaveLength(0);
+  it('AC3: an unknown token is 404', async () => {
+    await expect(loadShared(fakeClient([]), TOKEN)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('orders items by manual position, then learned aisle order, then insert order', async () => {
+    const client = fakeClient([{ id: 'l1', name: 'G' }], []);
+    await loadShared(client, TOKEN);
+    expect(client.queries[1]?.text).toMatch(/store_item_order/);
+    expect(client.queries[1]?.text).toMatch(/order by i\.manual_position nulls last, o\.mean_position nulls last/);
   });
 
   it('AC4: a live token returns name and unchecked items', async () => {
     const client = fakeClient([{ id: 'l1', name: 'Groceries' }], [{ name: 'Milk', quantity: '1.5', checked: false }]);
-    expect(await readShared(client, TOKEN)).toEqual({
+    expect(await loadShared(client, TOKEN)).toEqual({
       list: { name: 'Groceries' },
       items: [{ name: 'Milk', quantity: 1.5 }],
     });

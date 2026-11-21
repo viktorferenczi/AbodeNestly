@@ -1,4 +1,3 @@
-import { queryPublic } from '../_lib/db.ts';
 import { ApiError } from '../_lib/errors.ts';
 import { errorResponse, json, pathSegment } from '../_lib/http.ts';
 import { readShared } from '../_lib/shares.ts';
@@ -10,7 +9,7 @@ export default async function handler(req: Request): Promise<Response> {
   try {
     if (req.method !== 'GET') throw new ApiError(405, 'method_not_allowed', 'Use GET');
     const token = pathSegment(req, 1);
-    return json(await queryPublic((client) => readShared(client, token)));
+    return json(await readShared(token));
   } catch (e) {
     return errorResponse(e);
   }
