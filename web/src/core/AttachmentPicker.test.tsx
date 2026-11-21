@@ -15,12 +15,10 @@ import { AttachmentPicker } from './AttachmentPicker.tsx';
 function setOnline(value: boolean) {
   Object.defineProperty(navigator, 'onLine', { value, configurable: true });
 }
-async function flush() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 20));
-  });
+// The control offers its buttons only once the household database is open (a pick before that would be dropped).
+async function databaseOpen() {
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Add photo' }) as HTMLButtonElement).disabled).toBe(false));
 }
-
 const household = {
   id: 'h1', name: 'Home One', currency: 'EUR', module_shopping: true, module_pantry: true, module_maintenance: true,
 } as Household;
@@ -69,7 +67,7 @@ async function renderPicker(opts: { entity?: 'pantry_item' | 'maint_log'; enable
     </AuthProvider>,
   );
   await waitFor(() => expect(screen.queryByTestId('attachments.idle') ?? screen.queryByRole('navigation')).toBeTruthy());
-  await flush();
+  if (opts.enabled !== false) await databaseOpen();
   return { api, auth };
 }
 
