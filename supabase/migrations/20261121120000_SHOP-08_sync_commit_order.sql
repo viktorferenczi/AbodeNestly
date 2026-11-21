@@ -3,6 +3,7 @@
 -- see seq 11 (committed) while seq 10 was still in flight and then never return it.
 -- A transaction-scoped advisory lock per household, held until commit, means a later writer
 -- cannot take a sequence number until the earlier one has committed.
+-- pushMutations takes the same lock first, so row locks are always taken while it is held.
 create or replace function set_sync_fields() returns trigger
 language plpgsql as $$
 declare
@@ -16,7 +17,7 @@ begin
     hid := new.household_id;
   end if;
   -- Serialise per household until commit so sync_seq order equals commit order (#514).
-  perform pg_advisory_xact_lock(hashtext('sync_seq:' || hid::text));
+  perform pg_advisory_xact_lock(hashtextextended('sync_seq:' || hid::text, 0));
   new.updated_at := now();
   new.sync_seq := nextval('sync_seq_global');
   return new;

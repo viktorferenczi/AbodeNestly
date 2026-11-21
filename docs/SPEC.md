@@ -262,7 +262,7 @@ Response:
 ```
 Clients upsert every row by `id` (including deleted ones), then store `cursor`. If `has_more`, call again immediately.
 
-`since` is a non-negative integer (default 0) and `limit` is 1–500 (default 500); anything else is `400 validation`. A caller who is not a member of `household_id` gets `403 forbidden`, not an empty page. One query ordered by `sync_seq` serves all tables, so one table filling `limit` cannot move the cursor past another table's older rows. Rows also cannot commit out of `sync_seq` order within a household: `set_sync_fields()` takes a per-household advisory lock until commit, so writes to one household run one transaction at a time and a pull that sees a sequence number has seen every lower one. `household`, `member`, `invite`, `activity`, `attachment` and `store_item_order` are pull-only.
+`since` is a non-negative integer (default 0) and `limit` is 1–500 (default 500); anything else is `400 validation`. A caller who is not a member of `household_id` gets `403 forbidden`, not an empty page. One query ordered by `sync_seq` serves all tables, so one table filling `limit` cannot move the cursor past another table's older rows. Rows also cannot commit out of `sync_seq` order within a household: `set_sync_fields()` takes a per-household advisory lock until commit, so writes to one household run one transaction at a time and a pull that sees a sequence number has seen every lower one. A push takes the same lock before its first mutation; a deadlock or serialization failure that still occurs (`40P01`, `40001`) returns `503 retryable`, and the client retries the push. `household`, `member`, `invite`, `activity`, `attachment` and `store_item_order` are pull-only.
 
 **Push** — `POST /sync`
 ```jsonc
@@ -862,7 +862,7 @@ begin
     hid := new.household_id;
   end if;
   -- Serialise per household until commit so sync_seq order equals commit order (#514).
-  perform pg_advisory_xact_lock(hashtext('sync_seq:' || hid::text));
+  perform pg_advisory_xact_lock(hashtextextended('sync_seq:' || hid::text, 0));
   new.updated_at := now();
   new.sync_seq := nextval('sync_seq_global');
   return new;

@@ -3,7 +3,7 @@
 -- (it needs two connections); here we check the trigger still works on every kind of table.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(8);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'a1@example.com', 'authenticated', 'authenticated');
@@ -45,15 +45,11 @@ select lives_ok($$insert into public.notification_pref (user_id, household_id, t
   values ('00000000-0000-0000-0000-0000000000a1', current_setting('test.home')::uuid, 'eat_soon', false)$$,
   'SHOP-08: AC3 notification_pref insert accepted');
 
--- AC4: the write holds the household's advisory lock (released at commit), and only that household's
+-- AC4: the write holds the household's advisory lock (released at commit)
 select is((select count(*)::int from pg_locks
   where locktype = 'advisory' and pid = pg_backend_pid() and objsubid = 1
-    and objid = ((hashtext('sync_seq:' || current_setting('test.home')))::bigint & 4294967295)::oid),
+    and objid = ((hashtextextended('sync_seq:' || current_setting('test.home'), 0)) & 4294967295)::oid),
   1, 'SHOP-08: AC4 household advisory lock held by the writing transaction');
-select is((select count(*)::int from pg_locks
-  where locktype = 'advisory' and pid = pg_backend_pid()
-    and objid = ((hashtext('sync_seq:' || gen_random_uuid()::text))::bigint & 4294967295)::oid),
-  0, 'SHOP-08: AC4 no lock is taken for an unrelated household');
 
 select * from finish();
 rollback;

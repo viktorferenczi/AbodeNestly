@@ -30,6 +30,15 @@ const insertItem = (c: pg.Client, household: string, list: string, name: string)
     [crypto.randomUUID(), household, list, name],
   );
 
+const waitUntilBlocked = async (pid: number) => {
+  for (let i = 0; i < 100; i++) {
+    const r = await admin.query('select 1 from pg_stat_activity where pid = $1 and wait_event_type = $2', [pid, 'Lock']);
+    if (r.rows.length > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('writer never blocked on the household lock');
+};
+
 const pull = async (since: number) => {
   const res = await fetch(`${baseUrl}/sync?household_id=${home}&since=${since}`, { headers: { authorization: `Bearer ${token}` } });
   expect(res.status).toBe(200);
@@ -99,28 +108,27 @@ describe('SHOP-08 sync commit order (#514)', () => {
     await a.query('commit');
   });
 
-  it('AC3: a pull never skips a row that commits after a higher sequence was served', async () => {
+  it('AC3: a pull between the two commits never advances past a row that is still in flight', async () => {
     const before = (await pull(0)).cursor;
+    const bPid = (await b.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
     await a.query('begin');
-    await insertItem(a, home, listId, 'order-a');
-    // B starts second and is blocked until A commits, so it cannot take a lower-than-served sequence.
+    const first = await insertItem(a, home, listId, 'order-a');
     await b.query('begin');
-    const blocked = insertItem(b, home, listId, 'order-b');
-
-    // Neither row is visible while A is open, so the cursor cannot move past A's sequence.
-    const during = await pull(before);
-    expect(names(during)).not.toContain('order-a');
-    expect(names(during)).not.toContain('order-b');
-    expect(during.cursor).toBe(before);
+    // B's statement is sent before A commits; it must wait for A rather than take a sequence number.
+    const second = insertItem(b, home, listId, 'order-b');
+    await waitUntilBlocked(bPid);
 
     await a.query('commit');
-    await blocked;
-    await b.query('commit');
+    const secondRow = await second;
+    expect(BigInt(secondRow.rows[0].seq)).toBeGreaterThan(BigInt(first.rows[0].seq));
 
-    const after = await pull(before);
-    const got = names(after).filter((n) => n.startsWith('order-'));
-    expect(got).toEqual(['order-a', 'order-b']);
-    const full = await pull(0);
-    expect(names(full)).toEqual(expect.arrayContaining(['order-a', 'order-b']));
+    // A is committed, B is not: the pull returns A's row, not B's, and its cursor stops at A.
+    const between = await pull(before);
+    expect(names(between).filter((n) => n.startsWith('order-'))).toEqual(['order-a']);
+    expect(between.cursor).toBe(Number(first.rows[0].seq));
+
+    await b.query('commit');
+    const afterB = await pull(between.cursor);
+    expect(names(afterB).filter((n) => n.startsWith('order-'))).toEqual(['order-b']);
   });
 });

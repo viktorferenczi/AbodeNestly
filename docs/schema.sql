@@ -29,7 +29,7 @@ begin
     hid := new.household_id;
   end if;
   -- Serialise per household until commit so sync_seq order equals commit order (#514).
-  perform pg_advisory_xact_lock(hashtext('sync_seq:' || hid::text));
+  perform pg_advisory_xact_lock(hashtextextended('sync_seq:' || hid::text, 0));
   new.updated_at := now();
   new.sync_seq := nextval('sync_seq_global');
   return new;

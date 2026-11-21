@@ -13,6 +13,12 @@ export function errorResponse(e: unknown): Response {
     const body: ApiErrorBody = { error: { code: e.code, message: e.message } };
     return json(body, e.status);
   }
+  // Deadlock (40P01) and serialization failure (40001) abort one transaction and are safe to retry.
+  const pgCode = (e as { code?: unknown } | null)?.code;
+  if (pgCode === '40P01' || pgCode === '40001') {
+    const body: ApiErrorBody = { error: { code: 'retryable', message: 'Conflicting write, try again' } };
+    return json(body, 503);
+  }
   console.error(e);
   const body: ApiErrorBody = { error: { code: 'internal', message: 'Internal error' } };
   return json(body, 500);
