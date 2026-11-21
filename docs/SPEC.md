@@ -239,7 +239,7 @@ Free-text names are normalised with `name_key(text)` = lower, trimmed, whitespac
 }
 ```
 
-- `upsert`: the server merges `data` into the row (insert if missing). Conflict: **last write wins per row**, decided by the server's receive order, not `client_ts`. `client_ts` is informational only.
+- `upsert`: the server merges `data` into the row (insert if missing), ignoring server-owned columns: `created_at`, `updated_at`, `sync_seq`, `household_id` (forced), and `shopping_list.share_token` (only the share endpoints write it). Conflict: **last write wins per row**, decided by the server's receive order, not `client_ts`. `client_ts` is informational only.
 - `delete`: sets `deleted_at = now()`.
 - `delta`: allowed only on `pantry_item.quantity`. The server inserts a `pantry_movement`; the trigger applies it. Never lost on conflict.
 
@@ -311,7 +311,7 @@ Plain CRUD goes **through Supabase directly** from the clients (RLS enforces acc
 | POST | `/tasks/{id}/consumables-to-list` | Send consumables to a list | `{ list_id }` | `ListItem[]` |
 | POST | `/lists/{id}/share` | Create/rotate read-only share link | — | `{ url }` |
 | DELETE | `/lists/{id}/share` | Revoke share link | — | `204` |
-| GET | `/shared/{token}` **public** | Read-only list view data | — | `{ list: ShoppingList, items: ListItem[] }` |
+| GET | `/shared/{token}` **public** | Read-only list view data (§11: name and unchecked items only; 404 if shopping is off) | — | `{ list: { name }, items: { name, quantity }[] }` |
 | POST | `/templates/{id}/apply` | Create tasks from checklist template | `{ house_id? }` | `MaintTask[]` |
 | GET | `/export/maintenance.pdf` | Export maintenance log | `household_id`, `from?`, `to?` | `application/pdf` |
 | GET | `/reports/maintenance-costs` | Cost report | `household_id`, `year?`, `asset_id?` | `CostReport` |
@@ -458,7 +458,7 @@ export interface ShoppingList extends Synced {
   name: string;
   store_id: UUID | null;
   is_template: boolean;
-  share_token: string | null;
+  readonly share_token: string | null;   // server-owned: written only by POST/DELETE /lists/{id}/share, never by a sync upsert
   archived_at: ISODateTime | null;
 }
 
@@ -768,7 +768,7 @@ Module disabled matrix — what still works:
 - `profile` readable by anyone sharing a household with the user. Rows are created by the `on_auth_user_created` trigger (security definer) on `auth.users`; clients only update their own row (a write to a peer's profile is rejected with 42501; clients cannot insert or delete profiles).
 - `product` readable by all authenticated users; written only by the API with the service role.
 - API runs with the **user's JWT** forwarded to Postgres (`set local role authenticated; set local request.jwt.claims`) so RLS applies to the sync layer too. The service role is used only for cron delivery and product cache writes.
-- Share links (`/shared/{token}`) are the one public read path and return only the list name and unchecked item names/quantities.
+- Share links (`/shared/{token}`) are the one public read path and return only the list name and unchecked item names/quantities. The API reads them by token with a non-RLS connection (no user JWT exists); this is the one read besides cron and product cache that skips RLS, and it lives in `api/_lib/shares.ts` only.
 - Storage policies mirror table RLS using the `households/{household_id}/…` path prefix. Avatars under `profiles/{user_id}/…`: write your own folder only, read your own and your household peers'.
 
 ---

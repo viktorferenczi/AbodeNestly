@@ -117,6 +117,16 @@ export type SignAttachmentResponse = {
   storage_path: string;
 };
 
+// ---------- share links (SHOP-13) ----------
+/** `POST /lists/{id}/share` response: the public URL of the read-only view. */
+export type ShareLinkResponse = { url: string };
+
+/** `GET /shared/{token}` response (SPEC §11): the list name and unchecked items only, no ids. */
+export type SharedListResponse = {
+  list: { name: string };
+  items: Array<{ name: string; quantity: number | null }>;
+};
+
 // ---------- notification preferences (CORE-12) ----------
 export type NotificationType = 'eat_soon' | 'low_stock' | 'task_due' | 'warranty' | 'activity';
 
