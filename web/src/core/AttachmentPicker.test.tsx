@@ -152,7 +152,8 @@ describe('CORE-11: attachment control', () => {
     expect(api.signAttachmentCalls).toHaveLength(1);
     expect(puts).toHaveLength(1);
     expect(screen.queryAllByTestId('attachments.queuedItem')).toHaveLength(0);
-    expect(screen.getAllByTestId('attachments.item')).toHaveLength(1);
+    // The list is a live query that refreshes after the state returns to idle, so wait for it.
+    await waitFor(() => expect(screen.getAllByTestId('attachments.item')).toHaveLength(1));
   });
 
   it('CORE-11: AC5 a sign failure shows an error, records nothing, and Retry succeeds', async () => {
@@ -171,7 +172,8 @@ describe('CORE-11: attachment control', () => {
     fireEvent.click(screen.getByTestId('attachments.retry'));
     await waitFor(() => expect(screen.getByTestId('attachments.idle')).toBeTruthy());
     expect(api.signAttachmentCalls).toHaveLength(2);
-    expect(screen.getAllByTestId('attachments.item')).toHaveLength(1);
+    // The list is a live query that refreshes after the state returns to idle, so wait for it.
+    await waitFor(() => expect(screen.getAllByTestId('attachments.item')).toHaveLength(1));
   });
 
   it('CORE-11: a failed PUT shows an error and Retry signs again', async () => {
