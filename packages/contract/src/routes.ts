@@ -11,6 +11,7 @@ export type JsonSchema = {
   const?: string | number | boolean;
   enum?: string[];
   items?: JsonSchema;
+  additionalProperties?: JsonSchema;
 };
 
 export type Route = {
@@ -18,6 +19,7 @@ export type Route = {
   path: string;
   summary: string;
   public: boolean;
+  query?: Array<{ name: string; schema: JsonSchema; required: boolean }>;
   requestBody?: { schemaName: string; schema: JsonSchema };
   // A `schemaName` that already exists in `componentSchemas` is referenced, not redefined.
   // Only 204 may omit the body schema, so a 200/201 can never publish without one.
@@ -35,6 +37,70 @@ const dateTime: JsonSchema = { type: 'string', format: 'date-time' };
 const nullableDateTime: JsonSchema = { type: ['string', 'null'], format: 'date-time' };
 
 export const routes: Route[] = [
+  {
+    method: 'get',
+    path: '/sync',
+    summary: 'Pull changes since a cursor',
+    public: false,
+    query: [
+      { name: 'household_id', schema: uuid, required: true },
+      { name: 'since', schema: { type: 'integer' }, required: false },
+      { name: 'limit', schema: { type: 'integer' }, required: false },
+    ],
+    response: {
+      status: 200,
+      schemaName: 'SyncPullResponse',
+      schema: {
+        type: 'object',
+        properties: {
+          cursor: { type: 'integer' },
+          has_more: { type: 'boolean' },
+          changes: { type: 'object', additionalProperties: { type: 'array', items: { type: 'object' } } },
+        },
+        required: ['cursor', 'has_more', 'changes'],
+      },
+    },
+  },
+  {
+    method: 'post',
+    path: '/sync',
+    summary: 'Push outbox mutations',
+    public: false,
+    requestBody: {
+      schemaName: 'SyncPushRequest',
+      schema: {
+        type: 'object',
+        properties: {
+          household_id: uuid,
+          mutations: { type: 'array', items: { type: 'object' } },
+        },
+        required: ['household_id', 'mutations'],
+      },
+    },
+    response: {
+      status: 200,
+      schemaName: 'SyncPushResponse',
+      schema: {
+        type: 'object',
+        properties: {
+          applied: { type: 'array', items: uuid },
+          rejected: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: uuid,
+                reason: { type: 'string', enum: ['rls_denied', 'validation', 'unknown_table', 'module_disabled'] },
+                detail: { type: 'string' },
+              },
+              required: ['id', 'reason', 'detail'],
+            },
+          },
+        },
+        required: ['applied', 'rejected'],
+      },
+    },
+  },
   {
     method: 'get',
     path: '/health',

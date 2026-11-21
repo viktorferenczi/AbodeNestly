@@ -11,6 +11,7 @@ import householdMember from '../households/[id]/members/[user_id].ts';
 import acceptInvite from '../invites/[code]/accept.ts';
 import listShare from '../lists/[id]/share.ts';
 import sharedList from '../shared/[token].ts';
+import sync from '../sync.ts';
 
 type Handler = (req: Request) => Promise<Response>;
 
@@ -18,6 +19,7 @@ const routes: Record<string, Handler> = {
   '/health': health,
   '/households': households,
   '/attachments/sign': attachmentSign,
+  '/sync': sync,
 };
 
 // Vercel's [param] routes, as path patterns.
