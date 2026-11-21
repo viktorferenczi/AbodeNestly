@@ -91,6 +91,12 @@ export async function pushMutations(
 ): Promise<SyncPushResponse> {
   const applied: string[] = [];
   const rejected: SyncRejection[] = [];
+  // Take the household's sync lock (same key as set_sync_fields, #514) before any row lock. A plain
+  // UPDATE locks its row first and the trigger takes this lock after, so without this a push that
+  // already holds the lock could deadlock with a concurrent soft delete.
+  if (mutations.length > 0) {
+    await client.query("select pg_advisory_xact_lock(hashtextextended('sync_seq:' || $1::uuid::text, 0))", [householdId]);
+  }
   for (const m of mutations) {
     // Unknown tables need no database round trip and are never recorded as applied.
     if (!SYNC_TABLES[m.table]) {

@@ -9,6 +9,7 @@ vi.mock('../_lib/db.ts', () => ({ withUser: vi.fn() }));
 import handler, { parsePullQuery } from '../sync.ts';
 import { withUser } from '../_lib/db.ts';
 import { buildPullSql, pullChanges } from '../_lib/sync/pull.ts';
+import { errorResponse } from '../_lib/http.ts';
 import { buildUpsert, classifyError, pushMutations } from '../_lib/sync/push.ts';
 
 const HID = '8f6f3b9e-1c1e-4a55-9a52-0d2c5d9f7a11';
@@ -34,6 +35,22 @@ function fakeClient(fail: Record<string, { code: string; message: string }> = {}
 }
 
 describe('pushMutations', () => {
+  it('maps a deadlock to a retryable 503 instead of a 500', async () => {
+    const res = errorResponse(Object.assign(new Error('deadlock detected'), { code: '40P01' }));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: { code: 'retryable', message: 'Conflicting write, try again' } });
+  });
+
+  it('takes the household sync lock before the first mutation (#514)', async () => {
+    const c = fakeClient();
+    await pushMutations(c, HID, [upsert(1, 'store')]);
+    expect(c.calls[0]!.text).toContain('pg_advisory_xact_lock');
+    expect(c.calls[0]!.values).toEqual([HID]);
+    const empty = fakeClient();
+    await pushMutations(empty, HID, []);
+    expect(empty.calls).toEqual([]);
+  });
+
   it('AC3: applies valid mutations around an unknown table', async () => {
     const c = fakeClient();
     const res = await pushMutations(c, HID, [upsert(1, 'list_item'), upsert(2, 'nope'), upsert(3, 'store')]);

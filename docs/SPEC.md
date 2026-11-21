@@ -207,7 +207,7 @@ Full DDL in §14. Summary of tables by module:
 | `created_at` | timestamptz | Server default. |
 | `updated_at` | timestamptz | **Set by the server trigger**, never trusted from the client. |
 | `deleted_at` | timestamptz | Soft delete. `null` = live. Purged after 30 days by cron. |
-| `sync_seq` | bigint | Global monotonic sequence, set by the server trigger on every insert/update. Clients pull rows with `sync_seq > cursor`. |
+| `sync_seq` | bigint | Global monotonic sequence, set by the server trigger on every insert/update; within a household it increases in commit order. Clients pull rows with `sync_seq > cursor`. |
 
 ### Item identity
 Free-text names are normalised with `name_key(text)` = lower, trimmed, whitespace collapsed. `list_item.name_key`, `pantry_item.name_key`, `recipe_ingredient.name_key` are generated columns. Autocomplete, aisle learning, price memory and pantry↔list matching all use `name_key`; the UI always shows `name`.
@@ -262,7 +262,7 @@ Response:
 ```
 Clients upsert every row by `id` (including deleted ones), then store `cursor`. If `has_more`, call again immediately.
 
-`since` is a non-negative integer (default 0) and `limit` is 1–500 (default 500); anything else is `400 validation`. A caller who is not a member of `household_id` gets `403 forbidden`, not an empty page. One query ordered by `sync_seq` serves all tables, so one table filling `limit` cannot move the cursor past another table's older rows. This does not yet cover rows that commit out of `sync_seq` order (#514). `household`, `member`, `invite`, `activity`, `attachment` and `store_item_order` are pull-only.
+`since` is a non-negative integer (default 0) and `limit` is 1–500 (default 500); anything else is `400 validation`. A caller who is not a member of `household_id` gets `403 forbidden`, not an empty page. One query ordered by `sync_seq` serves all tables, so one table filling `limit` cannot move the cursor past another table's older rows. Rows also cannot commit out of `sync_seq` order within a household: `set_sync_fields()` takes a per-household advisory lock until commit, so writes to one household run one transaction at a time and a pull that sees a sequence number has seen every lower one. A push takes the same lock before its first mutation; a deadlock or serialization failure that still occurs (`40P01`, `40001`) returns `503 retryable`, and the client retries the push. `household`, `member`, `invite`, `activity`, `attachment` and `store_item_order` are pull-only.
 
 **Push** — `POST /sync`
 ```jsonc
@@ -835,7 +835,8 @@ The canonical DDL (`docs/schema.sql`) is reproduced here verbatim.
 -- Conventions:
 --   * every household-scoped table has: id uuid (client-generated allowed),
 --     household_id, created_at, updated_at, deleted_at (soft delete), sync_seq
---   * sync_seq is a global monotonic sequence bumped on every write; clients
+--   * sync_seq is a global monotonic sequence bumped on every write, in commit
+--     order within a household (per-household advisory lock); clients
 --     pull with  WHERE household_id = $1 AND sync_seq > $cursor
 --   * RLS: a user can touch a row only if they are a member of its household
 
@@ -850,7 +851,18 @@ create sequence if not exists sync_seq_global;
 
 create or replace function set_sync_fields() returns trigger
 language plpgsql as $$
+declare
+  hid uuid;
 begin
+  -- A TG_TABLE_NAME branch, not a CASE: plpgsql only plans the branch that runs, and
+  -- household has no household_id field.
+  if tg_table_name = 'household' then
+    hid := new.id;
+  else
+    hid := new.household_id;
+  end if;
+  -- Serialise per household until commit so sync_seq order equals commit order (#514).
+  perform pg_advisory_xact_lock(hashtextextended('sync_seq:' || hid::text, 0));
   new.updated_at := now();
   new.sync_seq := nextval('sync_seq_global');
   return new;
