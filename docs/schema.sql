@@ -485,7 +485,8 @@ create table store (
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
   deleted_at    timestamptz,
-  sync_seq      bigint not null default nextval('sync_seq_global')
+  sync_seq      bigint not null default nextval('sync_seq_global'),
+  unique (id, household_id)  -- target of store_item_order's same-household FK
 );
 call setup_scoped('store');
 create index store_household_name_idx on store(household_id, name) where deleted_at is null;  -- stores list screen
@@ -539,13 +540,15 @@ create unique index list_item_open_pantry_idx
 -- learned aisle order: running mean of check-off index per store
 create table store_item_order (
   household_id  uuid not null references household(id) on delete cascade,
-  store_id      uuid not null references store(id) on delete cascade,
+  store_id      uuid not null,
   name_key      text not null,
   mean_position numeric not null,
   samples       int not null default 1,
   updated_at    timestamptz not null default now(),
   sync_seq      bigint not null default nextval('sync_seq_global'),
-  primary key (store_id, name_key)
+  primary key (store_id, name_key),
+  -- composite FK: a row can only point at a store of its own household
+  foreign key (store_id, household_id) references store(id, household_id) on delete cascade
 );
 call setup_scoped('store_item_order');
 
