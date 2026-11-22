@@ -41,10 +41,19 @@ export function mutate(db: HouseholdDb, overrides: Partial<MutateDeps> = {}) {
 
   return {
     /** Stores the full row locally and queues its fields minus the server-owned columns. */
-    upsert(table: SyncTable, row: Row & Record<string, unknown>): Promise<void> {
+    upsert(table: SyncTable, row: Row): Promise<void> {
       const data = Object.fromEntries(Object.entries(row).filter(([key]) => !SERVER_OWNED.has(key)));
       const payload: Mutation = { id: deps.uuid(), table, op: 'upsert', row_id: row.id, data, client_ts: deps.now() };
       return commit(table, 'upsert', payload, () => db.table(table).put(row));
+    },
+    /**
+     * Updates only `fields` locally and queues just those columns, so a concurrent edit of another column on
+     * another device is not overwritten (the server merges the columns present in `data`).
+     */
+    patch(table: SyncTable, id: string, fields: Record<string, unknown>): Promise<void> {
+      const data = Object.fromEntries(Object.entries(fields).filter(([key]) => !SERVER_OWNED.has(key)));
+      const payload: Mutation = { id: deps.uuid(), table, op: 'upsert', row_id: id, data, client_ts: deps.now() };
+      return commit(table, 'upsert', payload, () => db.table(table).update(id, data));
     },
     /** Soft delete (SPEC §6.3): the row stays locally with `deleted_at` set. */
     remove(table: SyncTable, id: string): Promise<void> {

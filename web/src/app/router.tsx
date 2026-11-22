@@ -11,7 +11,9 @@ import { Welcome } from '../core/Welcome.tsx';
 import { Landing } from '../core/auth/Landing.tsx';
 import { RequireAuth } from '../core/auth/RequireAuth.tsx';
 import { SignIn } from '../core/auth/SignIn.tsx';
+import { Lists } from '../shopping/index.ts';
 import { Placeholder } from './Placeholder.tsx';
+import { RequireModule } from './RequireModule.tsx';
 import { Shell } from './Shell.tsx';
 
 // An invite link opens the join card with the code filled in; joining still needs a tap.
@@ -40,14 +42,19 @@ export function createAppRouter() {
             },
             { path: '/household', element: <HouseholdSettings /> },
             { path: '/household/members', element: <Members /> },
-            { path: '/shopping', element: <Placeholder /> },
+            {
+              element: <RequireModule module="shopping" />,
+              children: [
+                { path: '/shopping', element: <Lists /> },
+                { path: '/shopping/:listId', element: <Placeholder /> },
+              ],
+            },
             { path: '/pantry', element: <Placeholder /> },
             { path: '/maintenance', element: <Placeholder /> },
             { path: '/search', element: <Search /> },
             { path: '/deleted', element: <RecentlyDeleted /> },
             // Entity destinations of search rows (DESIGN B8); the module list stories replace these.
             ...[
-              '/shopping/:listId',
               '/shopping/stores/:id',
               '/pantry/settings',
               '/pantry/recipes/:id',

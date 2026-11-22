@@ -1,3 +1,4 @@
+import type { Store } from '@abodenestly/contract';
 import Dexie from 'dexie';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { openHouseholdDb } from '../sync/db.ts';
@@ -53,7 +54,7 @@ describe('CORE-10: restore', () => {
 
   it('clears deleted_at and writes one outbox row', async () => {
     const db = await openHouseholdDb('h1');
-    await db.store.put({ id: 's1', household_id: 'h1', name: 'Lidl', deleted_at: ago(DAY) });
+    await db.store.put({ id: 's1', household_id: 'h1', name: 'Lidl', deleted_at: ago(DAY) } as Store);
     await restore(db, 'store', 's1', deps);
     expect((await db.store.get('s1'))!.deleted_at).toBeNull();
     const out = await db.outbox.toArray();

@@ -1,3 +1,4 @@
+import type { ShoppingList } from '@abodenestly/contract';
 import { afterEach, describe, expect, it } from 'vitest';
 import { dbName, openHouseholdDb, pendingCount, readCursor, writeCursor, type HouseholdDb } from '../sync/db.ts';
 import { startTab } from './auth/landing.ts';
@@ -13,7 +14,7 @@ afterEach(() => {
   open.splice(0).forEach((db) => db.close());
 });
 
-const list = (id: string, household_id: string, name: string) => ({ id, household_id, name, deleted_at: null });
+const list = (id: string, household_id: string, name: string) => ({ id, household_id, name, deleted_at: null }) as ShoppingList;
 
 describe('CORE-07: local databases', () => {
   it('CORE-07: AC2 switching closes the current database and opens one named for the target', async () => {

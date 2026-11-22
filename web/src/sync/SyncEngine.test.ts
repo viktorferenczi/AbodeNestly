@@ -1,4 +1,4 @@
-import type { Mutation, SyncPushResponse, SyncRejection } from '@abodenestly/contract';
+import type { ListItem, Mutation, SyncPushResponse, SyncRejection } from '@abodenestly/contract';
 import Dexie from 'dexie';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeApiClient } from '../core/api/FakeApiClient.ts';
@@ -9,7 +9,7 @@ import { createSyncEngine } from './SyncEngine.ts';
 const NOW = new Date('2026-11-17T12:00:00.000Z');
 let n = 0;
 const deps = () => ({ uuid: () => `m${++n}`, now: () => NOW.toISOString() });
-const item = (id: string, name = id) => ({ id, household_id: 'h1', list_id: 'l1', name, deleted_at: null });
+const item = (id: string, name = id) => ({ id, household_id: 'h1', list_id: 'l1', name, deleted_at: null }) as ListItem;
 
 beforeEach(async () => {
   n = 0;
@@ -46,6 +46,17 @@ describe('SHOP-08: mutate', () => {
     expect(m).toMatchObject({ id: 'm1', row_id: 'i1', client_ts: NOW.toISOString() });
     // Server-owned columns do not travel.
     expect((m as { data: Record<string, unknown> }).data).toEqual({ list_id: 'l1', name: 'i1', deleted_at: null });
+  });
+
+  it('SHOP-01: patch updates only the given columns locally and queues only them', async () => {
+    const { db, write } = await setup(false);
+    await db.list_item.put(item('i1'));
+    await write.patch('list_item', 'i1', { name: 'renamed', updated_at: 'ignored' });
+    expect(await db.list_item.get('i1')).toMatchObject({ name: 'renamed', list_id: 'l1' });
+    const out = await db.outbox.toArray();
+    expect(out).toHaveLength(1);
+    expect(out[0]!.payload).toMatchObject({ table: 'list_item', op: 'upsert', row_id: 'i1', data: { name: 'renamed' } });
+    expect((out[0]!.payload as { data: object }).data).toEqual({ name: 'renamed' });
   });
 
   it('rolls both back when the transaction throws', async () => {
