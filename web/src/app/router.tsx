@@ -11,7 +11,7 @@ import { Welcome } from '../core/Welcome.tsx';
 import { Landing } from '../core/auth/Landing.tsx';
 import { RequireAuth } from '../core/auth/RequireAuth.tsx';
 import { SignIn } from '../core/auth/SignIn.tsx';
-import { Lists } from '../shopping/index.ts';
+import { ListDetail, Lists } from '../shopping/index.ts';
 import { Placeholder } from './Placeholder.tsx';
 import { RequireModule } from './RequireModule.tsx';
 import { Shell } from './Shell.tsx';
@@ -46,7 +46,7 @@ export function createAppRouter() {
               element: <RequireModule module="shopping" />,
               children: [
                 { path: '/shopping', element: <Lists /> },
-                { path: '/shopping/:listId', element: <Placeholder /> },
+                { path: '/shopping/:listId', element: <ListDetail /> },
               ],
             },
             { path: '/pantry', element: <Placeholder /> },

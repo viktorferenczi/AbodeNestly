@@ -189,6 +189,7 @@ _Deviation (CORE-09): the module list stories do not exist yet, so a result row 
 - States: `empty` (QuickAddBar focused, hint "Try: 2 l milk") · `populated` · `all-checked` (celebration line + "Clear checked") · `offline` · `pending-sync` · `reordering` (drag handles visible).
 - Interactions: tap checkbox → check with undo toast; tap row → C3; long-press → drag reorder (sets `manual_position`, teaches order); check a pantry-sourced item → inline prompt "Restock pantry? [Yes] [No]" (X2, only if pantry on); swipe left → delete with undo; add via text / mic (C6) / barcode (C7); pull to refresh.
 - Offline: full. · Gating: pantry prompt and badges only if pantry on; task badge only if maintenance on.
+- Web (SHOP-02-web): the Shell bar owns the h1, so the screen shows an h2 with the list name, a back link "Shopping" and the store chip (no rename, overflow menu, checkbox or swipe-delete until their stories). Items show names only, oldest first; checked items sit in a read-only collapsed "Checked (n)". The `QuickAddBar` has no mic or barcode button until SHOP-14 and SHOP-10, and suggestions come from the household's own list items (live, or checked at some point). The empty hint is "Add your first item" until SHOP-03 parses quantities (then "Try: 2 l milk"). An unknown or deleted list shows "This list is gone".
 
 ### C3. Item detail / edit
 - Route: sheet · Purpose: SHOP-03, SHOP-12.
