@@ -52,18 +52,6 @@
   list-style: none;
 }
 
-.row {
-  display: flex;
-  align-items: center;
-  min-height: var(--touch-min);
-  border-bottom: 1px solid var(--color-line);
-  font-size: var(--font-body);
-}
-
-.dim {
-  color: var(--color-text-2);
-}
-
 .checked summary {
   min-height: var(--touch-min);
   display: flex;

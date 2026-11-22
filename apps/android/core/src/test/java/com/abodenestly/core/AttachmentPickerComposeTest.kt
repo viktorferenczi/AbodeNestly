@@ -121,7 +121,8 @@ class AttachmentPickerComposeTest {
         show()
         rule.onNodeWithTag("attachments.photo").performClick()
         until { count("attachments.item") == 1 }
-        assertTrue(exists("attachments.idle"))
+        // The item is listed a frame before the control leaves "uploading", so wait for idle instead of asserting it.
+        until { exists("attachments.idle") }
     }
 
     @Test

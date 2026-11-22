@@ -38,4 +38,10 @@ describe('ListRow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Archive Groceries' }));
     expect(onClick).toHaveBeenCalled();
   });
+
+  it('shows trailing text', () => {
+    render(<ul><ListRow title="Milk" trailing="2 l" subtitle="lactose free" onOpen={() => undefined} /></ul>);
+    expect(screen.getByText('2 l')).toBeTruthy();
+    expect(screen.getByText('lactose free')).toBeTruthy();
+  });
 });

@@ -49,7 +49,7 @@ export function suggest(history: ListItem[], query: string, opts: { listId: stri
 export async function addItem(
   db: HouseholdDb,
   deps: Partial<MutateDeps>,
-  input: { householdId: string; listId: string; name: string; userId: string | null },
+  input: { householdId: string; listId: string; name: string; userId: string | null; quantity?: number | null; unit?: string | null; note?: string | null },
 ): Promise<string> {
   const id = (deps.uuid ?? (() => crypto.randomUUID()))();
   const now = (deps.now ?? (() => new Date().toISOString()))();
@@ -61,9 +61,9 @@ export async function addItem(
     list_id: input.listId,
     name,
     name_key: nameKey(name),
-    quantity: null,
-    unit: null,
-    note: null,
+    quantity: input.quantity ?? null,
+    unit: input.unit ?? null,
+    note: input.note ?? null,
     barcode: null,
     checked: false,
     checked_at: null,

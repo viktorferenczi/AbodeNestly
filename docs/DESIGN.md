@@ -62,7 +62,7 @@ System fonts (SF Pro / Roboto / system-ui). Scale: Title 28/34 semibold, Heading
 | `Badge` | Small chip: "from pantry", "for: Boiler service", "Low", "Eat soon", "Overdue" |
 | `Sheet` | Bottom sheet for add/edit; drag to dismiss; primary button pinned at bottom |
 | `QuickAddBar` | Sticky input at bottom of a list: text field + mic + barcode + add. Autocomplete above it |
-| `Stepper` | − value + with long-press repeat; used for quantities |
+| `Stepper` | − value + with long-press repeat; used for quantities. Web: the value is an editable decimal field (0.5 kg works); + on empty gives 1, − from 1 or below clears |
 | `EmptyState` | Illustration-free: one sentence of purpose, one primary button |
 | `UndoToast` | 5 s, "Deleted Milk · Undo"; stacks newest on top |
 | `OfflineBanner` | Only on screens that need network (core settings): "You're offline. Connect to change household settings." |
@@ -189,13 +189,14 @@ _Deviation (CORE-09): the module list stories do not exist yet, so a result row 
 - States: `empty` (QuickAddBar focused, hint "Try: 2 l milk") · `populated` · `all-checked` (celebration line + "Clear checked") · `offline` · `pending-sync` · `reordering` (drag handles visible).
 - Interactions: tap checkbox → check with undo toast; tap row → C3; long-press → drag reorder (sets `manual_position`, teaches order); check a pantry-sourced item → inline prompt "Restock pantry? [Yes] [No]" (X2, only if pantry on); swipe left → delete with undo; add via text / mic (C6) / barcode (C7); pull to refresh.
 - Offline: full. · Gating: pantry prompt and badges only if pantry on; task badge only if maintenance on.
-- Web (SHOP-02-web): the Shell bar owns the h1, so the screen shows an h2 with the list name, a back link "Shopping" and the store chip (no rename, overflow menu, checkbox or swipe-delete until their stories). Items show names only, oldest first; checked items sit in a read-only collapsed "Checked (n)". The `QuickAddBar` has no mic or barcode button until SHOP-14 and SHOP-10, and suggestions come from the household's own list items (live, or checked at some point). The empty hint is "Add your first item" until SHOP-03 parses quantities (then "Try: 2 l milk"). An unknown or deleted list shows "This list is gone".
+- Web (SHOP-02-web): the Shell bar owns the h1, so the screen shows an h2 with the list name, a back link "Shopping" and the store chip (no rename, overflow menu, checkbox or swipe-delete until their stories). Items show name, qty+unit and note (SHOP-03-web), oldest first; tapping a row opens C3; checked items sit in a read-only collapsed "Checked (n)". The `QuickAddBar` has no mic or barcode button until SHOP-14 and SHOP-10, and suggestions come from the household's own list items (live, or checked at some point). The empty hint is "Add your first item" until SHOP-14 parses quantities (then "Try: 2 l milk"). An unknown or deleted list shows "This list is gone".
 
 ### C3. Item detail / edit
 - Route: sheet · Purpose: SHOP-03, SHOP-12.
 - Layout: name (autocomplete) · Stepper qty + unit picker · note · price field with store name · "Last bought: 3 Nov, €1.20 at Test Market" · delete.
 - States: `new` · `edit` · `pantry-sourced` (shows link to pantry item) · `task-sourced` (shows link to task).
 - Offline: full.
+- Web (SHOP-03-web): name, Stepper quantity, unit and note only; no price or "Last bought" (SHOP-12), no name autocomplete in the sheet (the QuickAddBar owns it), no pantry or task states (SHOP-16/17). `new` opens from a "Details" button on the QuickAddBar, prefilled with the typed text; `edit` from tapping a row (checked rows too). Unit is free text with suggestions (pcs, g, kg, ml, l, pack, bottle, can, plus units already used in the household). Blank quantity, unit and note are stored as null; a quantity must be above 0 with at most 3 decimals (comma accepted). Saving writes only the changed columns. Delete has no confirmation, only the 5-second undo toast.
 
 ### C4. Stores
 - Route: `/shopping/stores` · Purpose: SHOP-05.
