@@ -5,6 +5,7 @@ import { useSync } from '../sync/SyncEngine.ts';
 import type { HouseholdDb } from '../sync/db.ts';
 import { QuickAddBar } from '../ui/QuickAddBar.tsx';
 import { addItem, historyOf, suggest } from './QuickAdd.ts';
+import styles from './QuickAdd.module.css';
 
 type Props = { db: HouseholdDb; householdId: string; listId: string; items: ListItem[]; autoFocus: boolean };
 
@@ -16,16 +17,32 @@ export function QuickAdd({ db, householdId, listId, items, autoFocus }: Props) {
   syncRef.current = sync;
   const deps = useMemo(() => ({ onQueued: () => void syncRef.current.kick() }), []);
   const [value, setValue] = useState('');
+  const [failed, setFailed] = useState(false);
 
   const history = useMemo(() => historyOf(items), [items]);
   const suggestions = useMemo(() => suggest(history, value, { listId }), [history, value, listId]);
 
-  const add = (name: string) => {
+  // The field clears only once the row and its outbox entry are committed; on failure the text stays for a retry.
+  const add = async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    setValue('');
-    void addItem(db, deps, { householdId, listId, name: trimmed, userId: session?.user.id ?? null });
+    try {
+      await addItem(db, deps, { householdId, listId, name: trimmed, userId: session?.user.id ?? null });
+      setValue('');
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    }
   };
 
-  return <QuickAddBar value={value} onChange={setValue} suggestions={suggestions} onPick={add} onSubmit={add} autoFocus={autoFocus} />;
+  return (
+    <>
+      {failed ? (
+        <p role="alert" className={styles.failed}>
+          Couldn't add that item. Try again.
+        </p>
+      ) : null}
+      <QuickAddBar value={value} onChange={setValue} suggestions={suggestions} onPick={(l) => void add(l)} onSubmit={(t) => void add(t)} autoFocus={autoFocus} />
+    </>
+  );
 }

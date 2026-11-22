@@ -28,6 +28,10 @@ export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, pl
     setActive(-1);
     setClosed(false);
   }, [value]);
+  // The list can shrink without the text changing (a live query drops a name just added); never point past its end.
+  useEffect(() => {
+    setActive(-1);
+  }, [suggestions.length]);
   useEffect(() => {
     if (autoFocus) input.current?.focus();
   }, [autoFocus]);
@@ -47,7 +51,8 @@ export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, pl
       setClosed(true);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (open && active >= 0) pick(suggestions[active]!.label);
+      const chosen = open ? suggestions[active] : undefined;
+      if (chosen) pick(chosen.label);
       else if (!blank) onSubmit(value);
     }
   };

@@ -50,6 +50,17 @@ describe('QuickAddBar', () => {
     expect(onSubmit).toHaveBeenCalledWith('Lightbulbs');
   });
 
+  it('Enter does not throw when the list shrinks under the highlight; it submits the typed text', () => {
+    const onSubmit = vi.fn();
+    const { rerender } = render(<QuickAddBar value="mi" onChange={vi.fn()} suggestions={suggestions} onPick={vi.fn()} onSubmit={onSubmit} />);
+    const box = screen.getByRole('combobox');
+    fireEvent.keyDown(box, { key: 'ArrowDown' });
+    fireEvent.keyDown(box, { key: 'ArrowDown' });
+    rerender(<QuickAddBar value="mi" onChange={vi.fn()} suggestions={[suggestions[0]!]} onPick={vi.fn()} onSubmit={onSubmit} />);
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(onSubmit).toHaveBeenCalledWith('mi');
+  });
+
   it('clicking a suggestion picks it; Add is disabled on blank input', () => {
     const onPick = vi.fn();
     render(<Harness onPick={onPick} onSubmit={vi.fn()} />);

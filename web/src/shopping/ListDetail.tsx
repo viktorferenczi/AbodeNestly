@@ -2,9 +2,7 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router';
 import { useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { EmptyState } from '../ui/EmptyState.tsx';
-import { OfflineBanner } from '../ui/OfflineBanner.tsx';
 import { useLiveQuery } from '../ui/useLiveQuery.ts';
-import { useOnline } from '../ui/useOnline.ts';
 import { QuickAdd } from './QuickAdd.tsx';
 import styles from './ListDetail.module.css';
 
@@ -13,7 +11,6 @@ import styles from './ListDetail.module.css';
 export function ListDetail() {
   const { listId = '' } = useParams();
   const { status, db, household, modules } = useHousehold();
-  const online = useOnline();
   const householdId = household?.id;
 
   const data = useLiveQuery(async () => {
@@ -64,7 +61,6 @@ export function ListDetail() {
           <h2 className={styles.heading}>{data.list.name}</h2>
           {view.storeName ? <span className={styles.chip}>{view.storeName}</span> : null}
         </div>
-        {online ? null : <OfflineBanner message="You're offline. Changes are saved and sync when you reconnect." />}
         {empty ? <p className={styles.hint}>Add your first item</p> : null}
         <ul className={styles.rows} aria-label="Items">
           {view.unchecked.map((i) => (

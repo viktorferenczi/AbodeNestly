@@ -1,7 +1,7 @@
 import type { Household, ListItem, Profile, ShoppingList } from '@abodenestly/contract';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import Dexie from 'dexie';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { RequireModule } from '../app/RequireModule.tsx';
 import { Shell } from '../app/Shell.tsx';
@@ -146,11 +146,11 @@ describe('SHOP-02: list detail with quick add', () => {
     await waitFor(async () => expect((await stored()).items).toHaveLength(2));
   });
 
-  it('AC4 offline: banner shows, adding from a suggestion still adds the row and one outbox upsert', async () => {
+  it('AC4 offline: the sync chip says Offline, adding from a suggestion still adds the row and one outbox upsert', async () => {
     Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
     await seed([list('a', 'Groceries')], [item('1', 'bb', 'Milk', { checked: true })]);
     await renderDetail();
-    expect(await screen.findByText(/You're offline/)).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Offline' })).toBeTruthy();
     fireEvent.change(await box(), { target: { value: 'mi' } });
     fireEvent.click(await screen.findByRole('option', { name: 'Milk' }));
     await waitFor(async () => {
@@ -158,6 +158,18 @@ describe('SHOP-02: list detail with quick add', () => {
       expect(items.filter((i) => i.list_id === 'a')).toHaveLength(1);
       expect(out).toHaveLength(1);
     });
+  });
+
+  it('keeps the typed text and shows an alert when the write fails', async () => {
+    await seed([list('a', 'Groceries')]);
+    await renderDetail();
+    const input = (await box()) as HTMLInputElement;
+    const spy = vi.spyOn(Dexie.prototype, 'transaction').mockRejectedValueOnce(new Error('closed'));
+    fireEvent.change(input, { target: { value: 'Lightbulbs' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(input.value).toBe('Lightbulbs');
+    spy.mockRestore();
   });
 
   it('an unknown list says it is gone and links back', async () => {

@@ -5,6 +5,8 @@ describe('nameKey (parity with the SQL name_key)', () => {
   it.each([
     ['  Oat   Milk ', 'oat milk'],
     ['MILK', 'milk'],
+    ['\tMilk', ' milk'],
+    ['Milk\t', 'milk '],
     ['Oat\t\nMilk', 'oat milk'],
     ['milk', 'milk'],
     ['   ', ''],
