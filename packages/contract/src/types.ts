@@ -20,6 +20,39 @@ export interface Synced {
   readonly sync_seq: number;
 }
 
+// ---------- shopping (SPEC §5) ----------
+export type ListItemSource = 'manual' | 'pantry' | 'maintenance' | 'template' | 'recipe';
+
+export interface Store extends Synced {
+  name: string;
+}
+
+export interface ShoppingList extends Synced {
+  name: string;
+  store_id: UUID | null;
+  is_template: boolean;
+  readonly share_token: string | null; // server-owned: written only by POST/DELETE /lists/{id}/share, never by a sync upsert
+  archived_at: ISODateTime | null;
+}
+
+export interface ListItem extends Synced {
+  list_id: UUID;
+  name: string;
+  readonly name_key: string;
+  quantity: number | null;
+  unit: string | null;
+  note: string | null;
+  barcode: string | null;
+  checked: boolean;
+  checked_at: ISODateTime | null;
+  checked_by: UUID | null;
+  manual_position: number | null;
+  source: ListItemSource;
+  pantry_item_id: UUID | null;
+  maint_task_id: UUID | null;
+  created_by: UUID | null;
+}
+
 // ---------- core ----------
 export interface Profile {
   id: UUID;

@@ -1,11 +1,17 @@
-import type { Activity, Attachment, AttachmentEntity, NotificationPref, SyncRejection } from '@abodenestly/contract';
+import type {
+  Activity,
+  Attachment,
+  AttachmentEntity,
+  ListItem,
+  NotificationPref,
+  ShoppingList,
+  Store,
+  SyncRejection,
+} from '@abodenestly/contract';
 import Dexie, { type Table } from 'dexie';
 
-// The contract has no ShoppingList type yet; SHOP-01/08 replace this with it and add the other tables.
-export type ShoppingListRow = { id: string; household_id: string; name: string; deleted_at: string | null };
 // Minimal local rows for CORE-09 search; each module's list story appends columns with its own version bump.
 type NamedRow = { id: string; household_id: string; name: string; deleted_at: string | null };
-export type ListItemRow = NamedRow & { list_id: string };
 export type MaintTaskRow = { id: string; household_id: string; title: string; deleted_at: string | null };
 export type OutboxRow = { seq?: number; table: string; op: string; payload: unknown };
 /** SHOP-08: a mutation the server rejected. Same `seq` as the outbox row it came from, so a retry keeps its place. */
@@ -40,14 +46,14 @@ export type MetaRow = { key: string; value: number };
 
 /** One database per household (SPEC §6.1): own rows, own outbox, own pull cursor. */
 export class HouseholdDb extends Dexie {
-  shopping_list!: Table<ShoppingListRow, string>;
+  shopping_list!: Table<ShoppingList, string>;
   activity!: Table<Activity, string>;
-  list_item!: Table<ListItemRow, string>;
+  list_item!: Table<ListItem, string>;
   pantry_item!: Table<NamedRow, string>;
   recipe!: Table<NamedRow, string>;
   asset!: Table<NamedRow, string>;
   maint_task!: Table<MaintTaskRow, string>;
-  store!: Table<NamedRow, string>;
+  store!: Table<Store, string>;
   location!: Table<NamedRow, string>;
   contractor!: Table<NamedRow, string>;
   attachment!: Table<Attachment, string>;
