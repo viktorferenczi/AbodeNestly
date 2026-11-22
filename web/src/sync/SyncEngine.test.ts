@@ -115,16 +115,44 @@ describe('SHOP-08: sync loop', () => {
     expect(await readCursor(db)).toBe(4);
   });
 
-  it('does not overwrite a row that still has a queued change', async () => {
-    const { api, db, engine, write, setOnline } = await setup(false);
-    await write.upsert('list_item', item('i1', 'mine'));
-    setOnline(true);
-    // The push is rejected as a network error, so nothing pulls; make the push apply nothing but stay queued instead.
+  it('does not overwrite a row that still has a queued change, but still advances the cursor', async () => {
+    const { api, db, engine } = await setup();
+    // pantry_item is held back (the server does not accept it yet), so its mutation stays queued through a full push and pull.
+    await db.pantry_item.put({ id: 'p1', household_id: 'h1', name: 'mine', deleted_at: null });
+    await db.outbox.add({ table: 'pantry_item', op: 'upsert', payload: { id: 'm', table: 'pantry_item', op: 'upsert', row_id: 'p1', data: {}, client_ts: 'x' } });
+    api.syncPullResults = [
+      { ok: true, value: { cursor: 3, has_more: false, changes: { pantry_item: [{ id: 'p1', household_id: 'h1', name: 'old', deleted_at: null }, { id: 'p2', household_id: 'h1', name: 'new', deleted_at: null }] } } },
+    ];
+    await engine.kick();
+    expect(api.syncPullCalls).toHaveLength(1);
+    expect((await db.pantry_item.get('p1'))?.name).toBe('mine');
+    expect((await db.pantry_item.get('p2'))?.name).toBe('new');
+    expect(await readCursor(db)).toBe(3);
+  });
+
+  it('does not overwrite a row whose change is in outbox_failed', async () => {
+    const { api, db, engine } = await setup();
+    await db.list_item.put(item('i1', 'mine'));
+    await db.outbox_failed.put({ seq: 1, table: 'list_item', op: 'upsert', payload: { id: 'm', table: 'list_item', op: 'upsert', row_id: 'i1', data: {}, client_ts: 'x' }, reason: 'validation', detail: 'bad', failed_at: 'now' });
+    api.syncPullResults = [{ ok: true, value: { cursor: 2, has_more: false, changes: { list_item: [item('i1', 'old')] } } }];
+    await engine.kick();
+    expect((await db.list_item.get('i1'))?.name).toBe('mine');
+  });
+
+  it('a push that stops on a non-network error skips the pull', async () => {
+    const { api, engine, write } = await setup();
+    await write.upsert('list_item', item('i1'));
     api.syncPushResults = [{ ok: false, error: { code: 'unknown' } }];
-    api.syncPullResults = [{ ok: true, value: { cursor: 1, has_more: false, changes: { list_item: [item('i1', 'old')] } } }];
     await engine.kick();
     expect(api.syncPullCalls).toHaveLength(0);
-    expect((await db.list_item.get('i1'))?.name).toBe('mine');
+  });
+
+  it('a notification_pref row survives kick(), is not in the POST body, and is not counted', async () => {
+    const { api, db, engine } = await setup();
+    await db.outbox.add({ table: 'notification_pref', op: 'upsert', payload: { id: 'np', table: 'notification_pref', op: 'upsert', row_id: 'r', data: {}, client_ts: 'x' } });
+    await engine.kick();
+    expect(api.syncPushCalls).toHaveLength(0);
+    expect(await db.outbox.count()).toBe(1);
   });
 
   it('moves a rejected mutation to outbox_failed with its reason and keeps the rest flowing', async () => {

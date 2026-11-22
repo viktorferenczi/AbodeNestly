@@ -2,8 +2,7 @@ import { expect, test } from '@playwright/test';
 import { adminClient, createUser, deleteUser, signInWithMagicLink, type E2eUser } from './helpers/auth.ts';
 import { seedOutbox } from './helpers/outbox.ts';
 
-// SHOP-08-web: the chip and the sync sheet, driven by a change seeded into the outbox. The full add/check
-// journey (E2E-SHOP-2) moves to SHOP-02/04-web, which bring the add-item UI.
+// SHOP-08-web: the chip and the sync sheet, driven by a change seeded into the outbox. E2E-SHOP-2 (offline add and check, a second client sees the items) is not this spec: it moves to SHOP-02/04-web with the add-item UI.
 test.describe('SHOP-08: sync sheet', () => {
   let user: E2eUser;
   let householdId: string;

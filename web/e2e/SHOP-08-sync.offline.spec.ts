@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { adminClient, createUser, deleteUser, signInWithMagicLink, type E2eUser } from './helpers/auth.ts';
 import { outboxCount, seedOutbox } from './helpers/outbox.ts';
 
-// TESTING §6 steps 2 and 4-6: work offline, reconnect, and the queued change reaches the server in one POST /sync.
+// TESTING §6 steps 2 and 5-6 (offline, reconnect, push body, empty outbox). Steps 3-4 (act through the UI, assert the local row and outbox row) need the add-item UI of SHOP-02-web, so the outbox row is seeded through IndexedDB here and the unit tests cover the one-transaction write (AC1).
 test.describe('SHOP-08: offline outbox', () => {
   let user: E2eUser;
   let householdId: string;

@@ -43,21 +43,24 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
       <p>Failed changes: {failed.length}</p>
       {failed.length > 0 ? (
         <ul className={styles.list} aria-label="Failed changes">
-          {failed.map((row) => (
-            <li key={row.seq} className={styles.row}>
-              <span className={styles.what}>
-                {row.table} · {ACTION[row.op] ?? row.op} · Couldn’t save: {REASON[row.reason]}
-              </span>
-              <span className={styles.actions}>
-                <button type="button" onClick={() => void sync.retry(row.seq)}>
-                  Retry
-                </button>
-                <button type="button" onClick={() => void sync.discard(row.seq)}>
-                  Discard
-                </button>
-              </span>
-            </li>
-          ))}
+          {failed.map((row) => {
+            const what = `${row.table} ${ACTION[row.op] ?? row.op}`;
+            return (
+              <li key={row.seq} className={styles.row}>
+                <span className={styles.what}>
+                  {row.table} · {ACTION[row.op] ?? row.op} · Couldn’t save: {REASON[row.reason]}
+                </span>
+                <span className={styles.actions}>
+                  <button type="button" aria-label={`Retry ${what}`} onClick={() => void sync.retry(row.seq)}>
+                    Retry
+                  </button>
+                  <button type="button" aria-label={`Discard ${what}`} onClick={() => void sync.discard(row.seq)}>
+                    Discard
+                  </button>
+                </span>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </Sheet>

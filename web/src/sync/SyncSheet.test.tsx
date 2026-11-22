@@ -82,6 +82,17 @@ describe('SHOP-08: SyncStatusChip', () => {
     expect((await screen.findByRole('button', { name: /3 to sync/ })).textContent).toContain('3 to sync');
   });
 
+  it('ignores held-back rows: a notification_pref outbox row is not "1 to sync"', async () => {
+    const db = await openHouseholdDb('h1');
+    await db.outbox.add({ table: 'notification_pref', op: 'upsert', payload: { ...envelope('np'), table: 'notification_pref' } });
+    db.close();
+    renderChip(new FakeSync());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(chip()).toBeNull();
+  });
+
   it('shows Syncing while the engine syncs, then Offline, then hides', async () => {
     await seed(0);
     const sync = new FakeSync();
@@ -122,8 +133,8 @@ describe('SHOP-08: SyncSheet (DESIGN B12)', () => {
     const { dialog } = await open();
     expect(await within(dialog).findByText('Failed changes: 1')).toBeTruthy();
     expect(within(dialog).getByText(/list_item · save · Couldn’t save: invalid/)).toBeTruthy();
-    expect(within(dialog).getByRole('button', { name: 'Retry' })).toBeTruthy();
-    expect(within(dialog).getByRole('button', { name: 'Discard' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Retry list_item save' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Discard list_item save' })).toBeTruthy();
   });
 
   it('state idle: says everything is synced', async () => {
@@ -139,8 +150,8 @@ describe('SHOP-08: SyncSheet (DESIGN B12)', () => {
   it('Retry and Discard call the engine with the change', async () => {
     await seed(0, [{ table: 'list_item', op: 'delete', reason: 'rls_denied' }]);
     const { sync, dialog } = await open();
-    fireEvent.click(await within(dialog).findByRole('button', { name: 'Retry' }));
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Discard' }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Retry list_item delete' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Discard list_item delete' }));
     expect(sync.retried).toEqual([100]);
     expect(sync.discarded).toEqual([100]);
   });

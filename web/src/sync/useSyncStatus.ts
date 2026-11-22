@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { useLiveQuery } from '../ui/useLiveQuery.ts';
 import { useOnline } from '../ui/useOnline.ts';
-import { useSync, type SyncPhase } from './SyncEngine.ts';
+import { PUSHABLE, useSync, type SyncPhase } from './SyncEngine.ts';
 
 export type ChipState = { kind: 'idle' } | { kind: 'syncing' } | { kind: 'offline' } | { kind: 'pending'; count: number };
 export type SyncStatus = { phase: SyncPhase; online: boolean; pending: number; failed: number; chip: ChipState };
@@ -20,7 +20,8 @@ export function useSyncStatus(): SyncStatus {
   const { db } = useHousehold();
   const phase = useSyncExternalStore(sync.subscribe, sync.getPhase, () => 'idle' as const);
   const online = useOnline();
-  const pending = useLiveQuery(async () => (db ? db.outbox.count() : 0), [db]) ?? 0;
+  // Only rows the loop will send count: rows held back for tables the server does not accept yet are not sync debt.
+  const pending = useLiveQuery(async () => (db ? db.outbox.filter((r) => PUSHABLE.has(r.table)).count() : 0), [db]) ?? 0;
   const failed = useLiveQuery(async () => (db ? db.outbox_failed.count() : 0), [db]) ?? 0;
   return { phase, online, pending, failed, chip: chipState(phase, online, pending, failed) };
 }
