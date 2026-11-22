@@ -66,6 +66,3 @@ export async function updateItem(db: HouseholdDb, deps: Partial<MutateDeps>, bef
 }
 
 export const deleteItem = (db: HouseholdDb, deps: Partial<MutateDeps>, id: string) => mutate(db, deps).remove('list_item', id);
-
-export const restoreItem = (db: HouseholdDb, deps: Partial<MutateDeps>, id: string) =>
-  mutate(db, deps).patch('list_item', id, { deleted_at: null });

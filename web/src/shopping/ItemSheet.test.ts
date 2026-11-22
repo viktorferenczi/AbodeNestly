@@ -3,7 +3,7 @@ import Dexie from 'dexie';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseQuantity, quantityText, stepQuantity } from '../lib/quantity.ts';
 import { openHouseholdDb } from '../sync/db.ts';
-import { createItem, deleteItem, formatQty, restoreItem, toFields, unitSuggestions, updateItem } from './ItemSheet.ts';
+import { createItem, deleteItem, formatQty, toFields, unitSuggestions, updateItem } from './ItemSheet.ts';
 
 let n = 0;
 const deps = () => ({ uuid: () => `m${++n}`, now: () => '2026-02-01T00:00:00Z' });
@@ -128,15 +128,11 @@ describe('SHOP-03: writes', () => {
     await db.close();
   });
 
-  it('delete then undo: deleted_at returns to null, two outbox rows', async () => {
+  it('delete soft-deletes the row and queues one delete', async () => {
     const { db, id } = await seedItem();
     await deleteItem(db, deps(), id);
     expect((await db.list_item.get(id))!.deleted_at).toBe('2026-02-01T00:00:00Z');
-    await restoreItem(db, deps(), id);
-    expect((await db.list_item.get(id))!.deleted_at).toBeNull();
-    const out = await db.outbox.toArray();
-    expect(out.map((o) => o.op)).toEqual(['delete', 'upsert']);
-    expect((out[1]!.payload as { data: object }).data).toEqual({ deleted_at: null });
+    expect((await db.outbox.toArray()).map((o) => o.op)).toEqual(['delete']);
     await db.close();
   });
 

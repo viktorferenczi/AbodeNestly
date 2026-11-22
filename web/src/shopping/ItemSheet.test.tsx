@@ -62,7 +62,7 @@ async function renderDetail(path = '/shopping/a', household = house()) {
       </ApiProvider>
     </AuthProvider>,
   );
-  return { sync };
+  return { sync, router };
 }
 
 async function stored() {
@@ -188,7 +188,7 @@ describe('SHOP-03: item sheet', () => {
     const save = within(dlg).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
     fireEvent.change(within(dlg).getByRole('textbox', { name: 'Quantity' }), { target: { value: '0' } });
     expect(save.disabled).toBe(true);
-    expect(within(dlg).getByText('Enter a number above 0')).toBeTruthy();
+    expect(within(dlg).getByText('Enter a number above 0, with at most 3 decimals')).toBeTruthy();
     fireEvent.change(within(dlg).getByRole('textbox', { name: 'Quantity' }), { target: { value: '' } });
     expect(save.disabled).toBe(false);
     fireEvent.change(within(dlg).getByLabelText('Name'), { target: { value: '  ' } });
@@ -205,28 +205,67 @@ describe('SHOP-03: item sheet', () => {
     expect((await stored()).out).toHaveLength(0);
   });
 
-  it('delete removes the row and shows an undo toast; Undo restores it', async () => {
+  it('delete hides the row at once but writes nothing during the undo window; Undo brings it back with an empty outbox', async () => {
     await seed([list('a', 'Groceries')], [milk()]);
     await renderDetail();
     const dlg = await openMilk();
     fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(within(screen.getByRole('list', { name: 'Items' })).queryByText('Milk')).toBeNull());
     expect(await screen.findByText('Deleted Milk')).toBeTruthy();
+    expect((await stored()).out).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(await within(await items()).findByText('Milk')).toBeTruthy();
     expect(screen.queryByText('Deleted Milk')).toBeNull();
-    const { out } = await stored();
-    expect(out.map((o) => o.op)).toEqual(['delete', 'upsert']);
+    const { out, items: rows } = await stored();
+    expect(out).toHaveLength(0);
+    expect(rows[0]!.deleted_at).toBeNull();
   });
 
-  it('the undo toast goes away after 5 seconds', async () => {
+  it('the delete is written once the 5 second undo window ends', async () => {
     await seed([list('a', 'Groceries')], [milk()]);
     await renderDetail();
     const dlg = await openMilk();
     fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
     expect(await screen.findByText('Deleted Milk')).toBeTruthy();
     await waitFor(() => expect(screen.queryByText('Deleted Milk')).toBeNull(), { timeout: 6000 });
+    await waitFor(async () => expect((await stored()).out.map((o) => o.op)).toEqual(['delete']));
   }, 10000);
+
+  it('leaving the screen writes a delete that is still waiting', async () => {
+    await seed([list('a', 'Groceries')], [milk()]);
+    const { router } = await renderDetail();
+    const dlg = await openMilk();
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByText('Deleted Milk')).toBeTruthy();
+    await router.navigate('/');
+    await waitFor(async () => expect((await stored()).out.map((o) => o.op)).toEqual(['delete']));
+  });
+
+  it('a pull while the sheet is open is not written back: only the edited column is queued', async () => {
+    await seed([list('a', 'Groceries')], [milk()]);
+    await renderDetail();
+    const dlg = await openMilk();
+    const db = await openHouseholdDb('h1');
+    await db.list_item.update('1', { quantity: 5 });
+    await db.close();
+    await waitFor(() => expect((screen.getByRole('list', { name: 'Items' }).textContent ?? '')).toContain('5 l'));
+    fireEvent.change(within(dlg).getByLabelText('Note'), { target: { value: '' } });
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
+    await waitFor(async () => expect((await stored()).out).toHaveLength(1));
+    const { out, items: rows } = await stored();
+    expect((out[0]!.payload as { data: object }).data).toEqual({ note: null });
+    expect(rows[0]!.quantity).toBe(5);
+  });
+
+  it('the quantity error states the whole rule and is tied to the field', async () => {
+    await seed([list('a', 'Groceries')], [item('1', 'a', 'Milk')]);
+    await renderDetail();
+    const dlg = await openMilk();
+    const qty = within(dlg).getByRole('textbox', { name: 'Quantity' });
+    fireEvent.change(qty, { target: { value: '1.2345' } });
+    const msg = within(dlg).getByText('Enter a number above 0, with at most 3 decimals');
+    expect(qty.getAttribute('aria-describedby')).toBe(msg.id);
+  });
 
   it('a checked item opens the sheet too', async () => {
     await seed([list('a', 'Groceries')], [item('1', 'a', 'Bread', { checked: true })]);

@@ -23,6 +23,7 @@ export function ItemSheet({ mode, item, initialName = '', units, onSave, onDelet
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const unitsId = useId();
+  const errorId = useId();
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const badQuantity = !parseQuantity(form.quantity).ok;
   const fields = toFields(form);
@@ -65,10 +66,10 @@ export function ItemSheet({ mode, item, initialName = '', units, onSave, onDelet
         </label>
         <div className={styles.field}>
           <span>Quantity</span>
-          <Stepper value={form.quantity} onChange={(quantity) => set({ quantity })} invalid={badQuantity} />
+          <Stepper value={form.quantity} onChange={(quantity) => set({ quantity })} invalid={badQuantity} describedBy={badQuantity ? errorId : undefined} />
           {badQuantity ? (
-            <p role="alert" className={styles.error}>
-              Enter a number above 0
+            <p id={errorId} role="alert" className={styles.error}>
+              Enter a number above 0, with at most 3 decimals
             </p>
           ) : null}
         </div>

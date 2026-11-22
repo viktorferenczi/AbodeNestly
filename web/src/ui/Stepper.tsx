@@ -2,14 +2,14 @@ import { useEffect, useRef } from 'react';
 import { stepQuantity } from '../lib/quantity.ts';
 import styles from './Stepper.module.css';
 
-type Props = { value: string; onChange: (text: string) => void; label?: string; invalid?: boolean };
+type Props = { value: string; onChange: (text: string) => void; label?: string; invalid?: boolean; describedBy?: string };
 
 const HOLD_DELAY = 400;
 const HOLD_EVERY = 100;
 
 // DESIGN A6 Stepper. The value is the field text, so "0,5" and half-typed numbers survive; the caller validates.
 // Holding − or + repeats. A hold must not also fire the click that follows it.
-export function Stepper({ value, onChange, label = 'Quantity', invalid }: Props) {
+export function Stepper({ value, onChange, label = 'Quantity', invalid, describedBy }: Props) {
   const latest = useRef(value);
   latest.current = value;
   const timers = useRef<{ delay?: ReturnType<typeof setTimeout>; every?: ReturnType<typeof setInterval> }>({});
@@ -57,6 +57,7 @@ export function Stepper({ value, onChange, label = 'Quantity', invalid }: Props)
         autoComplete="off"
         aria-label={label}
         aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
