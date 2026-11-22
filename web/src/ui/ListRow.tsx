@@ -14,6 +14,8 @@ type ListRowProps = {
   /** Greyed out, e.g. a checked item. */
   muted?: boolean;
   onOpen: () => void;
+  /** A checkbox before the title. A separate control, because a button cannot nest inside the open button. */
+  check?: { checked: boolean; onToggle: () => void; label: string };
   /** Fired by a swipe left past the threshold. Keyboard users get the same action from `actions`. */
   onSwipeLeft?: () => void;
   /** Always-reachable buttons (DESIGN A6): the swipe action must also exist as a button. */
@@ -21,7 +23,7 @@ type ListRowProps = {
 };
 
 // DESIGN A6 ListRow. Swipe uses plain pointer events; no gesture library.
-export function ListRow({ title, subtitle, chip, trailing, muted, onOpen, onSwipeLeft, actions }: ListRowProps) {
+export function ListRow({ title, subtitle, chip, trailing, muted, onOpen, check, onSwipeLeft, actions }: ListRowProps) {
   const [dx, setDx] = useState(0);
   // The latest delta lives in a ref: pointerup can run before React commits the last pointermove's state.
   const latest = useRef(0);
@@ -61,9 +63,12 @@ export function ListRow({ title, subtitle, chip, trailing, muted, onOpen, onSwip
         onPointerUp={end}
         onPointerCancel={end}
       >
+        {check ? (
+          <input type="checkbox" className={styles.check} checked={check.checked} aria-label={check.label} onChange={check.onToggle} />
+        ) : null}
         <button
           type="button"
-          className={muted ? `${styles.main} ${styles.muted}` : styles.main}
+          className={[styles.main, muted ? styles.muted : '', check?.checked ? styles.struck : ''].filter(Boolean).join(' ')}
           onClick={() => {
             // A drag that ends over the button is not a tap.
             if (!dragged.current) onOpen();
