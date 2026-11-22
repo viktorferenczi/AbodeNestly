@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toAcceptFailure, toRemoveFailure, toSignFailure } from './apiClient.ts';
+import { toAcceptFailure, toRemoveFailure, toSignFailure, toSyncFailure } from './apiClient.ts';
 
 const body = (code: string) => ({ error: { code, message: 'x' } });
 
@@ -49,5 +49,18 @@ describe('CORE-11: toSignFailure', () => {
     expect(toSignFailure(403, null)).toEqual({ code: 'forbidden' });
     expect(toSignFailure(400, null)).toEqual({ code: 'validation' });
     expect(toSignFailure(502, null)).toEqual({ code: 'unknown' });
+  });
+});
+
+describe('SHOP-08: toSyncFailure', () => {
+  it.each([
+    [503, body('retryable'), 'retryable'],
+    [503, null, 'retryable'],
+    [403, body('forbidden'), 'forbidden'],
+    [400, body('validation'), 'validation'],
+    [500, body('internal'), 'unknown'],
+    [502, null, 'unknown'],
+  ])('%s %j -> %s', (status, json, code) => {
+    expect(toSyncFailure(status, json)).toEqual({ code });
   });
 });

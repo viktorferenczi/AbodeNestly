@@ -1345,10 +1345,10 @@ Tables: outbox, list_item, shopping_list  Endpoints: GET /sync; POST /sync  Type
 Schema change: no  Contract change: no
 
 ## Tests required
-Unit: web/src/shopping/SyncSheet.test.ts → AC1 one local transaction writes the row and the outbox; AC2 reconnect calls push then pull
-Component: web/src/shopping/SyncSheet.test.tsx → AC3 failed with Retry and Discard, AC4 pending chip, AC5 Sync now. States idle, pending, failed.
+Unit: web/src/sync/SyncEngine.test.ts → AC1 one local transaction writes the row and the outbox; AC2 reconnect calls push then pull
+Component: web/src/sync/SyncSheet.test.tsx → AC3 failed with Retry and Discard, AC4 pending chip, AC5 Sync now. States idle, pending, failed.
 Integration: n/a (no API handler in this story)
-E2E: E2E-SHOP-2 web/e2e/SyncSheet.spec.ts
+E2E: web/e2e/SyncSheet.spec.ts (chip and sheet with a seeded outbox row). E2E-SHOP-2 (offline add and check, a second client sees the items) moves to SHOP-02-web / SHOP-04-web, which bring the add-item UI.
 Offline test: yes, TESTING §6 — web/e2e/SHOP-08-sync.offline.spec.ts
 
 ## Dependencies

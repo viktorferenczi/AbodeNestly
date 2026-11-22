@@ -46,7 +46,9 @@ void sync.kick();
 ## Sync loop (`sync/sync.ts`)
 - `kick()` coalesces calls; runs push (`POST /sync` with outbox in insertion order) then pull (`GET /sync?since=cursor`) until `has_more` is false.
 - Applied mutation ids are removed from the outbox; rejected ones are moved to `outbox_failed` and surfaced in a non-blocking toast, never retried automatically except `rls_denied` after a token refresh.
-- Pull applies rows with `bulkPut` per table in one transaction, then writes the cursor.
+- Only tables the server accepts (`PUSHABLE` in `sync/SyncEngine.ts`, mirroring `api/_lib/sync/tables.ts`) are pushed; rows for other tables stay in the outbox until their `-api` story adds them to both lists.
+- Discard on a failed change deletes it and, unless another change targets the row, the local row; it resets the cursor to 0 and pulls again.
+- Pull applies rows with `bulkPut` per table in one transaction, then writes the cursor. Rows with a queued or failed change are not overwritten. A Dexie version that adds a pulled table must reset the cursor in its `upgrade`.
 - Triggers: `visibilitychange` → visible, `online` event, Realtime event for the household, `setInterval` 5 min while visible.
 - Realtime: `supabase.channel(household_id).on('postgres_changes', { schema: 'public', filter: `household_id=eq.${id}` }, () => sync.kick())`. Payload ignored.
 

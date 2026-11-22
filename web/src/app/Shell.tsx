@@ -4,7 +4,8 @@ import { useAuth } from '../core/auth/AuthProvider.tsx';
 import { HouseholdProvider, useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { useApi } from '../core/api/ApiProvider.tsx';
 import { Switcher } from '../core/Switcher.tsx';
-import { createActivityPull, SyncProvider } from '../sync/SyncEngine.ts';
+import { createSyncEngine, NOOP_SYNC, SyncProvider } from '../sync/SyncEngine.ts';
+import { SyncStatusChip } from '../sync/SyncStatusChip.tsx';
 import { TopBar } from '../ui/TopBar.tsx';
 import styles from './Shell.module.css';
 import { TabBar } from './TabBar.tsx';
@@ -25,6 +26,7 @@ function Bar() {
       <TopBar title={household?.name ?? 'AbodeNestly'} trailing={
           <>
             <span className={styles.name}>{profile?.display_name}</span>
+            {status === 'ready' ? <SyncStatusChip /> : null}
             {status === 'ready' ? (
               <Link to="/search" aria-label="Search" className={styles.search}>
                 🔍
@@ -37,9 +39,9 @@ function Bar() {
   );
 }
 
-// Provides the interim sync engine (CORE-08) and kicks it on the SPEC §6.4 triggers available here: opening the
-// household, coming back to the tab, reconnecting, and every 5 minutes while the tab is visible. The Realtime
-// `postgres_changes` kick is not wired: it arrives with SHOP-08's channel subscription, which replaces this engine.
+// Provides the sync engine (SHOP-08) and kicks it on the SPEC §6.4 triggers available here: opening the
+// household, coming back to the tab, reconnecting, and every 5 minutes while the tab is visible. Writes kick it
+// themselves (`mutate`). The Realtime `postgres_changes` kick arrives with SHOP-09.
 function HouseholdSync({ children }: { children: ReactNode }) {
   const api = useApi();
   const { db, household } = useHousehold();
@@ -47,8 +49,8 @@ function HouseholdSync({ children }: { children: ReactNode }) {
   const engine = useMemo(
     () =>
       householdId && db
-        ? createActivityPull({ api, householdId, getDb: () => db, isOnline: () => navigator.onLine })
-        : { kick: () => Promise.resolve() },
+        ? createSyncEngine({ api, householdId, getDb: () => db, isOnline: () => navigator.onLine })
+        : NOOP_SYNC,
     [api, db, householdId],
   );
   useEffect(() => {
@@ -69,7 +71,7 @@ function HouseholdSync({ children }: { children: ReactNode }) {
   return <SyncProvider engine={engine}>{children}</SyncProvider>;
 }
 
-// Authenticated layout. Sync status arrives with later stories.
+// Authenticated layout.
 export function Shell() {
   return (
     <HouseholdProvider>

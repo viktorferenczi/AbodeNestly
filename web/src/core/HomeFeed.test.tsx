@@ -69,9 +69,11 @@ async function renderHome(opts: { household?: Household; rows?: Activity[]; serv
   dbOpenDelayMs = opts.dbOpenDelayMs ?? 0;
   const household = opts.household ?? house();
   const api = new FakeApiClient();
-  // Shell kicks a real activity pull that replaces the cached 30-day window with the server page. The fake server
-  // must serve the seeded rows, or that pull races the live query and sometimes wipes them (the flaky AC2/AC3).
-  api.fetchActivityResult = { ok: true, value: [...(opts.rows ?? []), ...(opts.serverRows ?? [])] };
+  // Shell kicks a real sync that stores the server's page. The fake server serves the seeded rows plus the server-only
+  // ones, so the pull can only add to what the live query shows.
+  api.syncPullResults = [
+    { ok: true, value: { cursor: 1, has_more: false, changes: { activity: [...(opts.rows ?? []), ...(opts.serverRows ?? [])] } } },
+  ];
   api.fetchHousehold = async () => ({ ok: true, value: { household, role: 'owner' } });
   api.fetchMyHouseholdsResult = { ok: true, value: [{ household, role: 'owner' }] };
   writeLastHousehold('h1');
