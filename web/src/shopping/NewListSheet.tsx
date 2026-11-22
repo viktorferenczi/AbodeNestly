@@ -8,13 +8,21 @@ export function NewListSheet({ stores, onSave, onClose }: { stores: Store[]; onS
   const [name, setName] = useState('');
   const [storeId, setStoreId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const valid = name.trim().length > 0;
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
     if (!valid || busy) return;
     setBusy(true);
-    await onSave(name.trim(), storeId || null);
+    setFailed(false);
+    try {
+      await onSave(name.trim(), storeId || null);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -32,6 +40,7 @@ export function NewListSheet({ stores, onSave, onClose }: { stores: Store[]; onS
           Name
           <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
         </label>
+        {failed ? <p role="alert">Could not save the list. Try again.</p> : null}
         {stores.length > 0 ? (
           <label className={styles.field}>
             Store

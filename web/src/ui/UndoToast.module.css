@@ -2,7 +2,8 @@
   position: fixed;
   left: var(--space-4);
   right: var(--space-4);
-  bottom: var(--space-4);
+  /* Clears the tab bar, like the FAB. */
+  bottom: calc(var(--touch-min) + var(--space-4));
   z-index: 20;
   display: flex;
   align-items: center;

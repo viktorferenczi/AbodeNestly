@@ -19,24 +19,32 @@ type ListRowProps = {
 // DESIGN A6 ListRow. Swipe uses plain pointer events; no gesture library.
 export function ListRow({ title, subtitle, chip, onOpen, onSwipeLeft, actions }: ListRowProps) {
   const [dx, setDx] = useState(0);
+  // The latest delta lives in a ref: pointerup can run before React commits the last pointermove's state.
+  const latest = useRef(0);
   const start = useRef<number | null>(null);
   const dragged = useRef(false);
 
   const onDown = (e: PointerEvent) => {
     start.current = e.clientX;
+    latest.current = 0;
     dragged.current = false;
+    // Keeps pointerup coming to the row when the finger drifts off it.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
   };
   const onMove = (e: PointerEvent) => {
     if (start.current == null) return;
     const delta = Math.min(0, e.clientX - start.current);
     if (delta < -4) dragged.current = true;
+    latest.current = delta;
     setDx(delta);
   };
   const end = () => {
     if (start.current == null) return;
     start.current = null;
-    if (dx <= -SWIPE_THRESHOLD) onSwipeLeft?.();
+    const swiped = latest.current <= -SWIPE_THRESHOLD;
+    latest.current = 0;
     setDx(0);
+    if (swiped) onSwipeLeft?.();
   };
 
   return (

@@ -204,12 +204,32 @@ describe('SHOP-01: Lists overview', () => {
     Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
     await seed();
     const { router } = await renderLists();
-    expect(await screen.findByText(/Offline\. Changes sync/)).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Offline' })).toBeTruthy();
+    await screen.findByRole('heading', { name: 'Shopping' });
     fireEvent.click(screen.getAllByRole('button', { name: 'New list' })[0]!);
     const dialog = await screen.findByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Hardware' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/shopping\/.+/));
+    expect(await outbox()).toHaveLength(1);
+  });
+
+  it('only archived lists: no first-list prompt, Archived stays', async () => {
+    await seed([list('a', 'Old', { archived_at: '2026-02-01T00:00:00Z' })]);
+    await renderLists();
+    expect(await screen.findByText('Archived (1)')).toBeTruthy();
+    expect(screen.queryByText('Make your first list')).toBeNull();
+  });
+
+  it('archiving the same list twice queues one write and one toast', async () => {
+    await seed([list('a', 'Groceries')]);
+    await renderLists();
+    const button = await screen.findByRole('button', { name: 'Archive Groceries' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(screen.getAllByText('Archived Groceries')).toHaveLength(1);
+    await waitFor(() => expect(screen.getByText('Archived (1)')).toBeTruthy());
+    await wait(300);
     expect(await outbox()).toHaveLength(1);
   });
 

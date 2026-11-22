@@ -20,7 +20,7 @@ export interface Synced {
   readonly sync_seq: number;
 }
 
-// ---------- shopping (SPEC §5) ----------
+// ---------- shopping (SPEC §8) ----------
 export type ListItemSource = 'manual' | 'pantry' | 'maintenance' | 'template' | 'recipe';
 
 export interface Store extends Synced {

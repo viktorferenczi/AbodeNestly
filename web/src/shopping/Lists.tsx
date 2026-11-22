@@ -4,10 +4,8 @@ import { useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { useSync } from '../sync/SyncEngine.ts';
 import { EmptyState } from '../ui/EmptyState.tsx';
 import { ListRow } from '../ui/ListRow.tsx';
-import { OfflineBanner } from '../ui/OfflineBanner.tsx';
 import { UndoToast } from '../ui/UndoToast.tsx';
 import { useLiveQuery } from '../ui/useLiveQuery.ts';
-import { useOnline } from '../ui/useOnline.ts';
 import { archiveList, createList, deleteList, listSections, restoreList, UNDO_MS, type ListRowModel } from './Lists.ts';
 import { NewListSheet } from './NewListSheet.tsx';
 import styles from './Lists.module.css';
@@ -19,7 +17,6 @@ export function Lists() {
   const { status, db, household, modules } = useHousehold();
   const sync = useSync();
   const navigate = useNavigate();
-  const online = useOnline();
   const householdId = household?.id;
   const [sheet, setSheet] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
@@ -70,13 +67,16 @@ export function Lists() {
   if (status !== 'ready' || !modules.shopping || !sections || !db || !householdId) return null;
 
   const defer = (entry: Pending) => {
+    // A second action on the same list replaces the first, so only one write is ever queued.
+    const old = timers.current.get(entry.id);
+    if (old) clearTimeout(old.timer);
     const timer = setTimeout(() => {
       timers.current.delete(entry.id);
       setPending((p) => p.filter((x) => x.id !== entry.id));
       void (entry.kind === 'archive' ? archiveList : deleteList)(db, deps, entry.id);
     }, UNDO_MS);
     timers.current.set(entry.id, { entry, timer });
-    setPending((p) => [entry, ...p]);
+    setPending((p) => [entry, ...p.filter((x) => x.id !== entry.id)]);
   };
   const undo = (id: string) => {
     const t = timers.current.get(id);
@@ -115,11 +115,11 @@ export function Lists() {
     />
   );
 
-  const empty = sections.lists.length === 0 && sections.templates.length === 0;
+  // Archived lists are lists: the first-list prompt is only for a household with none at all.
+  const empty = sections.lists.length === 0 && sections.templates.length === 0 && sections.archived.length === 0;
 
   return (
     <div className={styles.lists} data-testid="lists">
-      {online ? null : <OfflineBanner message="Offline. Changes sync when you are back online." />}
       <div className={styles.head}>
         <h2 className={styles.heading}>Shopping</h2>
         <button type="button" className={styles.plus} aria-label="New list" onClick={() => setSheet(true)}>
@@ -166,7 +166,7 @@ export function Lists() {
         </button>
       )}
       {pending.map((p, index) => (
-        <UndoToast key={p.id} index={index} message={`${p.kind === 'archive' ? 'Archived' : 'Deleted'} ${p.name}`} onUndo={() => undo(p.id)} />
+        <UndoToast key={p.id} index={pending.length - 1 - index} message={`${p.kind === 'archive' ? 'Archived' : 'Deleted'} ${p.name}`} onUndo={() => undo(p.id)} />
       ))}
       {sheet ? (
         <NewListSheet
