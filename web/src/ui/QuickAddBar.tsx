@@ -13,11 +13,13 @@ type Props = {
   onSubmit: (text: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  /** Shows a Details button that hands over the typed text (opens the item sheet). */
+  onDetails?: (text: string) => void;
 };
 
 // DESIGN A6 QuickAddBar: field, Add button and an autocomplete listbox above it (ARIA combobox pattern).
 // Mic and barcode buttons arrive with SHOP-14 and SHOP-10.
-export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, placeholder = 'Add an item', autoFocus }: Props) {
+export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, placeholder = 'Add an item', autoFocus, onDetails }: Props) {
   const listId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(-1);
@@ -98,6 +100,11 @@ export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, pl
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
         />
+        {onDetails ? (
+          <button type="button" className={styles.details} onClick={() => onDetails(value)}>
+            Details
+          </button>
+        ) : null}
         <button type="button" className={styles.add} disabled={blank} onClick={() => onSubmit(value)}>
           Add
         </button>

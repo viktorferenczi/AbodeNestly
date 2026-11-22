@@ -9,6 +9,10 @@ type ListRowProps = {
   subtitle?: string;
   /** Small chip next to the title (e.g. the store). */
   chip?: string;
+  /** Right-aligned text such as a quantity. */
+  trailing?: string;
+  /** Greyed out, e.g. a checked item. */
+  muted?: boolean;
   onOpen: () => void;
   /** Fired by a swipe left past the threshold. Keyboard users get the same action from `actions`. */
   onSwipeLeft?: () => void;
@@ -17,7 +21,7 @@ type ListRowProps = {
 };
 
 // DESIGN A6 ListRow. Swipe uses plain pointer events; no gesture library.
-export function ListRow({ title, subtitle, chip, onOpen, onSwipeLeft, actions }: ListRowProps) {
+export function ListRow({ title, subtitle, chip, trailing, muted, onOpen, onSwipeLeft, actions }: ListRowProps) {
   const [dx, setDx] = useState(0);
   // The latest delta lives in a ref: pointerup can run before React commits the last pointermove's state.
   const latest = useRef(0);
@@ -59,7 +63,7 @@ export function ListRow({ title, subtitle, chip, onOpen, onSwipeLeft, actions }:
       >
         <button
           type="button"
-          className={styles.main}
+          className={muted ? `${styles.main} ${styles.muted}` : styles.main}
           onClick={() => {
             // A drag that ends over the button is not a tap.
             if (!dragged.current) onOpen();
@@ -68,6 +72,7 @@ export function ListRow({ title, subtitle, chip, onOpen, onSwipeLeft, actions }:
         >
           <span className={styles.title}>{title}</span>
           {chip ? <span className={styles.chip}>{chip}</span> : null}
+          {trailing ? <span className={styles.trailing}>{trailing}</span> : null}
           {subtitle ? <span className={styles.subtitle}>{subtitle}</span> : null}
         </button>
         {actions ? <div className={styles.actions}>{actions}</div> : null}

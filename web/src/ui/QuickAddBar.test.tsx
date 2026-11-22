@@ -71,4 +71,13 @@ describe('QuickAddBar', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Milk' }));
     expect(onPick).toHaveBeenCalledWith('Milk');
   });
+
+  it('Details shows only when onDetails is passed and sends the typed text', () => {
+    const { rerender } = render(<QuickAddBar value="Mi" onChange={() => undefined} suggestions={[]} onPick={vi.fn()} onSubmit={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Details' })).toBeNull();
+    const onDetails = vi.fn();
+    rerender(<QuickAddBar value="Mi" onChange={() => undefined} suggestions={[]} onPick={vi.fn()} onSubmit={vi.fn()} onDetails={onDetails} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+    expect(onDetails).toHaveBeenCalledWith('Mi');
+  });
 });
