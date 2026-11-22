@@ -1,5 +1,4 @@
 import type {
-  Activity,
   ApiError,
   CreateHouseholdRequest,
   CreateInviteRequest,
@@ -10,12 +9,15 @@ import type {
   Role,
   SignAttachmentRequest,
   SignAttachmentResponse,
+  SyncPullResponse,
+  SyncPushRequest,
+  SyncPushResponse,
   UpdateModulesRequest,
 } from '@abodenestly/contract';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type ApiFailure = {
-  code: 'validation' | 'invalid_code' | 'network' | 'unknown' | 'last_owner' | 'forbidden' | 'not_found' | 'module_disabled';
+  code: 'validation' | 'invalid_code' | 'network' | 'unknown' | 'last_owner' | 'forbidden' | 'not_found' | 'module_disabled' | 'retryable';
 };
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: ApiFailure };
 
@@ -45,8 +47,12 @@ export interface ApiClient {
   fetchMembers(householdId: string): Promise<ApiResult<MemberRow[]>>;
   /** DELETE /households/{id}/members/{user_id}: remove someone, or leave when `userId` is the caller. */
   removeMember(householdId: string, userId: string): Promise<ApiResult<null>>;
-  /** CORE-08 interim pull (until SHOP-08's /sync): live activity rows created at or after `sinceIso`, newest first, at most `limit`. Read under RLS. */
-  fetchActivity(householdId: string, sinceIso: string, limit: number): Promise<ApiResult<Activity[]>>;
+  /** SHOP-08: POST /sync. 503 `retryable` (deadlock) → `retryable`; the rows stay queued. */
+  syncPush(req: SyncPushRequest): Promise<ApiResult<SyncPushResponse>>;
+  /** Forces a token refresh; the sync loop calls it once before it gives up on an `rls_denied` rejection (react-web skill). */
+  refreshSession(): Promise<void>;
+  /** SHOP-08: GET /sync, one page of changes after `since`. */
+  syncPull(householdId: string, since: number, limit: number): Promise<ApiResult<SyncPullResponse>>;
   /** Promotes a member to owner. Direct write under RLS (SPEC §7: network-only core settings). */
   makeOwner(householdId: string, userId: string): Promise<ApiResult<null>>;
   /** CORE-11: creates the attachment row and returns the Storage upload URL. 403 `module_disabled` when the entity's module is off. */
@@ -104,6 +110,15 @@ export function toRemoveFailure(status: number, body: ApiError | null): ApiFailu
   return { code: 'unknown' };
 }
 
+/** Maps a /sync error response to a failure; exported for the table test. */
+export function toSyncFailure(status: number, body: ApiError | null): ApiFailure {
+  const code = body?.error?.code;
+  if (status === 503 || code === 'retryable') return { code: 'retryable' };
+  if (code === 'forbidden' || status === 403) return { code: 'forbidden' };
+  if (code === 'validation' || status === 400) return { code: 'validation' };
+  return { code: 'unknown' };
+}
+
 async function readJson(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -118,7 +133,7 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
     return data.session?.access_token ?? null;
   }
 
-  async function send(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<Response> {
+  async function send(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<Response> {
     const request = async (token: string | null) =>
       fetch(`${baseUrl}${path}`, {
         method,
@@ -136,7 +151,7 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
   }
 
   async function call<T>(
-    method: 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
     body: unknown,
     okStatus: (status: number) => boolean,
@@ -238,22 +253,6 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
         return { ok: false, error: { code: 'network' } };
       }
     },
-    async fetchActivity(householdId, sinceIso, limit) {
-      try {
-        const { data, error } = await supabase
-          .from('activity')
-          .select('*')
-          .eq('household_id', householdId)
-          .is('deleted_at', null)
-          .gte('created_at', sinceIso)
-          .order('created_at', { ascending: false })
-          .limit(limit);
-        if (error) return { ok: false, error: { code: 'unknown' } };
-        return { ok: true, value: (data ?? []) as Activity[] };
-      } catch {
-        return { ok: false, error: { code: 'network' } };
-      }
-    },
     async removeMember(householdId, userId) {
       const result = await call<null>(
         'DELETE',
@@ -331,6 +330,16 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
       } catch {
         return { ok: false, error: { code: 'network' } };
       }
+    },
+    async refreshSession() {
+      await supabase.auth.refreshSession().catch(() => undefined);
+    },
+    syncPush(req) {
+      return call<SyncPushResponse>('POST', '/sync', req, (s) => s === 200, toSyncFailure);
+    },
+    syncPull(householdId, since, limit) {
+      const query = `household_id=${encodeURIComponent(householdId)}&since=${since}&limit=${limit}`;
+      return call<SyncPullResponse>('GET', `/sync?${query}`, undefined, (s) => s === 200, toSyncFailure);
     },
     signAttachment(req) {
       return call<SignAttachmentResponse>('POST', '/attachments/sign', req, (s) => s === 200 || s === 201, toSignFailure);

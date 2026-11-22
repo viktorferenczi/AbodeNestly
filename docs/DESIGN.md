@@ -169,6 +169,7 @@ _Deviation (CORE-09): the module list stories do not exist yet, so a result row 
 - Layout: status line · "Pending changes: N" · "Failed changes: M" with list (table, action, reason) and "Retry" / "Discard" · "Sync now".
 - States: `idle` · `pending` · `failed`.
 - Offline: works.
+- Web: the chip sits in the shell's top bar on every screen (not only list screens) and the sheet lives in `web/src/sync/`, because it also shows core writes. Failed changes: Retry puts the change back in the queue; Discard removes it and the local row it created, then pulls the server's version.
 
 ---
 

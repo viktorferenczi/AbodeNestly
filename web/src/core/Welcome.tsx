@@ -21,6 +21,8 @@ const CREATE_MESSAGES: Record<ApiFailure['code'], string> = {
   not_found: 'Something went wrong. Try again.',
   // Attachment code; never returned by create or join.
   module_disabled: 'Something went wrong. Try again.',
+  // Sync code; never returned by create or join.
+  retryable: 'Something went wrong. Try again.',
 };
 
 const JOIN_MESSAGES: Record<ApiFailure['code'], string> = {
@@ -34,6 +36,8 @@ const JOIN_MESSAGES: Record<ApiFailure['code'], string> = {
   not_found: 'Something went wrong. Try again.',
   // Attachment code; never returned by create or join.
   module_disabled: 'Something went wrong. Try again.',
+  // Sync code; never returned by create or join.
+  retryable: 'Something went wrong. Try again.',
 };
 
 export function Welcome() {

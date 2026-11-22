@@ -1,4 +1,4 @@
-import type { Activity, Attachment, AttachmentEntity, NotificationPref } from '@abodenestly/contract';
+import type { Activity, Attachment, AttachmentEntity, NotificationPref, SyncRejection } from '@abodenestly/contract';
 import Dexie, { type Table } from 'dexie';
 
 // The contract has no ShoppingList type yet; SHOP-01/08 replace this with it and add the other tables.
@@ -8,9 +8,21 @@ type NamedRow = { id: string; household_id: string; name: string; deleted_at: st
 export type ListItemRow = NamedRow & { list_id: string };
 export type MaintTaskRow = { id: string; household_id: string; title: string; deleted_at: string | null };
 export type OutboxRow = { seq?: number; table: string; op: string; payload: unknown };
+/** SHOP-08: a mutation the server rejected. Same `seq` as the outbox row it came from, so a retry keeps its place. */
+export type OutboxFailedRow = {
+  seq: number;
+  table: string;
+  op: string;
+  payload: unknown;
+  reason: SyncRejection['reason'];
+  detail: string;
+  failed_at: string;
+};
+/** Pull-only tables (SPEC §6.3) whose rows the client stores as received. */
+type PulledRow = { household_id: string };
 /**
- * CORE-11: a pick made offline. Separate from `outbox` on purpose: /sync carries rows, not bytes, and nothing
- * drains `outbox` yet (SHOP-08). The attachment control drains this queue itself when online.
+ * CORE-11: a pick made offline. Separate from `outbox` on purpose: /sync carries rows, not bytes, so the sync
+ * loop (SHOP-08) must not drain this queue. The attachment control drains this queue itself when online.
  */
 export type AttachmentOutboxRow = {
   id: string;
@@ -42,6 +54,11 @@ export class HouseholdDb extends Dexie {
   attachment_outbox!: Table<AttachmentOutboxRow, string>;
   notification_pref!: Table<NotificationPref, [string, string, string]>;
   outbox!: Table<OutboxRow, number>;
+  outbox_failed!: Table<OutboxFailedRow, number>;
+  household!: Table<{ id: string }, string>;
+  member!: Table<PulledRow & { user_id: string }, [string, string]>;
+  invite!: Table<PulledRow & { id: string }, string>;
+  store_item_order!: Table<PulledRow & { store_id: string; name_key: string }, [string, string]>;
   meta!: Table<MetaRow, string>;
 
   constructor(householdId: string) {
@@ -72,6 +89,17 @@ export class HouseholdDb extends Dexie {
     });
     // CORE-12: my switches for this household. Keyed by the server's PK; no `id`, no soft delete (a missing row means enabled).
     this.version(5).stores({ notification_pref: '[user_id+household_id+type], household_id' });
+    // SHOP-08: rejected mutations, and the pull-only tables the sync loop now stores. Rule: any later version that
+    // adds a pulled table must reset the cursor like this one does, or rows below the old cursor never arrive.
+    this.version(6)
+      .stores({
+        outbox_failed: 'seq',
+        household: 'id',
+        member: '[household_id+user_id], household_id',
+        invite: 'id, household_id',
+        store_item_order: '[store_id+name_key], household_id',
+      })
+      .upgrade((tx) => tx.table('meta').put({ key: 'cursor', value: 0 }));
   }
 }
 
@@ -88,9 +116,13 @@ export async function readCursor(db: HouseholdDb): Promise<number> {
   return (await db.meta.get('cursor'))?.value ?? 0;
 }
 
-/** SHOP-08's pull loop moves the cursor; this story only stores it. */
+/** The sync loop moves the cursor after each pulled page. */
 export async function writeCursor(db: HouseholdDb, value: number): Promise<void> {
   await db.meta.put({ key: 'cursor', value });
+}
+
+export async function failedCount(db: HouseholdDb): Promise<number> {
+  return db.outbox_failed.count();
 }
 
 /**

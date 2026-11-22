@@ -1,0 +1,71 @@
+import type { Mutation, MovementReason, SyncTable } from '@abodenestly/contract';
+import type { HouseholdDb, OutboxRow } from './db.ts';
+
+/** Columns the server writes itself (SPEC §6.2); they never travel in an upsert's `data`. Mirrors api/_lib/sync/tables.ts. */
+const SERVER_OWNED: ReadonlySet<string> = new Set([
+  'id',
+  'household_id',
+  'created_at',
+  'updated_at',
+  'sync_seq',
+  'name_key',
+  'share_token',
+]);
+
+export type MutateDeps = {
+  uuid: () => string;
+  now: () => string;
+  /** Called after each committed write; the caller passes `() => sync.kick()`. */
+  onQueued?: () => void;
+};
+
+const defaults: MutateDeps = { uuid: () => crypto.randomUUID(), now: () => new Date().toISOString() };
+
+type Row = { id: string };
+
+/**
+ * Every shopping and pantry write goes through here (AGENTS.md: offline is a requirement): the local row and the
+ * outbox entry commit in one transaction, so they cannot diverge. UI code never calls `fetch` for data writes.
+ */
+export function mutate(db: HouseholdDb, overrides: Partial<MutateDeps> = {}) {
+  const deps = { ...defaults, ...overrides };
+
+  async function commit(table: SyncTable, op: Mutation['op'], payload: Mutation, local: () => Promise<unknown>): Promise<void> {
+    await db.transaction('rw', db.table(table), db.outbox, async () => {
+      await local();
+      const entry: OutboxRow = { table, op, payload };
+      await db.outbox.add(entry);
+    });
+    deps.onQueued?.();
+  }
+
+  return {
+    /** Stores the full row locally and queues its fields minus the server-owned columns. */
+    upsert(table: SyncTable, row: Row & Record<string, unknown>): Promise<void> {
+      const data = Object.fromEntries(Object.entries(row).filter(([key]) => !SERVER_OWNED.has(key)));
+      const payload: Mutation = { id: deps.uuid(), table, op: 'upsert', row_id: row.id, data, client_ts: deps.now() };
+      return commit(table, 'upsert', payload, () => db.table(table).put(row));
+    },
+    /** Soft delete (SPEC §6.3): the row stays locally with `deleted_at` set. */
+    remove(table: SyncTable, id: string): Promise<void> {
+      const payload: Mutation = { id: deps.uuid(), table, op: 'delete', row_id: id, client_ts: deps.now() };
+      return commit(table, 'delete', payload, () => db.table(table).update(id, { deleted_at: deps.now() }));
+    },
+    /** Pantry quantity changes are deltas, never absolute writes (AGENTS.md). Pushed once PANT-03-api accepts them. */
+    delta(id: string, delta: number, reason: MovementReason): Promise<void> {
+      const payload: Mutation = {
+        id: deps.uuid(),
+        table: 'pantry_item',
+        op: 'delta',
+        row_id: id,
+        data: { field: 'quantity', delta, reason },
+        client_ts: deps.now(),
+      };
+      return commit('pantry_item', 'delta', payload, () =>
+        db.table('pantry_item').where('id').equals(id).modify((r: { quantity?: number }) => {
+          r.quantity = (r.quantity ?? 0) + delta;
+        }),
+      );
+    },
+  };
+}
