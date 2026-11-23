@@ -32,7 +32,11 @@ export function ListDetail() {
   const [pending, setPending] = useState<{ id: string; name: string }[]>([]);
   const timers = useRef(new Map<string, { name: string; timer: ReturnType<typeof setTimeout> }>());
   // Clear checked: the ids captured at tap time, written after the undo window.
-  const [clears, setClears] = useState<{ key: number; ids: string[] }[]>([]);
+  const [clears, setClears] = useState<{ key: number; ids: string[]; writing: boolean }[]>([]);
+  // Creation order of each toast, so the newest sits on top whatever its kind (DESIGN A6).
+  const toastSeq = useRef(new Map<string, number>());
+  const seqCounter = useRef(0);
+  const stamp = (key: string) => toastSeq.current.set(key, ++seqCounter.current);
   const clearTimers = useRef(new Map<number, { ids: string[]; timer: ReturnType<typeof setTimeout> }>());
   const clearSeq = useRef(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -126,7 +130,10 @@ export function ListDetail() {
           onToggle: () => {
             if (waiting) queue?.undo(i.id);
             else if (muted) void uncheck(db, deps, i.id);
-            else queue?.check(i);
+            else {
+              stamp(`c${i.id}`);
+              queue?.check(i);
+            }
           },
         }}
         onOpen={() => setEditing(i)}
@@ -140,11 +147,15 @@ export function ListDetail() {
     const key = ++clearSeq.current;
     const timer = setTimeout(() => {
       clearTimers.current.delete(key);
-      setClears((c) => c.filter((x) => x.key !== key));
-      void clearChecked(db, deps, ids);
+      // The rows stay hidden until the delete has landed, so they do not flash back under Checked.
+      setClears((c) => c.map((x) => (x.key === key ? { ...x, writing: true } : x)));
+      void clearChecked(db, deps, ids)
+        .catch(() => undefined)
+        .finally(() => setClears((c) => c.filter((x) => x.key !== key)));
     }, UNDO_MS);
     clearTimers.current.set(key, { ids, timer });
-    setClears((c) => [...c, { key, ids }]);
+    stamp(`x${key}`);
+    setClears((c) => [...c, { key, ids, writing: false }]);
   };
   const undoClear = (key: number) => {
     clearTimeout(clearTimers.current.get(key)?.timer);
@@ -154,6 +165,7 @@ export function ListDetail() {
   const remove = (i: ListItem) => {
     setEditing(null);
     queue?.undo(i.id);
+    stamp(`d${i.id}`);
     const old = timers.current.get(i.id);
     if (old) clearTimeout(old.timer);
     const timer = setTimeout(() => {
@@ -180,8 +192,8 @@ export function ListDetail() {
   const toasts = [
     ...pending.map((d) => ({ key: `d${d.id}`, message: `Deleted ${d.name}`, undo: () => undo(d.id) })),
     ...(queue?.pending() ?? []).filter((c) => !c.writing).map((c) => ({ key: `c${c.id}`, message: `Checked ${c.name}`, undo: () => queue?.undo(c.id) })),
-    ...clears.map((c) => ({ key: `x${c.key}`, message: `Cleared ${c.ids.length} ${c.ids.length === 1 ? 'item' : 'items'}`, undo: () => undoClear(c.key) })),
-  ];
+    ...clears.filter((c) => !c.writing).map((c) => ({ key: `x${c.key}`, message: `Cleared ${c.ids.length} ${c.ids.length === 1 ? 'item' : 'items'}`, undo: () => undoClear(c.key) })),
+  ].sort((a, b) => (toastSeq.current.get(a.key) ?? 0) - (toastSeq.current.get(b.key) ?? 0));
 
   return (
     <div className={styles.detail} data-testid="list-detail">
@@ -250,7 +262,7 @@ export function ListDetail() {
       {toasts.map((t, index) => (
         <UndoToast key={t.key} index={index} message={t.message} onUndo={t.undo} />
       ))}
-      <QuickAdd db={db} householdId={householdId} listId={listId} items={data.items} autoFocus={empty} />
+      <QuickAdd db={db} householdId={householdId} listId={listId} items={data.items} autoFocus={empty && !clearing} />
     </div>
   );
 }

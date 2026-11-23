@@ -55,6 +55,11 @@ test.describe('SHOP-04: check off and clear checked', () => {
     await expect(page.getByText('Cleared 2 items')).toBeVisible();
     await expect(page.getByText('Add your first item')).toBeVisible({ timeout: 10_000 });
 
-    await expect.poll(async () => (await serverRows()).every((r) => r.deleted_at != null && r.checked)).toBe(true);
+    await expect
+      .poll(async () => {
+        const rows = await serverRows();
+        return rows.length === 2 && rows.every((r) => r.deleted_at != null && r.checked);
+      })
+      .toBe(true);
   });
 });

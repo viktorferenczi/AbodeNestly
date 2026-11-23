@@ -156,6 +156,16 @@ describe('SHOP-04: check off', () => {
     expect(screen.queryByRole('button', { name: 'List actions' })).toBeNull();
   });
 
+  it('toasts stack in creation order and Clear checked does not focus the add field', async () => {
+    await seed([list('a', 'Groceries')], [item('1', 'a', 'Milk'), item('22', 'a', 'Bread', { checked: true, checked_at: '2026-01-03T00:00:00Z' })]);
+    await renderDetail();
+    fireEvent.click(await screen.findByRole('button', { name: 'List actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Clear checked' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Check off Milk' }));
+    expect(screen.getAllByRole('status').map((e) => e.textContent)).toEqual([expect.stringContaining('Cleared 1 item'), expect.stringContaining('Checked Milk')]);
+    expect(document.activeElement).not.toBe(screen.getByRole('combobox'));
+  });
+
   it('no checked items: no overflow menu', async () => {
     await seed([list('a', 'Groceries')], [item('1', 'a', 'Milk')]);
     await renderDetail();
