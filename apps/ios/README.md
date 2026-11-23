@@ -49,7 +49,8 @@ redirects and opens the resulting `abodenestly-dev://auth/callback?code=…` in 
 deletes the user (and its household). `HouseholdSettingsUITests` (E2E-CORE-3: an owner switches Pantry off in Settings, the Pantry tab disappears without a
 relaunch and `household.module_pantry` is false; it needs the API on :3000 too). `WelcomeUITests` also needs the API on :3000
 (`pnpm --filter @abodenestly/api dev`) and reads `shopping_list` / `location` with the service role.
-Without the key both skip. The app launches with `-reset-session` (Debug builds only) to start signed out.
+`SyncSheetUITests` (SHOP-08: the chip reads "1 to sync" for a change the server rejects, the sheet lists it, Discard clears it) seeds that change through the Debug-only `E2E_OUTBOX` environment variable (JSON array of `{table, op, row_id, data}`) and needs the API on :3000 too.
+Without the key they skip. The app launches with `-reset-session` (Debug builds only) to start signed out.
 Core has no test target of its own, so its unit and component tests live in `AbodeNestlyTests`.
 Until iOS sync exists, Settings keeps its offline snapshot of the household and the viewer's role in `UserDefaults`
 under `abodenestly.household.<user_id>.<household_id>` (Members: `abodenestly.members.<household_id>`).

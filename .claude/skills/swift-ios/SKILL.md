@@ -44,21 +44,19 @@ Rule: `Shopping`, `Pantry`, `Maintenance` packages depend on `Core`, `Sync`, `UI
 
 ## Writes: always through the outbox
 ```swift
-try await database.mutate { db in
-    try row.save(db)
-    try Outbox.upsert("list_item", row).insert(db)
-}
+try await database.upsert(table: "list_item", row: ["id": .string(id), "list_id": .string(list), "name": .string("Milk")])
 await syncEngine.kick()
 ```
-- `Outbox` has `upsert`, `delete`, `delta(pantryItem:delta:reason:)`.
+- `HouseholdDatabase` (`Sync/Outbox.swift`) has `upsert(table:row:)`, `patch(table:id:fields:localOnly:)`, `remove(table:id:)` (soft delete) and `delta(pantryItemId:delta:reason:)`. Each does the local write and the outbox insert in **one** `pool.write`, strips the server-owned columns (`id`, `household_id`, `created_at`, `updated_at`, `sync_seq`, `name_key`, `share_token`) from `data`, and returns; the caller then kicks. Rows are `[String: JSONValue]` keyed by column. `patch` queues only the changed columns so a concurrent edit of another column is not overwritten.
 - Pantry quantity changes update the local row optimistically and enqueue a `delta`.
 - Core settings (create household, invites, modules, members) call the API directly and show "needs connection" when offline.
 
-## Sync engine (`SyncEngine` actor)
-- `kick()` coalesces; push outbox (`POST /sync`) in insertion order, then pull (`GET /sync?since=`) until `has_more == false`, apply with `bulkUpsert` in one transaction, store cursor.
-- Triggers: `scenePhase == .active`, `NWPathMonitor` becomes satisfied, Realtime event for the household, 5-minute timer while active, `BGAppRefreshTask` (`com.abodenestly.sync`) when backgrounded.
+## Sync engine (`LiveSyncEngine` actor, `Sync/LiveSyncEngine.swift`)
+- `kick()` coalesces (a kick during a run causes exactly one more); push the outbox (`POST /sync`, up to 500 rows in `seq` order, only the tables the server accepts: `SyncTables.pushable`), then, if the push reached the server, pull (`GET /sync?since=`) until `has_more == false`. `applyPull` writes a page and the cursor in one transaction and ignores unknown tables and columns; a row with a change still queued keeps its local value; `*_at` timestamps are stored as millisecond UTC text. A migration that adds a pulled table must also reset `meta.cursor` to 0.
+- The wire types (`SyncMutation`, `SyncPushResult`, `SyncPullPage`) live in `Sync/SyncWire.swift`; `Sync` reaches the network only through `SyncTransport` (`HttpApiService` and `FakeApiService` conform).
+- Triggers: `scenePhase == .active`, `NWPathMonitor` becomes satisfied, entering or switching a household, 5-minute timer while active, `BGAppRefreshTask` (`com.abodenestly.sync`, scheduled when backgrounded and after each run, ≥ 15 min; identifier and `fetch` mode are in `Info.plist`), and a Realtime event for the household (SHOP-09-ios).
 - Realtime: `supabase.realtimeV2.channel(householdId)` with `postgresChange(AnyAction.self, schema: "public", filter: "household_id=eq.<id>")`; payload ignored, triggers `kick()`.
-- Rejected mutations go to `outbox_failed` and surface as a non-blocking banner.
+- Rejected mutations move to `outbox_failed` and show only through the `SyncStatusChip` ("N to sync" counts queued plus failed) and the sync sheet (DESIGN B12), like web: no banner. The sheet's Retry puts the change back at its old `seq` with the same mutation id; Discard drops it and, if nothing else targets the row, the local row too, then resets the cursor and syncs. `rls_denied` gets one automatic retry after a session refresh. Rows queued for tables the server does not accept yet (`notification_pref`, pantry, maintenance) wait, unsent and uncounted.
 
 ## Configuration
 `Config/Dev.xcconfig` and `Config/Prod.xcconfig` set `API_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` as Info.plist keys; `Shared/AppConfig` reads them once. Two schemes: `AbodeNestly Dev`, `AbodeNestly Prod`. Never hard-code a URL or key.

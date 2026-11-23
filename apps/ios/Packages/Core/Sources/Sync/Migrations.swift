@@ -117,6 +117,92 @@ enum Migrations {
             try db.execute(sql: "CREATE INDEX notification_pref_household_idx ON notification_pref (household_id)")
         }
 
+        // SHOP-08: the server's full columns for the tables /sync pushes (all nullable locally: a row may be written
+        // before the server stamps `created_at` / `updated_at` / `sync_seq`), the pull-only tables web also stores,
+        // and the queue of rejected changes. RULE (same as web `db.ts`): any later migration that adds a table the
+        // pull returns must also reset `meta.cursor` to 0, or rows below the old cursor never arrive.
+        migrator.registerMigration("v6") { db in
+            func add(_ table: String, _ columns: [(String, String)]) throws {
+                for (name, type) in columns {
+                    try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN \(name) \(type)")
+                }
+            }
+            let stamps: [(String, String)] = [("created_at", "TEXT"), ("updated_at", "TEXT"), ("sync_seq", "INTEGER")]
+            try add("shopping_list", [
+                ("store_id", "TEXT"), ("is_template", "BOOLEAN"), ("share_token", "TEXT"), ("archived_at", "TEXT"),
+            ] + stamps)
+            try add("list_item", [
+                ("name_key", "TEXT"), ("quantity", "REAL"), ("unit", "TEXT"), ("note", "TEXT"), ("barcode", "TEXT"),
+                ("checked", "BOOLEAN"), ("checked_at", "TEXT"), ("checked_by", "TEXT"), ("manual_position", "INTEGER"),
+                ("source", "TEXT"), ("pantry_item_id", "TEXT"), ("maint_task_id", "TEXT"), ("created_by", "TEXT"),
+            ] + stamps)
+            try add("store", stamps)
+            try add("location", [("kind", "TEXT")] + stamps)
+
+            try db.create(table: "household") { t in
+                t.primaryKey("id", .text)
+                t.column("name", .text)
+                t.column("created_by", .text)
+                t.column("module_shopping", .boolean)
+                t.column("module_pantry", .boolean)
+                t.column("module_maintenance", .boolean)
+                t.column("currency", .text)
+                t.column("created_at", .text)
+                t.column("updated_at", .text)
+                t.column("deleted_at", .text)
+                t.column("sync_seq", .integer)
+            }
+            try db.create(table: "member") { t in
+                t.column("household_id", .text).notNull()
+                t.column("user_id", .text).notNull()
+                t.column("role", .text)
+                t.column("joined_at", .text)
+                t.column("left_at", .text)
+                t.column("updated_at", .text)
+                t.column("sync_seq", .integer)
+                t.primaryKey(["household_id", "user_id"])
+            }
+            try db.create(table: "invite") { t in
+                t.primaryKey("id", .text)
+                t.column("household_id", .text).notNull().indexed()
+                t.column("code", .text)
+                t.column("role", .text)
+                t.column("created_by", .text)
+                t.column("expires_at", .text)
+                t.column("max_uses", .integer)
+                t.column("uses", .integer)
+                t.column("created_at", .text)
+                t.column("updated_at", .text)
+                t.column("deleted_at", .text)
+                t.column("sync_seq", .integer)
+            }
+            try db.create(table: "store_item_order") { t in
+                t.column("household_id", .text).notNull()
+                t.column("store_id", .text).notNull()
+                t.column("name_key", .text).notNull()
+                t.column("mean_position", .double)
+                t.column("samples", .integer)
+                t.column("updated_at", .text)
+                t.column("sync_seq", .integer)
+                t.primaryKey(["store_id", "name_key"])
+            }
+            // A rejected change leaves `outbox` and waits here for Retry or Discard; `seq` is the outbox seq it had,
+            // so Retry puts it back at its old place.
+            try db.create(table: "outbox_failed") { t in
+                t.primaryKey("seq", .integer)
+                t.column("id", .text).notNull()
+                t.column("table_name", .text).notNull()
+                t.column("op", .text).notNull()
+                t.column("row_id", .text).notNull()
+                t.column("data", .text).notNull()
+                t.column("client_ts", .text).notNull()
+                t.column("reason", .text).notNull()
+                t.column("detail", .text).notNull()
+                t.column("failed_at", .text).notNull()
+            }
+            try db.execute(sql: "UPDATE meta SET value = '0' WHERE key = 'cursor'")
+        }
+
         return migrator
     }
 }

@@ -116,6 +116,21 @@ public struct AttachmentUpload: Sendable, Equatable, Identifiable {
     }
 }
 
+/// A mutation to queue when a household file is first created (E2E hook, Debug builds only).
+public struct SeedMutation: Sendable, Equatable {
+    public var table: String
+    public var op: String
+    public var rowId: UUID
+    public var data: [String: JSONValue]?
+
+    public init(table: String, op: String = "upsert", rowId: UUID = UUID(), data: [String: JSONValue]? = nil) {
+        self.table = table
+        self.op = op
+        self.rowId = rowId
+        self.data = data
+    }
+}
+
 /// The handle `open` returns: which household and file, and whether its pool still works.
 public struct OpenHousehold: Sendable {
     public let householdId: UUID
@@ -138,15 +153,19 @@ public struct OpenHousehold: Sendable {
 /// of the household being left before the next opens. Web twin: `web/src/sync/db.ts`.
 public actor HouseholdDatabase {
     private let root: URL
-    private let directory: URL
+    let directory: URL
     private let seedLists: [UUID: String]
-    private var pool: DatabasePool?
-    private var handle: OpenHousehold?
+    private let seedOutbox: [SeedMutation]
+    // Internal, not private: the sync extensions (Outbox.swift, PullApply.swift) work on the open pool.
+    var pool: DatabasePool?
+    var handle: OpenHousehold?
 
     /// `rootURL` is a temporary directory in tests and Application Support in the app. `seedLists` (E2E only) names
-    /// one list to insert when a household is opened without any.
-    public init(rootURL: URL, seedLists: [UUID: String] = [:]) {
+    /// one list to insert when a household is opened without any; `seedOutbox` (E2E only) queues mutations the
+    /// first time any household file is created.
+    public init(rootURL: URL, seedLists: [UUID: String] = [:], seedOutbox: [SeedMutation] = []) {
         self.seedLists = seedLists
+        self.seedOutbox = seedOutbox
         root = rootURL
         directory = rootURL.appendingPathComponent("households", isDirectory: true)
     }
@@ -169,6 +188,7 @@ public actor HouseholdDatabase {
         if let handle, handle.householdId == householdId { return handle }
         close()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let isNew = !FileManager.default.fileExists(atPath: fileURL(for: householdId).path)
         let pool = try DatabasePool(path: fileURL(for: householdId).path)
         try Migrations.migrator().migrate(pool)
         try pool.write { db in
@@ -179,6 +199,14 @@ public actor HouseholdDatabase {
                     sql: "INSERT INTO shopping_list (id, household_id, name) VALUES (?, ?, ?)",
                     arguments: [UUID().uuidString.lowercased(), householdId.uuidString.lowercased(), name]
                 )
+            }
+        }
+        if isNew {
+            let seeds = seedOutbox
+            try pool.write { db in
+                for seed in seeds {
+                    try Self.queue(db, table: seed.table, op: seed.op, rowId: seed.rowId.uuidString.lowercased(), data: seed.data, now: Date())
+                }
             }
         }
         let opened = OpenHousehold(householdId: householdId, fileName: fileName(for: householdId), pool: pool)
@@ -194,7 +222,7 @@ public actor HouseholdDatabase {
         handle = nil
     }
 
-    // MARK: Cursor (SHOP-08's pull loop moves it; this story only stores it)
+    // MARK: Cursor (the sync loop reads it before each pull; `applyPull` writes it with the page)
 
     public func readCursor() throws -> Int {
         let pool = try requirePool()
@@ -665,11 +693,11 @@ public actor HouseholdDatabase {
         }
     }
 
-    private static let dateStyle = Date.ISO8601FormatStyle(includingFractionalSeconds: true, timeZone: .gmt)
+    static let dateStyle = Date.ISO8601FormatStyle(includingFractionalSeconds: true, timeZone: .gmt)
 
-    private static func text(_ date: Date) -> String { date.formatted(dateStyle) }
+    static func text(_ date: Date) -> String { date.formatted(dateStyle) }
 
-    private static func date(_ text: String) -> Date? {
+    static func date(_ text: String) -> Date? {
         (try? Date(text, strategy: dateStyle)) ?? (try? Date(text, strategy: Date.ISO8601FormatStyle(timeZone: .gmt)))
     }
 
@@ -732,7 +760,7 @@ public actor HouseholdDatabase {
         }
     }
 
-    private func requirePool() throws -> DatabasePool {
+    func requirePool() throws -> DatabasePool {
         guard let pool else { throw HouseholdDatabaseError.notOpen }
         return pool
     }

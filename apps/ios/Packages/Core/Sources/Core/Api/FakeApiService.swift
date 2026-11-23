@@ -1,9 +1,10 @@
 import Contract
 import Foundation
 import os
+import Sync
 
 /// Hand-written fake for component and unit tests (TESTING §2: no mocking libraries).
-public final class FakeApiService: ApiService {
+public final class FakeApiService: ApiService, SyncTransport {
     public enum Call: Sendable, Equatable {
         case createHousehold(name: String)
         case acceptInvite(code: String)
@@ -15,11 +16,13 @@ public final class FakeApiService: ApiService {
         case makeOwner(householdId: UUID, userId: UUID)
         case fetchHousehold(householdId: UUID, userId: UUID)
         case fetchMyHouseholds(userId: UUID)
-        case fetchActivity(householdId: UUID, since: Date, limit: Int)
         case updateModules(householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?)
         case updateHousehold(householdId: UUID, name: String?, currency: String?)
         case signAttachment(householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int)
         case upload(url: URL, byteCount: Int, mime: String)
+        case syncPush(SyncPushBody)
+        case syncPull(householdId: String, since: Int, limit: Int)
+        case refreshSession
     }
 
     private struct State {
@@ -35,7 +38,6 @@ public final class FakeApiService: ApiService {
         var makeOwnerResult: Result<Void, ApiFailure> = .success(())
         var householdResult: Result<HouseholdWithRole?, ApiFailure> = .success(nil)
         var myHouseholdsResult: Result<[HouseholdWithRole], ApiFailure> = .success([])
-        var activityResult: Result<[Activity], ApiFailure> = .success([])
         var updateModulesResult: Result<Household, ApiFailure> = .failure(.unknown)
         var updateHouseholdResult: Result<Household, ApiFailure> = .failure(.unknown)
         var signResult: Result<SignedUpload, ApiFailure> = .success(SignedUpload(
@@ -43,6 +45,9 @@ public final class FakeApiService: ApiService {
         ))
         var uploadResult: Result<Void, ApiFailure> = .success(())
         var signQueue: [Result<SignedUpload, ApiFailure>] = []
+        /// Results for the next `/sync` calls, in order; with none queued a push applies everything and a pull is empty.
+        var pushResults: [Result<SyncPushResult, SyncFailure>] = []
+        var pullResults: [Result<SyncPullPage, SyncFailure>] = []
         var held: [CheckedContinuation<Void, Never>] = []
         var hold = false
     }
@@ -75,7 +80,6 @@ public final class FakeApiService: ApiService {
 
     public func setHouseholdResult(_ result: Result<HouseholdWithRole?, ApiFailure>) { state.withLock { $0.householdResult = result } }
     public func setMyHouseholdsResult(_ result: Result<[HouseholdWithRole], ApiFailure>) { state.withLock { $0.myHouseholdsResult = result } }
-    public func setActivityResult(_ result: Result<[Activity], ApiFailure>) { state.withLock { $0.activityResult = result } }
     public func setUpdateModulesResult(_ result: Result<Household, ApiFailure>) { state.withLock { $0.updateModulesResult = result } }
     public func setUpdateHouseholdResult(_ result: Result<Household, ApiFailure>) { state.withLock { $0.updateHouseholdResult = result } }
 
@@ -169,12 +173,6 @@ public final class FakeApiService: ApiService {
         return state.withLock { $0.myHouseholdsResult }
     }
 
-    public func fetchActivity(householdId: UUID, since: Date, limit: Int) async -> Result<[Activity], ApiFailure> {
-        state.withLock { $0.calls.append(.fetchActivity(householdId: householdId, since: since, limit: limit)) }
-        await suspendIfHeld()
-        return state.withLock { $0.activityResult }
-    }
-
     public func updateModules(
         householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?
     ) async -> Result<Household, ApiFailure> {
@@ -207,5 +205,36 @@ public final class FakeApiService: ApiService {
         state.withLock { $0.calls.append(.upload(url: url, byteCount: data.count, mime: mime)) }
         await suspendIfHeld()
         return state.withLock { $0.uploadResult }
+    }
+
+    // MARK: /sync
+
+    public func queuePushResults(_ results: [Result<SyncPushResult, SyncFailure>]) { state.withLock { $0.pushResults.append(contentsOf: results) } }
+    public func queuePullResults(_ results: [Result<SyncPullPage, SyncFailure>]) { state.withLock { $0.pullResults.append(contentsOf: results) } }
+
+    /// Every body `push` received, oldest first.
+    public var pushes: [SyncPushBody] {
+        calls.compactMap { if case .syncPush(let body) = $0 { body } else { nil } }
+    }
+
+    public func push(_ body: SyncPushBody) async -> Result<SyncPushResult, SyncFailure> {
+        state.withLock { $0.calls.append(.syncPush(body)) }
+        await suspendIfHeld()
+        return state.withLock { state in
+            state.pushResults.isEmpty
+                ? .success(SyncPushResult(applied: body.mutations.map(\.id))) : state.pushResults.removeFirst()
+        }
+    }
+
+    public func pull(householdId: String, since: Int, limit: Int) async -> Result<SyncPullPage, SyncFailure> {
+        state.withLock { $0.calls.append(.syncPull(householdId: householdId, since: since, limit: limit)) }
+        await suspendIfHeld()
+        return state.withLock { state in
+            state.pullResults.isEmpty ? .success(SyncPullPage(cursor: since, hasMore: false)) : state.pullResults.removeFirst()
+        }
+    }
+
+    public func refreshSession() async {
+        state.withLock { $0.calls.append(.refreshSession) }
     }
 }
