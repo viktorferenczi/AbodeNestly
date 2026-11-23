@@ -106,3 +106,16 @@
   color: inherit;
   font: inherit;
 }
+
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.storesLink {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch-min);
+  color: var(--color-accent);
+}

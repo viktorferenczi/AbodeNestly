@@ -12,6 +12,8 @@ import { deleteItem, formatQty, unitSuggestions, updateItem } from './ItemSheet.
 import { clearChecked, createCheckOffQueue, uncheck } from './CheckOff.ts';
 import { ItemSheet } from './ItemSheet.tsx';
 import { UNDO_MS } from './Lists.ts';
+import { StorePickerSheet } from './StorePickerSheet.tsx';
+import { createStore, setListStore } from './Stores.ts';
 import { QuickAdd } from './QuickAdd.tsx';
 import styles from './ListDetail.module.css';
 
@@ -40,6 +42,7 @@ export function ListDetail() {
   const clearTimers = useRef(new Map<number, { ids: string[]; timer: ReturnType<typeof setTimeout> }>());
   const clearSeq = useRef(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const queue = useMemo(() => (db ? createCheckOffQueue({ db, deps, userId, onChange: rerender }) : null), [db, deps, userId]);
 
@@ -87,6 +90,7 @@ export function ListDetail() {
       unchecked: mine.filter((i) => !i.checked).sort(byCreated),
       checked: mine.filter((i) => i.checked).sort((a, b) => (b.checked_at ?? '').localeCompare(a.checked_at ?? '')),
       storeName: store?.name ?? null,
+      stores: data.stores.filter((s) => s.deleted_at == null).sort((a, b) => a.name.localeCompare(b.name)),
     };
   }, [data, listId, pending, clears]);
 
@@ -201,7 +205,9 @@ export function ListDetail() {
         {back}
         <div className={styles.head}>
           <h2 className={styles.heading}>{data.list.name}</h2>
-          {view.storeName ? <span className={styles.chip}>{view.storeName}</span> : null}
+          <button type="button" className={view.storeName ? styles.chip : `${styles.chip} ${styles.chipEmpty}`} aria-label={view.storeName ? `Store: ${view.storeName}` : undefined} onClick={() => setPicking(true)}>
+            {view.storeName ?? 'Add store'}
+          </button>
           {view.checked.length > 0 ? (
             <div
               className={styles.menuWrap}
@@ -257,6 +263,15 @@ export function ListDetail() {
             setEditing(null);
           }}
           onDelete={() => remove(editing)}
+        />
+      ) : null}
+      {picking ? (
+        <StorePickerSheet
+          stores={view.stores}
+          current={data.list.store_id && view.storeName ? data.list.store_id : null}
+          onClose={() => setPicking(false)}
+          onSave={(storeId) => setListStore(db, deps, listId, storeId)}
+          onCreate={(name) => createStore(db, deps, { householdId, name })}
         />
       ) : null}
       {toasts.map((t, index) => (
