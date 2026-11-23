@@ -77,3 +77,16 @@
 .muted .title {
   color: var(--color-text-2);
 }
+
+.check {
+  flex: none;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.struck .title {
+  text-decoration: line-through;
+}

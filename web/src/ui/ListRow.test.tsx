@@ -44,4 +44,13 @@ describe('ListRow', () => {
     expect(screen.getByText('2 l')).toBeTruthy();
     expect(screen.getByText('lactose free')).toBeTruthy();
   });
+
+  it('renders a checkbox that toggles without opening the row', () => {
+    const onToggle = vi.fn();
+    const onOpen = vi.fn();
+    render(<ul><ListRow title="Milk" onOpen={onOpen} check={{ checked: false, onToggle, label: 'Check off Milk' }} /></ul>);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Check off Milk' }));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
 });
