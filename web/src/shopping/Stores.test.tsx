@@ -177,8 +177,8 @@ describe('SHOP-05: store picker on List detail', () => {
   it('AC3 pick Test Market and Save: chip reads Test Market, only store_id is queued', async () => {
     await seed([store('s1', 'Test Market')], [list('l1', 'Groceries')]);
     await renderAt('/shopping/l1');
-    fireEvent.click(await screen.findByRole('button', { name: 'Store: none' }));
-    expect(screen.getByRole('button', { name: 'Store: none' }).textContent).toBe('Add store');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add store' }));
+    expect(screen.getByRole('button', { name: 'Add store' }).textContent).toBe('Add store');
     fireEvent.click(await screen.findByRole('radio', { name: 'Test Market' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     const chip = await screen.findByRole('button', { name: 'Store: Test Market' });
@@ -194,14 +194,14 @@ describe('SHOP-05: store picker on List detail', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Store: Test Market' }));
     fireEvent.click(await screen.findByRole('radio', { name: 'No store' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect((await screen.findByRole('button', { name: 'Store: none' })).textContent).toBe('Add store');
+    expect((await screen.findByRole('button', { name: 'Add store' })).textContent).toBe('Add store');
     expect((await outbox())[0]!.data).toEqual({ store_id: null });
   });
 
   it('Save without a change writes nothing', async () => {
     await seed([store('s1', 'Test Market')], [list('l1', 'Groceries')]);
     await renderAt('/shopping/l1');
-    fireEvent.click(await screen.findByRole('button', { name: 'Store: none' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add store' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(await outbox()).toHaveLength(0);
@@ -210,13 +210,13 @@ describe('SHOP-05: store picker on List detail', () => {
   it('a deleted store makes the chip read Add store', async () => {
     await seed([store('s1', 'Gone', { deleted_at: '2026-01-01T00:00:00Z' })], [list('l1', 'Groceries', { store_id: 's1' })]);
     await renderAt('/shopping/l1');
-    expect((await screen.findByRole('button', { name: 'Store: none' })).textContent).toBe('Add store');
+    expect((await screen.findByRole('button', { name: 'Add store' })).textContent).toBe('Add store');
   });
 
   it('inline New store creates and selects it in one step', async () => {
     await seed([], [list('l1', 'Groceries')]);
     await renderAt('/shopping/l1');
-    fireEvent.click(await screen.findByRole('button', { name: 'Store: none' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add store' }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('New store'), { target: { value: 'Corner Shop' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
@@ -228,10 +228,24 @@ describe('SHOP-05: store picker on List detail', () => {
     expect(out.map((o) => o.table)).toEqual(['store', 'shopping_list']);
   });
 
+  it('Save right after Add keeps the new store selected without waiting for the list to refresh', async () => {
+    await seed([], [list('l1', 'Groceries')]);
+    await renderAt('/shopping/l1');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add store' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('New store'), { target: { value: 'Corner Shop' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+    // The field clears in the same turn the new id is selected; Save follows before the live query has published the row.
+    await waitFor(() => expect((within(dialog).getByLabelText('New store') as HTMLInputElement).value).toBe(''));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('button', { name: 'Store: Corner Shop' })).toBeTruthy();
+    expect((await outbox()).map((o) => o.table)).toEqual(['store', 'shopping_list']);
+  });
+
   it('Manage stores navigates to /shopping/stores', async () => {
     await seed([], [list('l1', 'Groceries')]);
     const { router } = await renderAt('/shopping/l1');
-    fireEvent.click(await screen.findByRole('button', { name: 'Store: none' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add store' }));
     fireEvent.click(await screen.findByRole('link', { name: 'Manage stores' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/shopping/stores'));
   });

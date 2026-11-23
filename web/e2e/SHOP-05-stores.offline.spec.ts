@@ -6,7 +6,6 @@ import { outboxCount } from './helpers/outbox.ts';
 test.describe('SHOP-05: stores offline', () => {
   let user: E2eUser;
   let householdId: string;
-  let listId: string;
 
   test.beforeAll(async () => {
     user = await createUser();
@@ -16,9 +15,6 @@ test.describe('SHOP-05: stores offline', () => {
     householdId = data.id as string;
     const { error: memberError } = await admin.from('member').insert({ household_id: householdId, user_id: user.id, role: 'owner' });
     if (memberError) throw memberError;
-    const { data: list, error: listError } = await admin.from('shopping_list').insert({ household_id: householdId, name: 'Groceries' }).select('id').single();
-    if (listError) throw listError;
-    listId = list.id as string;
   });
 
   test.afterAll(async () => {

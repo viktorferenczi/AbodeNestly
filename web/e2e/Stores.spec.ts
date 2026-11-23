@@ -37,7 +37,7 @@ test.describe('SHOP-05: stores', () => {
     await expect(page.getByRole('button', { name: /^Test Market/ })).toBeVisible();
 
     await page.goto(`/shopping/${listId}`);
-    await page.getByRole('button', { name: 'Store: none' }).click();
+    await page.getByRole('button', { name: 'Add store' }).click();
     await page.getByRole('radio', { name: 'Test Market' }).check();
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByRole('button', { name: 'Store: Test Market' })).toBeVisible();

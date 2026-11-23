@@ -205,7 +205,7 @@ export function ListDetail() {
         {back}
         <div className={styles.head}>
           <h2 className={styles.heading}>{data.list.name}</h2>
-          <button type="button" className={view.storeName ? styles.chip : `${styles.chip} ${styles.chipEmpty}`} aria-label={`Store: ${view.storeName ?? 'none'}`} onClick={() => setPicking(true)}>
+          <button type="button" className={view.storeName ? styles.chip : `${styles.chip} ${styles.chipEmpty}`} aria-label={view.storeName ? `Store: ${view.storeName}` : undefined} onClick={() => setPicking(true)}>
             {view.storeName ?? 'Add store'}
           </button>
           {view.checked.length > 0 ? (

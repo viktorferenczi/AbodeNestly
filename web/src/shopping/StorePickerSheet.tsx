@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Store } from '@abodenestly/contract';
 import { Link } from 'react-router';
 import { Sheet } from '../ui/Sheet.tsx';
@@ -25,8 +25,11 @@ export function StorePickerSheet({
   const [name, setName] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // A store deleted elsewhere while the sheet is open drops out; the selection falls back to the list's own value.
-  const selected = choice === null || stores.some((s) => s.id === choice) ? choice : current;
+  // Ids that were in `stores` at some render. A store just created is not there until the live query catches up, and must stay selected.
+  const seen = useRef(new Set<string>());
+  stores.forEach((s) => seen.current.add(s.id));
+  // A store deleted elsewhere while the sheet is open drops out; the selection then falls back to the list's own value.
+  const selected = choice === null || stores.some((s) => s.id === choice) || !seen.current.has(choice) ? choice : current;
 
   async function add() {
     const bad = validateStoreName(name, stores);
