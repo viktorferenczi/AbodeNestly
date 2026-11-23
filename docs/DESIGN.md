@@ -183,6 +183,7 @@ _Deviation (CORE-09): the module list stories do not exist yet, so a result row 
 - Interactions: tap → C2; swipe left archive (undo); "+" → sheet: name, store picker, "Template" switch.
 - Offline: full. · Gating: tab hidden when off.
 - Web (SHOP-01-web): the Shell bar owns the h1, so the screen shows an h2 "Shopping" with the "+" beside it. The sheet has no Template switch until SHOP-11, and rows have no pantry badge until SHOP-16. Archived rows offer Restore, and swipe left there deletes with the same 5 s undo; every swipe also exists as a button.
+- iOS (SHOP-01-ios): the global `TopBar` keeps the household name, so the screen has its own "Shopping" heading with the "+" beside it, and a "New list" button at the bottom of a populated overview. Swipe left archives with a 5 s `UndoToast` (the write waits for the window; leaving the screen or backgrounding writes what is waiting). Archived is a collapsed disclosure group; its rows offer Restore and swipe-left Delete (same 5 s undo), and every swipe also exists as a VoiceOver action. Offline shows a note under the heading; nothing else changes. The new-list sheet has name and store (the picker only when the household has stores) and no Template switch until SHOP-11. After saving, the list opens a placeholder showing its name until SHOP-02-ios. Lists and stores are read straight from the local database (`HouseholdDatabase.observeShoppingLists`).
 
 ### C2. List detail  ← the most used screen
 - Route: `/shopping/:listId` · Purpose: SHOP-02…09, 12, 16, 17.
