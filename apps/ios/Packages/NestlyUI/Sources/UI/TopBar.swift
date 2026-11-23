@@ -21,11 +21,17 @@ public struct TopBar: View {
     private let trailing: String?
     private let onTitleTap: (() -> Void)?
     private let actions: [TopBarAction]
+    private let status: SyncChipState
+    private let onStatusTap: () -> Void
 
     /// With `onTitleTap` the title is a button ("<title> ▾") that opens the household switcher (DESIGN B3).
+    /// `status` is the SyncStatusChip (DESIGN A6); it sits before the actions and does not count toward their two.
     public init(title: String, trailing: String? = nil, onTitleTap: (() -> Void)? = nil,
+        status: SyncChipState = .hidden, onStatusTap: @escaping () -> Void = {},
         actions: [TopBarAction] = []
     ) {
+        self.status = status
+        self.onStatusTap = onStatusTap
         self.actions = Array(actions.prefix(2))
         self.title = title
         self.trailing = trailing
@@ -36,6 +42,7 @@ public struct TopBar: View {
         HStack {
             titleView
             Spacer(minLength: Tokens.screenPadding)
+            SyncStatusChip(state: status, onTap: onStatusTap)
             ForEach(actions.indices, id: \.self) { index in
                 let item = actions[index]
                 Button(action: item.action) {

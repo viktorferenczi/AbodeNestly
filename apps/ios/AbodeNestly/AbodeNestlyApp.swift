@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 
 @main
@@ -12,6 +13,10 @@ struct AbodeNestlyApp: App {
                 .onOpenURL { url in
                     Task { await environment.auth.handle(url: url) }
                 }
+        }
+        // SPEC §6.4: the system wakes the app to drain the outbox; `Info.plist` lists the identifier.
+        .backgroundTask(.appRefresh(BackgroundSync.taskIdentifier)) {
+            await environment.sync.kick()
         }
     }
 }

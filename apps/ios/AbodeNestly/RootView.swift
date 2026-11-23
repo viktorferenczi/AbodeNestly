@@ -64,6 +64,9 @@ private struct SignedInView: View {
     /// Lives as long as the signed-in session, not the Profile screen, so queued edits drain on reconnect
     /// and on foreground wherever the person is (interim stand-in for SHOP-08's `SyncEngine.kick()`).
     @State private var profile: ProfileModel
+    /// What the TopBar chip and the sync sheet (DESIGN B12) show; lives with the signed-in session.
+    @State private var syncStatus: SyncStatusModel
+    @State private var showSync = false
     @State private var showSwitcher = false
     /// "Create or join another" was tapped: present Welcome once the switcher sheet is gone (one sheet at a time).
     @State private var wantsWelcome = false
@@ -74,6 +77,9 @@ private struct SignedInView: View {
         self.session = session
         self.environment = environment
         let network = environment.network
+        _syncStatus = State(initialValue: SyncStatusModel(
+            engine: environment.sync, database: environment.database, network: network
+        ))
         _profile = State(initialValue: ProfileModel(
             // Only built while signed in; the nil-UUID fallback never matches a row.
             userId: session.userId ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
@@ -102,6 +108,8 @@ private struct SignedInView: View {
                 title: session.householdName ?? "AbodeNestly", trailing: session.profile?.displayName,
                 // No household yet (Welcome, loading): nothing to switch from.
                 onTitleTap: showsSwitcher ? { showSwitcher = true } : nil,
+                // The chip is hidden when idle; it sits in the global bar because the sheet also shows core writes.
+                status: syncStatus.chip, onStatusTap: { showSync = true },
                 // Search reads the open household's local database, so it needs one (not Welcome or the load error).
                 actions: showsSwitcher && searchModules != nil ? [TopBarAction(
                     systemImage: "magnifyingglass", label: "Search", identifier: "topbar.search",
@@ -127,6 +135,10 @@ private struct SignedInView: View {
                     }
                 )
             }
+        }
+        .sheet(isPresented: $showSync) {
+            SyncSheetView(model: syncStatus, onClose: { showSync = false })
+                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showWelcome) {
             NavigationStack {
@@ -154,9 +166,21 @@ private struct SignedInView: View {
             if phase == .active {
                 profile.kickDrain()
                 kickSync()
+            } else if phase == .background {
+                environment.backgroundSync.scheduleNext()
             }
         }
         .onChange(of: session.currentHouseholdId, initial: true) { _, _ in kickSync() }
+        .task(id: session.currentHouseholdId) { await syncStatus.run(householdId: session.currentHouseholdId) }
+        // SPEC §6.4: every 5 minutes while the app is in the foreground. The task restarts with the scene phase.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(300))
+                if Task.isCancelled { break }
+                kickSync()
+            }
+        }
     }
 
     private func kickSync() {

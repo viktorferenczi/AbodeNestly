@@ -1,6 +1,7 @@
 import Contract
 import Foundation
 import Shared
+import Sync
 
 /// `URLSession` client for the Vercel API. Attaches the user's JWT and, on a 401, refreshes the session
 /// once and retries (swift-ios skill, Auth).
@@ -90,24 +91,6 @@ public final class HttpApiService: ApiService {
             }
             // PostgREST cannot compare two columns, so `uses < max_uses` is filtered here.
             return .success(invites.first { $0.uses < $0.maxUses })
-        } catch {
-            return .failure(Self.failure(for: error))
-        }
-    }
-
-    public func fetchActivity(householdId: UUID, since: Date, limit: Int) async -> Result<[Activity], ApiFailure> {
-        do {
-            let url = try restURL(table: "activity", query: [
-                ("household_id", "eq.\(householdId.uuidString.lowercased())"),
-                ("created_at", "gte.\(PostgrestJSON.format(since))"),
-                ("order", "created_at.desc"),
-                ("limit", String(limit)),
-            ])
-            let (data, status) = try await perform(url: url, method: "GET", headers: restHeaders())
-            guard status == 200, let rows = try? PostgrestJSON.decoder.decode([Activity].self, from: data) else {
-                return .failure(.unknown)
-            }
-            return .success(rows)
         } catch {
             return .failure(Self.failure(for: error))
         }
@@ -459,5 +442,47 @@ public final class HttpApiService: ApiService {
 
     private static func failure(for error: Error) -> ApiFailure {
         SupabaseAuthService.map(error) == .network ? .network : .unknown
+    }
+}
+
+// MARK: /sync (SHOP-08)
+
+extension HttpApiService: SyncTransport {
+    public func push(_ body: SyncPushBody) async -> Result<SyncPushResult, SyncFailure> {
+        do {
+            let (data, status) = try await post("sync", body: JSONEncoder().encode(body))
+            return Self.syncResult(status: status, data: data)
+        } catch {
+            return .failure(Self.syncFailure(for: error))
+        }
+    }
+
+    public func pull(householdId: String, since: Int, limit: Int) async -> Result<SyncPullPage, SyncFailure> {
+        do {
+            let (data, status) = try await perform(
+                url: try apiURL("sync?household_id=\(householdId)&since=\(since)&limit=\(limit)"), method: "GET",
+                headers: ["Accept": "application/json"]
+            )
+            return Self.syncResult(status: status, data: data)
+        } catch {
+            return .failure(Self.syncFailure(for: error))
+        }
+    }
+
+    public func refreshSession() async {
+        _ = await auth.accessToken(refresh: true)
+    }
+
+    /// 200 decodes; 503 or the API's `retryable` code means try again shortly (deadlock); anything else stops the run.
+    static func syncResult<T: Decodable>(status: Int, data: Data) -> Result<T, SyncFailure> {
+        if status == 200 {
+            guard let value = try? JSONDecoder().decode(T.self, from: data) else { return .failure(.other) }
+            return .success(value)
+        }
+        return .failure(status == 503 || errorCode(in: data) == "retryable" ? .retryable : .other)
+    }
+
+    static func syncFailure(for error: Error) -> SyncFailure {
+        failure(for: error) == .network ? .network : .other
     }
 }

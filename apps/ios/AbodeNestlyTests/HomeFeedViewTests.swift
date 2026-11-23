@@ -6,15 +6,6 @@ import ViewInspector
 @testable import Core
 @testable import Sync
 
-/// Records what the screen asked for (TESTING §7): the fake engine counts `kick()` calls.
-final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
-    // Guarded by `lock`: `kick()` may arrive from any task.
-    private let lock = NSLock()
-    private var count = 0
-    var kicks: Int { lock.withLock { count } }
-    func kick() async { lock.withLock { count += 1 } }
-}
-
 /// Polls on the main actor until `condition` holds or 10 s pass. A bounded `Task.yield()` loop gave up too early on
 /// slow CI runners, where the database observation delivers a few scheduler turns later.
 @MainActor
@@ -33,7 +24,7 @@ private struct HomeHarness {
     let root = switcherTempRoot()
     let household = UUID()
     let db: HouseholdDatabase
-    let sync = FakeSyncEngine()
+    let sync = FakeSync()
     let taps = Taps()
     let model: HomeModel
     private let reader: Task<Void, Never>
@@ -147,7 +138,7 @@ struct HomeFeedViewTests {
     func offline() async throws {
         let h = try await HomeHarness(modules: modulesOn, rows: [makeActivity("Anna checked off Milk", ago: 5)])
         defer { h.stop() }
-        // Offline is the pull engine's concern (ActivityPull is a no-op); the screen only reads the local database.
+        // Offline is the pull engine's concern (LiveSyncEngine is a no-op); the screen only reads the local database.
         _ = try h.inspect().find(text: "Anna checked off Milk")
         nonisolated(unsafe) let list = try h.inspect().find(ViewType.List.self)
         try await list.callRefreshable()

@@ -96,9 +96,6 @@ public protocol ApiService: Sendable {
     /// Every household the viewer is an active member of, with their role in each. Same read as `fetchHousehold`
     /// without the household filter (CORE-07).
     func fetchMyHouseholds(userId: UUID) async -> Result<[HouseholdWithRole], ApiFailure>
-    /// CORE-08 interim pull (until SHOP-08's `/sync`): live activity rows created at or after `since`, newest first,
-    /// at most `limit`. Read under RLS, no API route.
-    func fetchActivity(householdId: UUID, since: Date, limit: Int) async -> Result<[Activity], ApiFailure>
     /// `PATCH /households/{id}/modules` (owner only). Pass only the flags to change. 403 → `.forbidden`, 400 → `.validation`.
     func updateModules(householdId: UUID, shopping: Bool?, pantry: Bool?, maintenance: Bool?) async -> Result<Household, ApiFailure>
     /// Name and/or currency: a direct `household` update under RLS (SPEC §7); a non-owner gets `.forbidden`.
