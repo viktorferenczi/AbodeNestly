@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { useSync } from '../sync/SyncEngine.ts';
 import { EmptyState } from '../ui/EmptyState.tsx';
@@ -122,9 +122,14 @@ export function Lists() {
     <div className={styles.lists} data-testid="lists">
       <div className={styles.head}>
         <h2 className={styles.heading}>Shopping</h2>
-        <button type="button" className={styles.plus} aria-label="New list" onClick={() => setSheet(true)}>
-          +
-        </button>
+        <div className={styles.headActions}>
+          <Link to="/shopping/stores" className={styles.storesLink}>
+            Stores
+          </Link>
+          <button type="button" className={styles.plus} aria-label="New list" onClick={() => setSheet(true)}>
+            +
+          </button>
+        </div>
       </div>
       {empty ? (
         <EmptyState

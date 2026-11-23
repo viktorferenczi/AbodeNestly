@@ -72,7 +72,7 @@ For a screen `X`, the component test file has one test per row of the screen's *
 | E2E-CORE-3 | Toggle pantry off → pantry tab gone, list has no pantry badges |
 | E2E-SHOP-1 | Add item, check off, undo, clear checked |
 | E2E-SHOP-2 | Go offline, add and check items, go online, second client sees them |
-| E2E-SHOP-3 | Assign store, check items in order twice, list re-sorts |
+| E2E-SHOP-3 | Assign store, check items in order twice, list re-sorts (web: `Stores.spec.ts` covers create and assign from SHOP-05-web; SHOP-06-web adds the re-sort) |
 | E2E-SHOP-4 | Share link opens read-only without sign-in |
 | E2E-PANT-1 | Add item with threshold, use it below threshold → list line appears |
 | E2E-PANT-2 | Check that line off → restock → quantity updated |

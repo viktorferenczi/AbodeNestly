@@ -191,6 +191,7 @@ _Deviation (CORE-09): the module list stories do not exist yet, so a result row 
 - Offline: full. · Gating: pantry prompt and badges only if pantry on; task badge only if maintenance on.
 - Web (SHOP-02-web): the Shell bar owns the h1, so the screen shows an h2 with the list name, a back link "Shopping" and the store chip (no rename or swipe-delete until their stories). Items show name, qty+unit and note (SHOP-03-web), oldest first; tapping a row opens C3; checked items sit in a collapsed "Checked (n)", newest first. The `QuickAddBar` has no mic or barcode button until SHOP-14 and SHOP-10, and suggestions come from the household's own list items (live, or checked at some point). The empty hint is "Add your first item" until SHOP-14 parses quantities (then "Try: 2 l milk"). An unknown or deleted list shows "This list is gone".
 - Web (SHOP-04-web): each row has a checkbox. Checking writes after the 5-second undo window (nothing is written if Undo is tapped); until then the item stays in place, ticked and struck through, with a "Checked Milk · Undo" toast, and then moves to "Checked (n)". Unchecking (tap a ticked box in the group) writes at once with no toast. A "⋯" button (List actions) next to the list name appears when something is checked and holds only "Clear checked" until Share, Template and Archive land. `all-checked` shows "All done" and a "Clear checked" button. Clear checked soft-deletes the checked items after a 5-second undo ("Cleared 2 items · Undo").
+- Web (SHOP-05-web): the store chip is always a button: the store name, or a muted "Add store" when the list has none (or its store was deleted). It opens a picker with "No store", the household's stores, an inline "New store" field (creates and selects in one step) and a "Manage stores" link; Save writes only `store_id`, and only if the choice changed.
 
 ### C3. Item detail / edit
 - Route: sheet · Purpose: SHOP-03, SHOP-12.
@@ -205,6 +206,7 @@ _Deviation (CORE-09): the module list stories do not exist yet, so a result row 
 - States: `empty` · `populated`.
 - Interactions: tap → C5; swipe delete with undo.
 - Offline: full.
+- Web (SHOP-05-web): the Shell bar owns the h1, so the screen shows a back link "Shopping" and an h2 "Stores" with the "+" beside it. Reached from a "Stores" link next to "+" on Shopping and from "Manage stores" in the store picker. Rows show the name and "learned N items" only when N > 0. A row tap does nothing until SHOP-06-web adds C5. Swipe left or the Delete button soft-deletes after the 5 s undo; lists keep their `store_id`, and Recently deleted restores the store. Duplicate names (case-insensitive) and empty names are blocked inline.
 
 ### C5. Store detail (aisle order)
 - Route: `/shopping/stores/:id` · Purpose: make SHOP-06 visible and editable.
