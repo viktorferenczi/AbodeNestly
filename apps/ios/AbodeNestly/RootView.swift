@@ -415,14 +415,17 @@ private struct ShoppingScreen: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            VStack(spacing: 0) {
-                #if DEBUG
-                LocalListsDebugView(householdId: householdId, database: environment.database)
-                #endif
-                ListsView(model: model, isOnline: environment.network.isOnline) { row in
-                    path.append(ListRoute(id: row.id, name: row.name))
-                }
+            ListsView(model: model, isOnline: environment.network.isOnline) { row in
+                path.append(ListRoute(id: row.id, name: row.name))
             }
+            #if DEBUG
+            // E2E reads the text by identifier; it takes no room, so the heading stays the top of the screen.
+            .overlay(alignment: .topLeading) {
+                LocalListsDebugView(householdId: householdId, database: environment.database)
+                    .frame(width: 1, height: 1)
+                    .clipped()
+            }
+            #endif
             .navigationDestination(for: ListRoute.self) { ListPlaceholderView(name: $0.name) }
         }
     }

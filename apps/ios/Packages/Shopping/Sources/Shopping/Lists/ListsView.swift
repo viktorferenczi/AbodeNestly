@@ -9,10 +9,12 @@ public struct ListsView: View {
     private let isOnline: Bool
     private let onOpen: (ListRow) -> Void
     @State private var showSheet = false
-    @State private var archivedOpen = false
+    @State private var archivedOpen: Bool
     @Environment(\.scenePhase) private var scenePhase
 
-    public init(model: ListsModel, isOnline: Bool, onOpen: @escaping (ListRow) -> Void) {
+    /// `archivedExpanded` starts the Archived section open (tests; the person opens it by tapping its header).
+    public init(model: ListsModel, isOnline: Bool, archivedExpanded: Bool = false, onOpen: @escaping (ListRow) -> Void) {
+        _archivedOpen = State(initialValue: archivedExpanded)
         self.model = model
         self.isOnline = isOnline
         self.onOpen = onOpen
@@ -21,6 +23,14 @@ public struct ListsView: View {
     public var body: some View {
         VStack(spacing: 0) {
             header
+            if model.writeFailed {
+                Text("Could not save the change. Try again.")
+                    .font(.subheadline)
+                    .foregroundStyle(Tokens.danger)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Tokens.screenPadding)
+                    .accessibilityIdentifier("lists.error")
+            }
             if !isOnline {
                 OfflineBanner(message: "Offline — changes will sync when you're back online")
                     .padding(.horizontal, Tokens.screenPadding)
@@ -54,7 +64,8 @@ public struct ListsView: View {
         // A swipe still inside its undo window is written when the person leaves, not dropped.
         .onDisappear { Task { await model.flush() } }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { Task { await model.flush() } }
+            // Not `.inactive`: Control Center and the app switcher set it and the person is still here.
+            if phase == .background { Task { await model.flush() } }
         }
     }
 
@@ -111,11 +122,12 @@ public struct ListsView: View {
                     }
                 }
                 if !sections.archived.isEmpty {
-                    Section {
-                        DisclosureGroup("Archived (\(sections.archived.count))", isExpanded: $archivedOpen) {
-                            ForEach(sections.archived) { row in archivedRow(row) }
-                        }
-                        .accessibilityIdentifier("lists.archived")
+                    // Each archived row is a real list row, so its swipe works like Archive's.
+                    Section(isExpanded: $archivedOpen) {
+                        ForEach(sections.archived) { row in archivedRow(row) }
+                    } header: {
+                        Text("Archived (\(sections.archived.count))")
+                            .accessibilityIdentifier("lists.archived")
                     }
                 }
             }

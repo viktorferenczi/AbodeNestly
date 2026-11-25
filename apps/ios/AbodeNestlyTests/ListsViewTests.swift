@@ -82,27 +82,60 @@ struct ListsViewTests {
         #expect(has(h, "lists.row"))
     }
 
-    @Test("SHOP-01: archived lists offer Restore and swipe Delete")
+    @Test("SHOP-01: archived lists sit in a collapsed section; opened, each row has Restore, and Restore unarchives it")
     func archivedActions() async throws {
         let h = try await ListsHarness(seed: { try await seedList($0, name: "Old", archived: "2026-11-05T10:00:00.000Z") })
         await h.settle { h.model.sections.archived.count == 1 }
         // Archived is the only section with rows, so the first-list prompt does not show.
         #expect(!has(h, "lists.empty"))
         _ = try inspect(h).find(text: "Archived (1)")
+        let open = try ListsView(model: h.model, isOnline: true, archivedExpanded: true, onOpen: { _ in }).inspect()
+        _ = try open.find(viewWithAccessibilityIdentifier: "lists.archived.row")
+        try open.find(viewWithAccessibilityIdentifier: "lists.restore").button().tap()
+        await h.settle { h.model.sections.lists.count == 1 }
+        #expect(h.model.sections.lists.map(\.name) == ["Old"] && h.model.sections.archived.isEmpty)
+        #expect(try await h.outbox().last?.data == #"{"archived_at":null}"#)
     }
 
-    @Test("SHOP-01: AC5 the new-list sheet saves a trimmed name and opens the list")
+    @Test("SHOP-01: AC5 the new-list sheet saves a trimmed name and the chosen store, then the list opens")
     func newListSheet() async throws {
-        let h = try await ListsHarness()
-        var saved: [(String, UUID?)] = []
-        let sheet = NewListSheet(stores: [StoreRecord(id: UUID(), name: "Lidl")]) { name, store in
-            saved.append((name, store))
+        let lidl = UUID()
+        let saved = SavedBox()
+        let draft = NewListSheet.Draft()
+        let sheet = NewListSheet(stores: [StoreRecord(id: lidl, name: "Lidl")], draft: draft) { name, store in
+            await saved.set(name, store)
             return true
         } onClose: {}
         let view = try sheet.inspect()
-        _ = try view.find(viewWithAccessibilityIdentifier: "newlist.name")
         _ = try view.find(viewWithAccessibilityIdentifier: "newlist.store")
         #expect(try view.find(viewWithAccessibilityIdentifier: "newlist.save").button().isDisabled())
-        _ = h
+        try view.find(viewWithAccessibilityIdentifier: "newlist.name").textField().setInput("  Hardware ")
+        try view.find(viewWithAccessibilityIdentifier: "newlist.store").picker().select(value: UUID?.some(lidl))
+        try view.find(viewWithAccessibilityIdentifier: "newlist.save").button().tap()
+        for _ in 0..<400 where await saved.name == nil { await Task.yield() }
+        #expect(await saved.name == "  Hardware ")
+        #expect(await saved.store == lidl)
+    }
+
+    @Test("SHOP-01: a write that fails shows a message and the list comes back")
+    func failedWriteShown() async throws {
+        let h = try await ListsHarness(undoWindow: .milliseconds(10), seed: { try await seedList($0, name: "Groceries") })
+        await h.settle { h.model.sections.lists.count == 1 }
+        let row = try #require(h.model.sections.lists.first)
+        // The row disappears from the local database under the swipe, so the patch cannot be stored.
+        h.model.archive(ListRow(id: UUID(), name: row.name, storeName: nil, count: row.count))
+        await h.settle { h.model.writeFailed }
+        #expect(h.model.writeFailed)
+        #expect(has(h, "lists.error"))
+        #expect(h.model.sections.lists.map(\.name) == ["Groceries"])
+    }
+}
+
+private actor SavedBox {
+    var name: String?
+    var store: UUID?
+    func set(_ name: String, _ store: UUID?) {
+        self.name = name
+        self.store = store
     }
 }
