@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
 
@@ -17,6 +18,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    testOptions {
+        // Robolectric opens real Room files in a temp context.
+        unitTests.isIncludeAndroidResources = true
     }
     sourceSets {
         // Room's exported schemas are also what migration tests read.
@@ -37,4 +42,13 @@ dependencies {
     api(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.kotlinx.coroutines.android)
+    // The /sync wire types (SyncWire.kt) are hand-written on top of JsonObject.
+    api(libs.kotlinx.serialization.json)
+    // SyncWorker / SyncScheduler (SPEC §6.4: periodic 15-minute job while backgrounded).
+    api(libs.androidx.work.runtime.ktx)
+
+    testImplementation(libs.junit4)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.work.testing)
 }

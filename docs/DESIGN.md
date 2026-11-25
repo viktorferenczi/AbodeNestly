@@ -171,6 +171,7 @@ _Deviation (CORE-09): the module list stories do not exist yet, so a result row 
 - Offline: works.
 - Web: the chip sits in the shell's top bar on every screen (not only list screens) and the sheet lives in `web/src/sync/`, because it also shows core writes. Failed changes: Retry puts the change back in the queue; Discard removes it and the local row it created, then pulls the server's version.
 - iOS: the chip sits in the global `TopBar` before the icon actions (it does not count toward their two) on every signed-in screen, and the sheet (`Core/Sync`) is a medium/large detent sheet, because it also shows core writes. Status line: "Up to date" · "Syncing…" · "Offline — changes will sync when you're back online". Failed rows read `<table> · save|delete|adjust · Couldn't save: <reason>`; Retry and Discard behave as on web, and there is no separate banner for failed changes.
+- Android: same rules as iOS. The chip sits in the global `TopBar` before the action icons on every signed-in screen (a 48 dp target, cloud icons drawn in `:ui`), and the sheet (`:core`, `core/sync/`) is a Material 3 modal bottom sheet, because it also shows core writes. Status line and failed-row wording as on iOS; there is no separate banner for failed changes (the skill's earlier "dismissible banner" line was dropped). Background sync is a 15-minute `WorkManager` job plus one extra pass when the app leaves the foreground with writes queued.
 
 ---
 

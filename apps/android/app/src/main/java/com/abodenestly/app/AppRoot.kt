@@ -62,6 +62,11 @@ import com.abodenestly.core.home.HomeModules
 import com.abodenestly.core.home.HomeScreen
 import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.sync.SyncEngine
+import com.abodenestly.core.sync.SyncSheet
+import com.abodenestly.core.sync.SyncSheetState
+import com.abodenestly.core.sync.SyncSheetViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -105,7 +110,7 @@ fun AppRoot(
             SessionStatus.Loading -> Box(Modifier.fillMaxSize().testTag("session.loading"))
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = online)
             SessionStatus.SignedIn -> SignedInShell(
-                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, householdsCache, sync, recentSearches,
+                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, householdsCache, sync, recentSearches, network.isOnline,
                 onSwitch = session::switchTo, onSelectTab = session::selectTab, onSettingsShown = session::settingsShown,
                 meId = session.userId, email = session.email, isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
                 onLeft = session::leftHousehold, onHouseholdChanged = session::updateHousehold,
@@ -129,6 +134,7 @@ private fun SignedInShell(
     householdsCache: HouseholdsCache,
     sync: SyncEngine,
     recentSearches: RecentSearchStore,
+    onlineFlow: StateFlow<Boolean>,
     onSwitch: suspend (UUID, Boolean) -> Unit,
     onSelectTab: (AppTab) -> Unit,
     onSettingsShown: () -> Unit,
@@ -162,12 +168,17 @@ private fun SignedInShell(
     }
     val searchModules = (state.household?.let(HomeModules::of) ?: cachedModules)?.searchModules()
     val canSearch = canSwitch && searchHouseholdId != null && searchModules != null && !showWelcome
+    // SHOP-08: the sync chip sits in the TopBar on every signed-in screen and opens the sync sheet (DESIGN B12).
+    var showSync by remember { mutableStateOf(false) }
+    val syncSheet = rememberSyncSheet(searchHouseholdId, database, sync, onlineFlow)
+    val syncUi by remember(syncSheet) { syncSheet?.state ?: MutableStateFlow(SyncSheetState()) }.collectAsState()
     // AC8: the TopBar shows the person's display name once the profile row is in. The title opens the switcher (B3).
     Scaffold(
         topBar = {
             TopBar(
                 state.householdName ?: "AbodeNestly", state.profile?.displayName,
                 onTitleClick = if (canSwitch && meId != null) ({ showSwitcher = true }) else null,
+                status = syncUi.chip, onStatusClick = { showSync = true },
                 actions = if (canSearch && !showSearch && state.selectedTab == AppTab.Home) {
                     {
                         IconButton(onClick = { showSearch = true }, modifier = Modifier.testTag("topbar.search")) {
@@ -213,6 +224,7 @@ private fun SignedInShell(
                 )
             }
         }
+        if (showSync && syncSheet != null) SyncSheet(syncSheet, onDismiss = { showSync = false })
         if (showSwitcher && meId != null) {
             SwitcherHost(
                 meId, state.destination, api, lastHousehold, householdCache, householdsCache, database, isOnline,
@@ -220,6 +232,14 @@ private fun SignedInShell(
             )
         }
     }
+}
+
+/** One [SyncSheetViewModel] per household, with a scope that ends when the household changes or the shell leaves. */
+@Composable
+private fun rememberSyncSheet(householdId: UUID?, database: DatabaseRegistry, sync: SyncEngine, online: StateFlow<Boolean>): SyncSheetViewModel? {
+    val scope = remember(householdId) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+    DisposableEffect(scope) { onDispose { scope.cancel() } }
+    return remember(householdId) { householdId?.let { SyncSheetViewModel(it, database, sync, online, scope) } }
 }
 
 /** One [SwitcherViewModel] per presentation, built once the current household is known (it may come from storage offline). */

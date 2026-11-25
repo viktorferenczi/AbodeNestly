@@ -25,11 +25,14 @@ import androidx.compose.ui.text.style.TextOverflow
 /**
  * DESIGN A6 TopBar: title on the left, optional trailing text (the signed-in person's name for now). With
  * [onTitleClick] the title is the household switcher's entry (DESIGN B3): "<title> ▾" as a 48 dp target.
- * [actions] are trailing icon buttons (DESIGN A6: up to 2), placed after the trailing text.
+ * [actions] are trailing icon buttons (DESIGN A6: up to 2), placed after the trailing text. [status] is the sync chip
+ * (A6), drawn before the actions and not counted among them; it is absent while [SyncChipState.Hidden].
  */
 @Composable
 fun TopBar(title: String, trailing: String? = null, modifier: Modifier = Modifier,
     onTitleClick: (() -> Unit)? = null,
+    status: SyncChipState? = null,
+    onStatusClick: () -> Unit = {},
     actions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val tokens = LocalTokens.current
@@ -72,6 +75,7 @@ fun TopBar(title: String, trailing: String? = null, modifier: Modifier = Modifie
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        if (status != null) SyncStatusChip(status, onStatusClick)
         actions?.invoke(this)
     }
 }

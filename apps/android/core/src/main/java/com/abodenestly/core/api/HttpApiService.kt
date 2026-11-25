@@ -1,12 +1,19 @@
 package com.abodenestly.core.api
 
 import com.abodenestly.contract.infrastructure.Serializer
-import com.abodenestly.contract.models.Activity
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
 import com.abodenestly.contract.models.Member
 import com.abodenestly.core.auth.AuthService
 import com.abodenestly.shared.AppConfig
+import com.abodenestly.sync.SyncFailure
+import com.abodenestly.sync.SyncJson
+import com.abodenestly.sync.SyncPullPage
+import com.abodenestly.sync.SyncPushBody
+import com.abodenestly.sync.SyncPushResult
+import com.abodenestly.sync.SyncResult
+import com.abodenestly.sync.SyncTransport
+import kotlinx.serialization.KSerializer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -39,12 +46,13 @@ import java.util.concurrent.TimeUnit
 class HttpApiService(
     private val config: AppConfig,
     private val auth: AuthService,
-) : ApiService {
-    private val http = OkHttpClient.Builder()
+    // Tests pass a client with a stub Interceptor; the app uses the default.
+    private val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .writeTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
+        .build(),
+) : ApiService, SyncTransport {
 
     override suspend fun createHousehold(name: String): ApiResult<Household> = guarded {
         // `CreateHouseholdRequest` is not in the generated models (the generator emits only schemas that
@@ -94,21 +102,6 @@ class HttpApiService(
             { invites -> ApiResult.Success(invites.firstOrNull { it.uses < it.maxUses }) },
             { ApiResult.Failure(ApiFailure.Unknown) },
         )
-    }
-
-    override suspend fun fetchActivity(householdId: UUID, since: OffsetDateTime, limit: Int): ApiResult<List<Activity>> = guarded {
-        val url = restUrl(
-            "activity",
-            "household_id" to "eq.$householdId",
-            "created_at" to "gte.${timestamp(since)}",
-            "order" to "created_at.desc",
-            "limit" to limit.toString(),
-        )
-        val reply = perform(url, "GET", restHeaders())
-        if (reply.status != 200) return@guarded ApiResult.Failure(ApiFailure.Unknown)
-        runCatching {
-            Serializer.kotlinxSerializationJson.decodeFromString(ListSerializer(Activity.serializer()), reply.body)
-        }.fold({ ApiResult.Success(it) }, { ApiResult.Failure(ApiFailure.Unknown) })
     }
 
     override suspend fun retireInvite(id: UUID): ApiResult<Unit> = guarded {
@@ -238,6 +231,51 @@ class HttpApiService(
             .build()
         val ok = withContext(Dispatchers.IO) { http.newCall(request).execute().use { it.isSuccessful } }
         if (ok) ApiResult.Success(Unit) else ApiResult.Failure(ApiFailure.Unknown)
+    }
+
+    // MARK: /sync (SHOP-08)
+
+    override suspend fun push(body: SyncPushBody): SyncResult<SyncPushResult> = syncGuarded {
+        val reply = perform(url { addPathSegment("sync") }, "POST", emptyMap(), SyncJson.encodeToString(SyncPushBody.serializer(), body))
+        decodeSync(reply, SyncPushResult.serializer())
+    }
+
+    override suspend fun pull(householdId: String, since: Long, limit: Int): SyncResult<SyncPullPage> = syncGuarded {
+        val url = url {
+            addPathSegment("sync")
+            addQueryParameter("household_id", householdId)
+            addQueryParameter("since", since.toString())
+            addQueryParameter("limit", limit.toString())
+        }
+        decodeSync(perform(url, "GET", emptyMap()), SyncPullPage.serializer())
+    }
+
+    override suspend fun refreshSession() {
+        try {
+            auth.accessToken(refresh = true)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // The next push reports the failure; a refresh that cannot run is not worse than none.
+        }
+    }
+
+    private fun <T> decodeSync(reply: Reply, serializer: KSerializer<T>): SyncResult<T> = when {
+        reply.status in 200..299 -> runCatching { SyncJson.decodeFromString(serializer, reply.body) }
+            .fold({ SyncResult.Success(it) }, { SyncResult.Failure(SyncFailure.Other) })
+        // The server's advisory lock may deadlock (SPEC §6.3); the same push is safe to send again.
+        reply.status == 503 && errorCode(reply.body) == "retryable" -> SyncResult.Failure(SyncFailure.Retryable)
+        else -> SyncResult.Failure(SyncFailure.Other)
+    }
+
+    private suspend fun <T> syncGuarded(block: suspend () -> SyncResult<T>): SyncResult<T> = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: IOException) {
+        SyncResult.Failure(SyncFailure.Network)
+    } catch (e: Exception) {
+        SyncResult.Failure(SyncFailure.Other)
     }
 
     private fun decodeHousehold(body: String): ApiResult<Household> =

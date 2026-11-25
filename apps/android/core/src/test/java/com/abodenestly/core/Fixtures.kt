@@ -13,14 +13,31 @@ import com.abodenestly.core.auth.Membership
 import java.time.Instant
 import java.time.OffsetDateTime
 import com.abodenestly.sync.SyncEngine
+import com.abodenestly.sync.SyncPhase
+import kotlinx.coroutines.flow.MutableStateFlow
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Records what the screen asked for (TESTING §7): counts `kick()` calls. */
 class FakeSyncEngine : SyncEngine {
     val kicks = AtomicInteger()
+    val retried = CopyOnWriteArrayList<Long>()
+    val discarded = CopyOnWriteArrayList<Long>()
+    override val phase = MutableStateFlow(SyncPhase.Idle)
+
     override fun kick() {
         kicks.incrementAndGet()
+    }
+
+    override suspend fun run() = kick()
+
+    override suspend fun retry(seq: Long) {
+        retried += seq
+    }
+
+    override suspend fun discard(seq: Long) {
+        discarded += seq
     }
 }
 

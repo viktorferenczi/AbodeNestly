@@ -39,22 +39,24 @@ Rule: `:shopping`, `:pantry`, `:maintenance` depend on `:core`, `:sync`, `:ui`, 
 
 ## Writes: always through the outbox
 ```kotlin
-db.withTransaction {
-    listItemDao.upsert(row)
-    outboxDao.insert(Outbox.upsert("list_item", row))
-}
+database.upsert(householdId, "list_item", row)      // local row + outbox row in ONE Room transaction
+database.patch(householdId, "list_item", id, fields) // partial change; localOnly = true for columns the server lacks
+database.remove(householdId, "list_item", id)        // soft delete (deleted_at) + queued delete
+database.delta(householdId, pantryItemId, -1.0, "used")
 syncEngine.kick()
 ```
-- `Outbox` has `upsert`, `delete`, `delta(pantryItemId, delta, reason)`.
-- Pantry quantity: optimistic local update + `delta` mutation.
+- The write API lives in `sync/Outbox.kt` (extensions of `DatabaseRegistry`). It validates the table against the SPEC §6.2 set (names go into SQL), strips server-owned keys (`id`, `household_id`, `created_at`, `updated_at`, `sync_seq`, `name_key`, `share_token`) from `data`, and throws `DatabaseNotOpenException` for another household. Callers kick.
+- Pantry quantity: optimistic local update + `delta` mutation, never a direct write.
+- Only `store`, `shopping_list`, `list_item` and `location` are pushed today (`PUSHABLE_TABLES`); other queued rows (e.g. `notification_pref`) stay queued and are not counted by the chip.
 - Core settings (create household, invites, modules, members) call the API directly; show "needs connection" when offline.
 
 ## Sync engine
-- `SyncEngine.kick()` coalesces with a `Mutex`; push outbox in insertion order, then pull until `has_more == false`; apply with DAO `upsertAll` in one transaction; store cursor in `MetaEntity`.
-- Triggers: `ProcessLifecycleOwner` START, `ConnectivityManager.NetworkCallback` available, Realtime event, 5-minute ticker while foregrounded.
-- Background: `SyncWorker` (`CoroutineWorker`) scheduled as `PeriodicWorkRequest` 15 min with `NetworkType.CONNECTED`, plus a one-time expedited request when the outbox is non-empty and the app goes to background.
-- Realtime: `supabase.realtime.channel(householdId)` with `postgresChangeFlow<PostgresAction>(schema = "public") { filter = "household_id=eq.$id" }`; payload ignored, triggers `kick()`.
-- Rejected mutations → `outbox_failed` table, surfaced as a dismissible banner.
+- `LiveSyncEngine` (`sync/LiveSyncEngine.kt`, twin of iOS `LiveSyncEngine`): `kick()` coalesces (a kick mid-pass makes exactly one more pass); push the outbox in `seq` order (500 per request), then pull until `has_more == false`; a page is applied by `DatabaseRegistry.applyPull` in one transaction together with the cursor in `meta`. Rows with a queued or failed change of their own are skipped until their push lands.
+- The wire types (`SyncMutation`, `SyncPushBody`, `SyncPushResult`, `SyncPullPage`) are hand-written in `sync/SyncWire.kt`: the generated `:contract` has no usable types for them. `SyncTransport` is the seam to HTTP (`HttpApiService` implements it).
+- Triggers: `ProcessLifecycleOwner` START, `ConnectivityManager.NetworkCallback` available, household open, a 5-minute ticker while foregrounded (all in `AppGraph`); Realtime joins in SHOP-09.
+- Background: `SyncWorker` (`CoroutineWorker`, finds the engine through `SyncEngineProvider` on the `Application`), `SyncScheduler`: a 15-minute `PeriodicWorkRequest` with `NetworkType.CONNECTED`, plus a one-time request when the app goes to the background with pushable writes queued (not expedited: before Android 12 that needs a foreground notification).
+- Rejected mutations move to `outbox_failed` (keeping the old `seq`). The sheet (`core/sync/SyncSheet.kt`) lists them with Retry (back in the queue at the old place, same mutation id) and Discard (drops the entry and the local row if nothing else targets it, resets the cursor to 0). `rls_denied` gets one automatic retry after a session refresh. No separate banner.
+- A migration that adds a pulled table must reset `meta.cursor` to `'0'` (see `MIGRATION_5_6`).
 
 ## Networking
 `ApiClient` in `:contract`: OkHttp, `kotlinx.serialization` with `ignoreUnknownKeys = true`, bearer token from Supabase session, one retry after token refresh on 401. Base URL from `BuildConfig.API_BASE_URL`, set per product flavor (`dev`, `prod`) from `env/dev.properties` / `env/prod.properties`; never hard-coded. Timeouts 15 s.
@@ -74,7 +76,7 @@ syncEngine.kick()
 Every screen is built from its plan in `docs/DESIGN.md` (layout, states, interactions, tokens in Part A). Implement all listed states; deviations go into the PR and `docs/DESIGN.md` together.
 - Material 3, dynamic color on Android 12+, dark theme via system.
 - Destructive actions use a 5 s undo `Snackbar`, not confirm dialogs.
-- Sync status chip (`idle / syncing / offline / N pending`) in the top bar on list screens.
+- Sync status chip (`syncing / offline / N to sync`, hidden when idle) in the global `TopBar` on every signed-in screen; it opens the sync sheet.
 - Money with `BigDecimal` + `NumberFormat.getCurrencyInstance`; dates with `java.time`. Never `Double` for money.
 - TalkBack content descriptions on all controls; minimum 48 dp touch targets.
 

@@ -18,11 +18,11 @@ import com.abodenestly.core.Fixtures.homeNow
 import com.abodenestly.core.Fixtures.id
 import com.abodenestly.core.api.FakeApiService
 import com.abodenestly.core.auth.AppTab
-import com.abodenestly.core.home.ActivityPull
 import com.abodenestly.core.home.HomeEvent
 import com.abodenestly.core.home.HomeModules
 import com.abodenestly.core.home.HomeScreen
 import com.abodenestly.sync.DatabaseRegistry
+import com.abodenestly.sync.LiveSyncEngine
 import com.abodenestly.sync.SyncEngine
 import com.abodenestly.ui.AbodeTheme
 import com.abodenestly.ui.NetworkMonitor
@@ -151,7 +151,7 @@ class HomeFeedComposeTest {
     fun `AC5 - offline the cached feed is shown and a pull makes no request`() {
         val api = FakeApiService()
         val offline = NetworkMonitor(online = false)
-        val engine = ActivityPull(api, registry, isOnline = { offline.isOnline.value }, scope = CoroutineScope(Dispatchers.Unconfined), now = { homeNow })
+        val engine = LiveSyncEngine(api, registry, isOnline = { offline.isOnline.value }, scope = CoroutineScope(Dispatchers.Unconfined))
         show(rows = listOf(fresh("Anna checked off Milk", Duration.ofSeconds(5))), engine = engine)
         settle()
         rule.onNodeWithText("Anna checked off Milk").assertIsDisplayed()

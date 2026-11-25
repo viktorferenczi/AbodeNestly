@@ -6,21 +6,13 @@ import com.abodenestly.contract.models.Activity
 import com.abodenestly.core.Fixtures.activity
 import com.abodenestly.core.Fixtures.homeNow
 import com.abodenestly.core.Fixtures.id
-import com.abodenestly.core.api.ApiFailure
-import com.abodenestly.core.api.ApiResult
-import com.abodenestly.core.api.FakeApiService
-import com.abodenestly.core.home.ActivityPull
 import com.abodenestly.core.home.HomeFeed
 import com.abodenestly.core.home.HomeModules
 import com.abodenestly.core.home.HomeState
 import com.abodenestly.sync.DatabaseRegistry
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -38,7 +30,7 @@ import java.util.UUID
 
 private val DAY: Duration = Duration.ofDays(1)
 
-/** CORE-08 logic: the window, the state rule, the local table and the interim pull. Real Room files in Robolectric's temp context. */
+/** CORE-08 logic: the window, the state rule and the local table (the pull is `LiveSyncEngine`, tested in `:sync`). Real Room files in Robolectric's temp context. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class HomeFeedTest {
@@ -151,101 +143,5 @@ class HomeFeedTest {
         assertEquals(1, registry.pendingCount(household))
         registry.upsertActivity(household, listOf(activity("after migration", Duration.ofSeconds(5))))
         assertEquals(listOf("after migration"), summaries(registry.activityFeed(household).first()))
-    }
-
-    // --- ActivityPull ---
-
-    private val api = FakeApiService()
-
-    private fun pull(online: Boolean = true) =
-        ActivityPull(api, registry, isOnline = { online }, scope = CoroutineScope(Dispatchers.Unconfined), now = { homeNow })
-
-    private suspend fun stored() = summaries(registry.activityFeed(household).first())
-
-    @Test
-    fun `pull asks for the last 30 days and stores what comes back`() = runBlocking {
-        registry.open(household)
-        api.activityResult = ApiResult.Success(listOf(activity("pulled", Duration.ofSeconds(5))))
-        pull().pull()
-        assertEquals(listOf(FakeApiService.Call.FetchActivity(household, homeNow.minusDays(30), HomeFeed.PULL_LIMIT)), api.calls)
-        assertEquals(listOf("pulled"), stored())
-    }
-
-    @Test
-    fun `AC5 - offline pull is a no-op and keeps the cached rows`() = runBlocking {
-        registry.open(household)
-        registry.upsertActivity(household, listOf(activity("cached", Duration.ofSeconds(5))))
-        pull(online = false).pull()
-        assertTrue(api.calls.isEmpty())
-        assertEquals(listOf("cached"), stored())
-    }
-
-    @Test
-    fun `a failed read keeps the cache`() = runBlocking {
-        registry.open(household)
-        registry.upsertActivity(household, listOf(activity("cached", Duration.ofSeconds(5))))
-        api.activityResult = ApiResult.Failure(ApiFailure.Network)
-        pull().pull()
-        assertEquals(listOf("cached"), stored())
-    }
-
-    @Test
-    fun `concurrent kicks share one read`() = runBlocking {
-        registry.open(household)
-        val engine = pull()
-        api.hold()
-        val first = async(Dispatchers.Default) { engine.pull() }
-        // The first pull is inside the read; the second must not overlap it, and leaves one follow-up pass.
-        withTimeout(5_000) { while (api.calls.isEmpty()) kotlinx.coroutines.delay(10) }
-        engine.pull()
-        assertEquals(1, api.calls.size)
-        api.release()
-        first.await()
-        assertEquals(2, api.calls.size)
-    }
-
-    @Test
-    fun `a switch during the read is pulled again for the household now open`() = runBlocking {
-        val other = id(2)
-        registry.open(household)
-        val engine = pull()
-        api.hold()
-        val first = async(Dispatchers.Default) { engine.pull() }
-        withTimeout(5_000) { while (api.calls.isEmpty()) kotlinx.coroutines.delay(10) }
-        registry.open(other)
-        api.activityResult = ApiResult.Success(listOf(activity("other", Duration.ofSeconds(5), householdId = other)))
-        engine.pull() // the switch's kick, dropped into the running pull's follow-up
-        api.release()
-        first.await()
-        assertEquals(listOf(household, other), api.calls.map { (it as FakeApiService.Call.FetchActivity).householdId })
-        assertEquals(listOf("other"), summaries(registry.activityFeed(other).first()))
-    }
-
-    @Test
-    fun `a tombstone hides the cached row, and an empty page is still a read`() = runBlocking {
-        registry.open(household)
-        val row = activity("shown", Duration.ofSeconds(5))
-        registry.upsertActivity(household, listOf(row))
-        api.activityResult = ApiResult.Success(listOf(activity("shown", Duration.ofSeconds(5), id = row.id, deleted = true)))
-        pull().pull()
-        assertEquals(emptyList<String>(), stored())
-        api.activityResult = ApiResult.Success(emptyList())
-        pull().pull()
-        assertEquals(2, api.calls.size)
-    }
-
-    @Test
-    fun `with no household open there is nothing to pull`() = runBlocking {
-        pull().pull()
-        assertTrue(api.calls.isEmpty())
-    }
-
-    @Test
-    fun `kick pulls in the background`() = runBlocking {
-        registry.open(household)
-        api.activityResult = ApiResult.Success(listOf(activity("pulled", Duration.ofSeconds(5))))
-        pull().kick()
-        withTimeout(5_000) { while (api.calls.isEmpty()) kotlinx.coroutines.delay(10) }
-        assertEquals(1, api.calls.size)
     }
 }
