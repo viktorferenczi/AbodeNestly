@@ -88,7 +88,7 @@ Every screen is built from its plan in `docs/DESIGN.md` (layout, states, interac
 - `XCTest`. GRDB in-memory `DatabaseQueue` for DB tests.
 - Required for shopping/pantry stories: perform the action with a stubbed offline `URLProtocol`, assert outbox row, then simulate online and assert the push body.
 - Pure logic (aisle sort, quantity parser, eat-soon, due dates) gets table-driven tests.
-- UI tests only for sign-in and household switch flows.
+- UI tests only for sign-in, household switch and the TESTING §8 journeys (local only; CI skips them).
 
 ## Checklist before PR
 - [ ] No module-to-module package dependency
