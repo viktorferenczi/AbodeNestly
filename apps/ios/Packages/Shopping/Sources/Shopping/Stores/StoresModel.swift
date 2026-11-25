@@ -45,8 +45,9 @@ public final class StoresModel {
         return Stores.sorted(stored.filter { !hidden.contains($0.id) })
     }
 
-    /// For name validation: what the person sees.
-    public var records: [StoreRecord] { rows.map { StoreRecord(id: $0.id, name: $0.name) } }
+    /// For name validation: every live store, including one whose delete is still inside its undo window (its row is
+    /// not written yet, so its name is taken until the delete lands).
+    public var records: [StoreRecord] { stored.map { StoreRecord(id: $0.id, name: $0.name) } }
 
     /// Follows the local rows until the view goes away or the household's database closes.
     public func start() async {

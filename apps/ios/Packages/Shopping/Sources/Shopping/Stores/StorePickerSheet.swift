@@ -16,6 +16,8 @@ struct StorePickerSheet: View {
         var failed = false
         /// Stores created in this sheet, kept selectable before the observation has caught up.
         var created: [StoreRecord] = []
+        /// Created ids the live stores have already reported; once seen, a missing one was deleted elsewhere.
+        var seen: Set<UUID> = []
 
         init(selection: UUID? = nil) { self.selection = selection }
     }
@@ -46,7 +48,7 @@ struct StorePickerSheet: View {
     /// Live stores plus the ones just created here, by name.
     private var choices: [StoreRecord] {
         let known = Set(stores.map(\.id))
-        return (stores + draft.created.filter { !known.contains($0.id) })
+        return (stores + draft.created.filter { !known.contains($0.id) && !draft.seen.contains($0.id) })
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
@@ -103,6 +105,9 @@ struct StorePickerSheet: View {
                         .accessibilityIdentifier("storepicker.save")
                 }
             }
+        }
+        .onChange(of: stores, initial: true) { _, live in
+            draft.seen.formUnion(draft.created.map(\.id).filter { id in live.contains { $0.id == id } })
         }
         .presentationDetents([.medium, .large])
     }

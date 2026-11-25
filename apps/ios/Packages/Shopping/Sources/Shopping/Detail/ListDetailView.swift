@@ -14,6 +14,8 @@ public struct ListDetailView: View {
     private let onManageStores: () -> Void
     @State private var checkedOpen: Bool
     @State private var showStorePicker = false
+    /// "Manage stores" pushes once the picker has finished dismissing; a push during the dismissal is dropped.
+    @State private var manageAfterDismiss = false
     @FocusState private var fieldFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
 
@@ -59,7 +61,11 @@ public struct ListDetailView: View {
                 onDelete: { model.delete($0) }, onCancel: { model.closeSheet() }
             )
         }
-        .sheet(isPresented: $showStorePicker) {
+        .sheet(isPresented: $showStorePicker, onDismiss: {
+            guard manageAfterDismiss else { return }
+            manageAfterDismiss = false
+            onManageStores()
+        }) {
             StorePickerSheet(
                 stores: model.snapshot.stores, current: model.snapshot.list?.storeId,
                 onCreate: { await model.createStore(name: $0) },
@@ -69,8 +75,8 @@ public struct ListDetailView: View {
                     return true
                 },
                 onManage: {
+                    manageAfterDismiss = true
                     showStorePicker = false
-                    onManageStores()
                 },
                 onClose: { showStorePicker = false }
             )

@@ -180,3 +180,28 @@ struct StorePickerFallbackTests {
         #expect(await wrote.name == "closed")
     }
 }
+
+@MainActor
+@Suite("SHOP-05 picker manage and seen", .serialized)
+struct StorePickerManageTests {
+    @Test("SHOP-05: Manage stores calls onManage")
+    func manage() async throws {
+        let called = SavedName()
+        let picker = StorePickerSheet(
+            stores: [], current: nil, onCreate: { _ in nil }, onSave: { _ in true },
+            onManage: { Task { await called.set("manage") } }, onClose: {}
+        )
+        try picker.inspect().find(viewWithAccessibilityIdentifier: "storepicker.manage").button().tap()
+        for _ in 0..<400 where await called.name == nil { await Task.yield() }
+        #expect(await called.name == "manage")
+    }
+
+    @Test("SHOP-05: a store still inside its undo window keeps its name taken")
+    func pendingNameTaken() async throws {
+        let h = try await StoresHarness(seed: { db, _ in try await db.upsert(table: "store", row: storeRow(name: "Lidl")) })
+        await h.settle { h.model.rows.count == 1 }
+        h.model.delete(try #require(h.model.rows.first))
+        #expect(await h.model.create(name: "lidl") == nil)
+        #expect(try await h.outbox().isEmpty)
+    }
+}
