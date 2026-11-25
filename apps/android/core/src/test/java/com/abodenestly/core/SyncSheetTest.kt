@@ -96,7 +96,7 @@ class SyncSheetTest {
         val vm = viewModel(FakeSyncEngine())
         val state = withTimeout(5_000) { vm.state.first { it.pending == 3 } }
         assertEquals(SyncChipState.Pending(3), state.chip)
-        assertEquals("Up to date", state.statusText)
+        assertEquals("Changes are waiting to sync", state.statusText)
     }
 
     @Test
