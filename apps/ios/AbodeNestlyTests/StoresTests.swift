@@ -55,6 +55,12 @@ func seedOrder(_ db: HouseholdDatabase, household: UUID, store: UUID, keys: [Str
     _ = try await db.applyPull(householdId: household, page: SyncPullPage(cursor: 1, hasMore: false, changes: ["store_item_order": rows]))
 }
 
+/// The first snapshot the list detail observation emits.
+func firstDetail(_ db: HouseholdDatabase, _ household: UUID, _ list: UUID) async -> ListDetailSnapshot? {
+    for await snapshot in await db.observeListDetail(householdId: household, listId: list) { return snapshot }
+    return nil
+}
+
 @Suite("SHOP-05 stores logic")
 struct StoresLogicTests {
     @Test("SHOP-05: learned label for 0, 1 and 42 items")
@@ -145,7 +151,7 @@ struct StoresModelTests {
         await h.model.flush()
         #expect(h.model.pending.isEmpty)
         #expect(try await h.outbox().map(\.op) == ["delete"])
-        let snapshot = await h.db.observeListDetail(householdId: h.household, listId: list).first { _ in true }
+        let snapshot = await firstDetail(h.db, h.household, list)
         #expect(snapshot?.list?.storeId == store)
         #expect(snapshot?.storeName == nil)
     }
@@ -173,7 +179,7 @@ struct StoresModelTests {
         })
         let list = UUID()
         try await seedList(h.db, id: list, name: "Groceries", store: store)
-        let snapshot = await h.db.observeListDetail(householdId: h.household, listId: list).first { _ in true }
+        let snapshot = await firstDetail(h.db, h.household, list)
         #expect(Set(snapshot?.stores.map(\.name) ?? []) == ["Lidl", "Aldi"])
         #expect(snapshot?.storeName == "Lidl")
     }
