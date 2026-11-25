@@ -21,6 +21,9 @@ public final class ListDetailModel {
     /// hidden from the list; a checked row shows ticked in place until its write lands.
     public private(set) var pendingActions: [PendingAction] = []
 
+    /// Actions whose window has ended and whose write is running: no toast, no Undo, row still hidden or ticked.
+    private var writing: Set<UUID> = []
+
     @ObservationIgnored private let undoWindow: Duration
     @ObservationIgnored private var timers: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private let householdId: UUID
@@ -147,7 +150,9 @@ public final class ListDetailModel {
 
     /// Unchecking is its own undo: written at once, no toast.
     public func uncheck(_ item: ListItemRecord) async {
-        await write { try await database.patch(table: "list_item", id: item.id, fields: CheckOff.uncheckFields(), now: now()) }
+        if await write({ try await database.patch(table: "list_item", id: item.id, fields: CheckOff.uncheckFields(), now: now()) }) {
+            await kick()
+        }
     }
 
     /// Hides the rows that are checked now and soft-deletes them after the window (AC5). A row checked during the
@@ -158,19 +163,41 @@ public final class ListDetailModel {
         begin(.clear(id: makeId(), itemIds: ids))
     }
 
-    /// Undo inside the window: nothing was written.
+    /// Undo inside the window: nothing was written. Once the window ends the write has begun and Undo is gone.
     public func undo(_ id: UUID) {
+        guard !writing.contains(id) else { return }
         timers.removeValue(forKey: id)?.cancel()
         pendingActions.removeAll { $0.id == id }
     }
 
+    /// Tapping a box that is ticked only because its check-off is still waiting takes the check back (web: `queue.undo`).
+    public func undoCheck(_ itemId: UUID) {
+        guard let action = pendingActions.first(where: { if case .check(let id, _) = $0 { id == itemId } else { false } }) else { return }
+        undo(action.id)
+    }
+
+    /// The actions that still offer Undo. Once the window ends an action keeps hiding or ticking its row until the
+    /// local write is visible, but its toast is gone.
+    public var toasts: [PendingAction] { pendingActions.filter { !writing.contains($0.id) } }
+
+    /// DESIGN C2 "empty": nothing to show. Not while a delete or clear hides the last rows, so the list and the toast stay up.
+    public var showsEmptyState: Bool {
+        unchecked.isEmpty && checked.isEmpty && !pendingActions.contains { !$0.hiddenIds.isEmpty }
+    }
+
     /// Leaving the screen (or the app) writes what is still waiting rather than dropping it.
     public func flush() async {
-        let waiting = pendingActions
-        for action in waiting { timers.removeValue(forKey: action.id)?.cancel() }
-        for action in waiting { await commit(action) }
+        let waiting = pendingActions.filter { !writing.contains($0.id) }
+        for action in waiting {
+            timers.removeValue(forKey: action.id)?.cancel()
+            writing.insert(action.id)
+        }
+        var wrote = false
+        for action in waiting where await commit(action) { wrote = true }
         let done = Set(waiting.map(\.id))
         pendingActions.removeAll { done.contains($0.id) }
+        writing.subtract(done)
+        if wrote { await kick() }
     }
 
     private func begin(_ action: PendingAction) {
@@ -181,50 +208,56 @@ public final class ListDetailModel {
             try? await Task.sleep(for: window)
             guard !Task.isCancelled, let self else { return }
             self.timers[action.id] = nil
-            guard self.pendingActions.contains(where: { $0.id == action.id }) else { return }
-            await self.commit(action)
-            // A check stays pending until its write has landed, so the row never flickers back to unchecked.
+            guard self.pendingActions.contains(where: { $0.id == action.id }), !self.writing.contains(action.id) else { return }
+            self.writing.insert(action.id)
+            let wrote = await self.commit(action)
+            // A check stays pending until its local write has landed, so the row never flickers back to unchecked.
             self.pendingActions.removeAll { $0.id == action.id }
+            self.writing.remove(action.id)
+            // The kick waits on the network, so it runs after the toast and the pending state are gone.
+            if wrote { await self.kick() }
         }
     }
 
     private func dropPending(where match: (PendingAction) -> Bool) {
-        for action in pendingActions where match(action) { timers.removeValue(forKey: action.id)?.cancel() }
-        pendingActions.removeAll(where: match)
+        for action in pendingActions where match(action) && !writing.contains(action.id) {
+            timers.removeValue(forKey: action.id)?.cancel()
+        }
+        pendingActions.removeAll { match($0) && !writing.contains($0.id) }
     }
 
     private func isHidden(_ item: ListItemRecord) -> Bool { pendingActions.contains { $0.hiddenIds.contains(item.id) } }
 
-    private func commit(_ action: PendingAction) async {
+    /// The local write only; the caller kicks sync. `true` when something was stored.
+    private func commit(_ action: PendingAction) async -> Bool {
         switch action {
         case .delete(let id, _):
-            await write { try await database.remove(table: "list_item", id: id, now: now()) }
+            return await write { try await database.remove(table: "list_item", id: id, now: now()) }
         case .check(let id, _):
-            // Re-read: a row deleted here or checked on another device meanwhile must not be overwritten.
-            guard let latest = snapshot.items.first(where: { $0.id == id }), !latest.checked else { return }
+            // Re-read the stored row, not the observed snapshot (which can lag a sync apply): a row deleted here or
+            // checked on another device meanwhile must not be overwritten.
+            guard let state = try? await database.listItemState(id: id), state.deletedAt == nil, !state.checked else { return false }
             let stamp = now().formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true, timeZone: .gmt))
-            await write { try await database.patch(table: "list_item", id: id, fields: CheckOff.checkFields(userId: userId, now: stamp), now: now()) }
+            return await write { try await database.patch(table: "list_item", id: id, fields: CheckOff.checkFields(userId: userId, now: stamp), now: now()) }
         case .clear(_, let ids):
             var wrote = false
             for id in ids {
-                if await write({ try await database.remove(table: "list_item", id: id, now: now()) }, kick: false) { wrote = true }
+                if await write({ try await database.remove(table: "list_item", id: id, now: now()) }) { wrote = true }
             }
-            if wrote { await kick() }
+            return wrote
         }
     }
 
-    /// One local write, then a sync kick. `false` when it could not be stored.
-    @discardableResult
-    private func write(_ body: () async throws -> Void, kick shouldKick: Bool = true) async -> Bool {
+    /// One local write. `false` when it could not be stored.
+    private func write(_ body: () async throws -> Void) async -> Bool {
         do {
             try await body()
             writeFailed = false
+            return true
         } catch {
             writeFailed = true
             return false
         }
-        if shouldKick { await kick() }
-        return true
     }
 
     /// Tapping a suggestion adds its label, so the row shows the household's own casing (AC2).

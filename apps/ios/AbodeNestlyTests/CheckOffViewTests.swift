@@ -79,4 +79,15 @@ struct CheckOffViewTests {
         try view.find(viewWithAccessibilityIdentifier: "list.row.Milk.check").button().tap()
         #expect(h.model.pendingActions.count == 1)
     }
+
+    @Test("SHOP-04: a pending check is drawn ticked and labelled Uncheck; tapping it takes the check back")
+    func pendingTick() async throws {
+        let h = try await DetailHarness(seed: { db, list in try await seedItem(db, list: list, name: "Milk") }, undoWindow: .seconds(30))
+        await h.settle { h.model.unchecked.count == 1 }
+        try inspect(h).find(viewWithAccessibilityIdentifier: "list.row.Milk.check").button().tap()
+        let box = try inspect(h).find(viewWithAccessibilityIdentifier: "list.row.Milk.check")
+        #expect(try box.accessibilityLabel().string() == "Uncheck Milk")
+        try box.button().tap()
+        #expect(h.model.pendingActions.isEmpty)
+    }
 }

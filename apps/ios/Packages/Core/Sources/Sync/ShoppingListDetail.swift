@@ -58,6 +58,19 @@ public struct ListDetailSnapshot: Sendable, Equatable {
 }
 
 extension HouseholdDatabase {
+    /// The stored state of one item, read straight from the database (not the observed snapshot, which can lag a sync
+    /// apply). `nil` when there is no such row.
+    public func listItemState(id: UUID) throws -> (checked: Bool, deletedAt: String?)? {
+        guard let pool else { throw HouseholdDatabaseError.notOpen }
+        return try pool.read { db in
+            try Row.fetchOne(db, sql: "SELECT checked, deleted_at FROM list_item WHERE id = ?", arguments: [id.uuidString.lowercased()])
+                .map { row in
+                    let checked: Bool? = row["checked"]
+                    return (checked ?? false, row["deleted_at"])
+                }
+        }
+    }
+
     /// One list with its store name, its live items and the household's item history, re-emitted whenever any of them
     /// changes. Finishes at once when the household is not open.
     public func observeListDetail(householdId: UUID, listId: UUID) -> AsyncStream<ListDetailSnapshot> {

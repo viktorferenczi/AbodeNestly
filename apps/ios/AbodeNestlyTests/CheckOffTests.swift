@@ -204,4 +204,42 @@ struct CheckOffModelTests {
         #expect(h.model.checked.map(\.name) == ["New", "Old"])
         #expect(h.model.checked.first?.checkedAt == "2026-11-03T10:00:00.000Z")
     }
+
+    @Test("SHOP-04: tapping a pending-check box takes the check back, nothing written")
+    func undoCheckByItem() async throws {
+        let h = try await DetailHarness(seed: { db, list in try await seedItem(db, list: list, name: "Milk") }, undoWindow: window)
+        await h.settle { h.model.unchecked.count == 1 }
+        let item = try #require(h.model.unchecked.first)
+        h.model.check(item)
+        h.model.undoCheck(item.id)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(!h.model.isPendingCheck(item.id) && h.model.unchecked.count == 1)
+        #expect(try await h.outbox().isEmpty)
+    }
+
+    @Test("SHOP-04: the toast is gone once the window ends, and Undo no longer cancels the write")
+    func undoGoneAfterWindow() async throws {
+        let h = try await DetailHarness(seed: { db, list in try await seedItem(db, list: list, name: "Milk") }, undoWindow: .milliseconds(50))
+        await h.settle { h.model.unchecked.count == 1 }
+        h.model.check(try #require(h.model.unchecked.first))
+        let id = try #require(h.model.pendingActions.first).id
+        await h.settle { h.model.toasts.isEmpty }
+        h.model.undo(id)
+        await h.settle { h.model.pendingActions.isEmpty && h.model.checked.count == 1 }
+        #expect(h.model.checked.count == 1)
+        #expect(try await h.outbox().count == 1)
+    }
+
+    @Test("SHOP-04: a clear of the last rows keeps the list (not the empty state) up for the window")
+    func noEmptyStateWhileClearing() async throws {
+        let h = try await DetailHarness(seed: { db, list in try await seedItem(db, list: list, name: "A", checked: true) }, undoWindow: .seconds(30))
+        await h.settle { h.model.checked.count == 1 }
+        #expect(!h.model.showsEmptyState)
+        h.model.clearChecked()
+        #expect(h.model.checked.isEmpty && h.model.unchecked.isEmpty && !h.model.showsEmptyState)
+        h.model.undo(try #require(h.model.pendingActions.first).id)
+        #expect(!h.model.showsEmptyState)
+        h.model.delete(try #require(h.model.checked.first))
+        #expect(!h.model.showsEmptyState)
+    }
 }

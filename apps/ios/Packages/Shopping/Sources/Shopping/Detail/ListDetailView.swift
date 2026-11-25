@@ -37,7 +37,7 @@ public struct ListDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .overlay(alignment: .bottom) {
             VStack(spacing: 8) {
-                ForEach(model.pendingActions) { action in
+                ForEach(model.toasts) { action in
                     UndoToast(message: action.message) { model.undo(action.id) }
                 }
             }
@@ -114,7 +114,7 @@ public struct ListDetailView: View {
                 .padding(.horizontal, Tokens.screenPadding)
         }
         if model.loaded {
-            if model.unchecked.isEmpty && model.checked.isEmpty { emptyState } else { populated }
+            if model.showsEmptyState { emptyState } else { populated }
         } else {
             Spacer()
         }
@@ -167,7 +167,7 @@ public struct ListDetailView: View {
                 let pending = model.isPendingCheck(item.id)
                 ItemRow(
                     item: item, idPrefix: "list.row", color: pending ? Tokens.text2 : Tokens.text, ticked: pending, strikethrough: pending,
-                    onOpen: { model.open(item) }, onToggle: { model.check(item) }
+                    onOpen: { model.open(item) }, onToggle: { pending ? model.undoCheck(item.id) : model.check(item) }
                 )
             }
             if !model.checked.isEmpty {
@@ -215,7 +215,7 @@ private struct ItemRow: View {
             }
             .buttonStyle(.borderless)
             .sensoryFeedback(.success, trigger: ticked) { old, new in !old && new }
-            .accessibilityLabel(item.checked ? "Uncheck \(item.name)" : "Check off \(item.name)")
+            .accessibilityLabel(ticked ? "Uncheck \(item.name)" : "Check off \(item.name)")
             .accessibilityIdentifier("\(idPrefix).\(item.name).check")
             Button(action: onOpen) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -245,6 +245,6 @@ private struct ItemRow: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("\(idPrefix).\(item.name)")
         }
-        .accessibilityAction(named: item.checked ? "Uncheck" : "Check off", onToggle)
+        .accessibilityAction(named: ticked ? "Uncheck" : "Check off", onToggle)
     }
 }
