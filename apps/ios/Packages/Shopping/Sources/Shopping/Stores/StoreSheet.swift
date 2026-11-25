@@ -19,11 +19,12 @@ struct StoreSheet: View {
     let stores: [StoreRecord]
     let onSave: (String) async -> Bool
     let onClose: () -> Void
-    @Bindable private var draft: Draft
+    /// `@State` so a name being typed survives the parent re-rendering.
+    @State private var draft: Draft
 
     init(stores: [StoreRecord], draft: Draft = Draft(), onSave: @escaping (String) async -> Bool, onClose: @escaping () -> Void) {
         self.stores = stores
-        self.draft = draft
+        _draft = State(initialValue: draft)
         self.onSave = onSave
         self.onClose = onClose
     }
@@ -36,6 +37,7 @@ struct StoreSheet: View {
     }
 
     var body: some View {
+        @Bindable var draft = draft
         NavigationStack {
             Form {
                 TextField("Name", text: $draft.name)

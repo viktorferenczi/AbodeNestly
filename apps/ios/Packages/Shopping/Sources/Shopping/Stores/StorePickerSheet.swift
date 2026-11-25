@@ -27,7 +27,8 @@ struct StorePickerSheet: View {
     let onSave: (UUID?) async -> Bool
     let onManage: () -> Void
     let onClose: () -> Void
-    @Bindable private var draft: Draft
+    /// `@State` so the sheet keeps its draft when the parent re-renders (a store created here makes the detail observation emit).
+    @State private var draft: Draft
 
     init(
         stores: [StoreRecord], current: UUID?, draft: Draft? = nil, onCreate: @escaping (String) async -> UUID?,
@@ -35,7 +36,7 @@ struct StorePickerSheet: View {
     ) {
         self.stores = stores
         self.current = current
-        self.draft = draft ?? Draft(selection: current)
+        _draft = State(initialValue: draft ?? Draft(selection: current))
         self.onCreate = onCreate
         self.onSave = onSave
         self.onManage = onManage
@@ -53,10 +54,13 @@ struct StorePickerSheet: View {
     private var selected: UUID? {
         guard let id = draft.selection else { return nil }
         if choices.contains(where: { $0.id == id }) { return id }
-        return current.flatMap { fallback in choices.contains { $0.id == fallback } ? fallback : nil }
+        // Only an explicit "No store" clears the link; a store that went away keeps the list's own value (Recently
+        // deleted restores it).
+        return current
     }
 
     var body: some View {
+        @Bindable var draft = draft
         NavigationStack {
             Form {
                 Section {

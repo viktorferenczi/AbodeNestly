@@ -90,7 +90,7 @@ struct StoresViewTests {
         await h.settle { h.model.snapshot.stores.count == 1 }
         _ = try inspect(h).find(text: "Add store")
         let chip = try inspect(h).find(viewWithAccessibilityIdentifier: "list.store")
-        #expect(try chip.accessibilityLabel().string() == "Store: none")
+        #expect(try chip.accessibilityLabel().string() == "Add store")
 
         let draft = StorePickerSheet.Draft(selection: nil)
         let picker = StorePickerSheet(
@@ -158,4 +158,25 @@ struct StoresViewTests {
 private actor SavedName {
     var name: String?
     func set(_ name: String) { self.name = name }
+}
+
+@MainActor
+@Suite("SHOP-05 picker fallbacks", .serialized)
+struct StorePickerFallbackTests {
+    @Test("SHOP-05: a store deleted elsewhere keeps the list's value, so Save writes nothing")
+    func deletedCurrentKeepsLink() async throws {
+        let gone = UUID()
+        let wrote = SavedName()
+        let draft = StorePickerSheet.Draft(selection: gone)
+        let picker = StorePickerSheet(
+            stores: [], current: gone, draft: draft, onCreate: { _ in nil },
+            onSave: { _ in
+                await wrote.set("saved")
+                return true
+            }, onManage: {}, onClose: { Task { await wrote.set("closed") } }
+        )
+        try picker.inspect().find(viewWithAccessibilityIdentifier: "storepicker.save").button().tap()
+        for _ in 0..<400 where await wrote.name == nil { await Task.yield() }
+        #expect(await wrote.name == "closed")
+    }
 }

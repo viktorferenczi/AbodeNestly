@@ -23,6 +23,8 @@ public final class StoresModel {
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let makeId: @MainActor () -> UUID
     @ObservationIgnored private var timers: [UUID: Task<Void, Never>] = [:]
+    /// Deletes whose window ended and whose local write is running: no toast, no Undo, no second write.
+    @ObservationIgnored private var writing: Set<UUID> = []
 
     public init(
         householdId: UUID, database: HouseholdDatabase, kick: @escaping @Sendable () async -> Void,
@@ -87,34 +89,47 @@ public final class StoresModel {
             try? await Task.sleep(for: window)
             guard !Task.isCancelled, let self else { return }
             self.timers[action.id] = nil
-            guard self.pending.contains(where: { $0.id == action.id }) else { return }
-            await self.commit(action)
+            guard self.pending.contains(where: { $0.id == action.id }), !self.writing.contains(action.id) else { return }
+            self.writing.insert(action.id)
+            let wrote = await self.write(action)
             self.pending.removeAll { $0.id == action.id }
+            self.writing.remove(action.id)
+            // The kick waits on the network, so it runs after the toast and the pending state are gone.
+            if wrote { await self.kick() }
         }
     }
 
     /// Undo inside the window: nothing was written.
     public func undo(_ id: UUID) {
+        guard !writing.contains(id) else { return }
         timers.removeValue(forKey: id)?.cancel()
         pending.removeAll { $0.id == id }
     }
 
     /// Leaving the screen (or the app) writes what is still waiting rather than dropping it.
     public func flush() async {
-        let waiting = pending
-        for action in waiting { timers.removeValue(forKey: action.id)?.cancel() }
-        pending = []
-        for action in waiting { await commit(action) }
+        let waiting = pending.filter { !writing.contains($0.id) }
+        for action in waiting {
+            timers.removeValue(forKey: action.id)?.cancel()
+            writing.insert(action.id)
+        }
+        var wrote = false
+        for action in waiting where await write(action) { wrote = true }
+        let done = Set(waiting.map(\.id))
+        pending.removeAll { done.contains($0.id) }
+        writing.subtract(done)
+        if wrote { await kick() }
     }
 
-    private func commit(_ action: PendingStoreDelete) async {
+    /// The local write only; the caller kicks sync. `true` when something was stored.
+    private func write(_ action: PendingStoreDelete) async -> Bool {
         do {
             try await database.remove(table: "store", id: action.id, now: now())
             writeFailed = false
+            return true
         } catch {
             writeFailed = true
-            return
+            return false
         }
-        await kick()
     }
 }

@@ -120,7 +120,8 @@ public struct ListDetailView: View {
                     .frame(minHeight: Tokens.minTouchTarget)
                     .contentShape(Rectangle())
             }
-            .accessibilityLabel("Store: \(store ?? "none")")
+            // Voice Control activates by the visible words, so the empty chip is named "Add store".
+            .accessibilityLabel(store.map { "Store: \($0)" } ?? "Add store")
             .accessibilityIdentifier("list.store")
             Spacer()
         }
