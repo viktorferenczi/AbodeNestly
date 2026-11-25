@@ -196,6 +196,18 @@ struct StorePickerManageTests {
         #expect(await called.name == "manage")
     }
 
+    @Test("SHOP-05: a created store seen in the live list and then deleted elsewhere is not offered again")
+    func seenThenGone() async throws {
+        let created = StoreRecord(id: UUID(), name: "Corner Shop")
+        let draft = StorePickerSheet.Draft(selection: created.id)
+        draft.created = [created]
+        draft.seen = [created.id] // what the stores observation records once the row appears
+        let picker = StorePickerSheet(
+            stores: [], current: nil, draft: draft, onCreate: { _ in nil }, onSave: { _ in true }, onManage: {}, onClose: {}
+        )
+        #expect((try? picker.inspect().find(text: "Corner Shop")) == nil)
+    }
+
     @Test("SHOP-05: a store still inside its undo window keeps its name taken")
     func pendingNameTaken() async throws {
         let h = try await StoresHarness(seed: { db, _ in try await db.upsert(table: "store", row: storeRow(name: "Lidl")) })

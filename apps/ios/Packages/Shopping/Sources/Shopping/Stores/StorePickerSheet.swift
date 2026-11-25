@@ -16,7 +16,7 @@ struct StorePickerSheet: View {
         var failed = false
         /// Stores created in this sheet, kept selectable before the observation has caught up.
         var created: [StoreRecord] = []
-        /// Created ids the live stores have already reported; once seen, a missing one was deleted elsewhere.
+        /// Every id the live stores have reported; a created store seen once and missing later was deleted elsewhere.
         var seen: Set<UUID> = []
 
         init(selection: UUID? = nil) { self.selection = selection }
@@ -107,7 +107,7 @@ struct StorePickerSheet: View {
             }
         }
         .onChange(of: stores, initial: true) { _, live in
-            draft.seen.formUnion(draft.created.map(\.id).filter { id in live.contains { $0.id == id } })
+            draft.seen.formUnion(live.map(\.id))
         }
         .presentationDetents([.medium, .large])
     }
