@@ -70,7 +70,7 @@ class SyncSheetComposeTest {
                 LiveSyncEngine(api, registry, isOnline = { true }, scope = CoroutineScope(Dispatchers.Unconfined)).run()
             }
         }
-        val vm = SyncSheetViewModel(household, registry, engine, online, CoroutineScope(Dispatchers.Default))
+        vm = SyncSheetViewModel(household, registry, engine, online, CoroutineScope(Dispatchers.Default))
         rule.setContent {
             AbodeTheme {
                 Column {
@@ -81,6 +81,10 @@ class SyncSheetComposeTest {
             }
         }
     }
+
+    private lateinit var vm: SyncSheetViewModel
+
+    private fun failedSeq(): Long = vm.state.value.failed.single().seq
 
     private fun waitForText(text: String) = rule.waitUntil(5_000) { rule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
 
@@ -109,9 +113,9 @@ class SyncSheetComposeTest {
         show(rejected = true)
         waitForText("list_item · save · Couldn't save: invalid")
         rule.onNodeWithTag("sync.failedCount").assertTextContains("Failed changes: 1")
-        rule.onNodeWithTag("sync.retry").performClick()
+        rule.onNodeWithTag("sync.retry.${failedSeq()}").performClick()
         rule.waitUntil(5_000) { engine.retried.isNotEmpty() }
-        rule.onNodeWithTag("sync.discard").performClick()
+        rule.onNodeWithTag("sync.discard.${failedSeq()}").performClick()
         rule.waitUntil(5_000) { engine.discarded.isNotEmpty() }
         val seq = engine.retried.single()
         assertEquals(listOf(seq), engine.discarded.toList())

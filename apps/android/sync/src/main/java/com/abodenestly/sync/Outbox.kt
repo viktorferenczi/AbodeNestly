@@ -64,6 +64,8 @@ suspend fun DatabaseRegistry.patch(householdId: UUID, table: String, id: String,
         db.runInTransaction(Callable {
             val raw = db.openHelper.writableDatabase
             val cv = contentValues(raw, table, fields.without(setOf("id")))
+            // A table with a local copy but no such row: nothing changed, so nothing is queued (a bare partial upsert would insert a bare row on the server).
+            if (hasLocalTable(raw, table) && !rowExists(raw, table, id)) return@Callable Unit
             if (cv.size() > 0) raw.update(table, SQLiteDatabase.CONFLICT_NONE, cv, "id = ?", arrayOf(id))
             if (!localOnly) queue(raw, table, "upsert", id, fields.without(SERVER_OWNED_KEYS), now)
             Unit
@@ -77,6 +79,7 @@ suspend fun DatabaseRegistry.remove(householdId: UUID, table: String, id: String
     withOpenFor(householdId) { db ->
         db.runInTransaction(Callable {
             val raw = db.openHelper.writableDatabase
+            if (hasLocalTable(raw, table) && !rowExists(raw, table, id)) return@Callable Unit
             if (columnsOf(raw, table).contains("deleted_at")) {
                 val cv = ContentValues().apply { put("deleted_at", DatabaseRegistry.stamp(now.atOffset(java.time.ZoneOffset.UTC))) }
                 raw.update(table, SQLiteDatabase.CONFLICT_NONE, cv, "id = ?", arrayOf(id))
@@ -117,13 +120,17 @@ private fun queue(raw: SupportSQLiteDatabase, table: String, op: String, rowId: 
     raw.insert("outbox", SQLiteDatabase.CONFLICT_ABORT, cv)
 }
 
+private fun hasLocalTable(raw: SupportSQLiteDatabase, table: String) = columnsOf(raw, table).isNotEmpty()
+
+private fun rowExists(raw: SupportSQLiteDatabase, table: String, id: String): Boolean =
+    raw.query("SELECT 1 FROM `$table` WHERE id = ?", arrayOf(id)).use { it.moveToFirst() }
+
 private fun writeLocal(raw: SupportSQLiteDatabase, table: String, householdId: UUID, rowId: String, row: JsonObject) {
     val columns = columnsOf(raw, table)
     if (columns.isEmpty()) return // a table with no local copy yet (pantry, …): only the queued write matters
     val cv = contentValues(raw, table, row.without(setOf("id")))
     if ("household_id" in columns) cv.put("household_id", householdId.toString())
-    val exists = raw.query("SELECT 1 FROM `$table` WHERE id = ?", arrayOf(rowId)).use { it.moveToFirst() }
-    if (exists) {
+    if (rowExists(raw, table, rowId)) {
         if (cv.size() > 0) raw.update(table, SQLiteDatabase.CONFLICT_NONE, cv, "id = ?", arrayOf(rowId))
     } else {
         cv.put("id", rowId)
@@ -133,11 +140,14 @@ private fun writeLocal(raw: SupportSQLiteDatabase, table: String, householdId: U
 
 // JSON → SQLite
 
+private val PLAIN_NAME = Regex("[a-z_][a-z0-9_]*")
+
 private val columnCache = ConcurrentHashMap<String, Set<String>>()
 
 /** The columns of a local table (empty when the table does not exist), read once per database file. */
 internal fun columnsOf(raw: SupportSQLiteDatabase, table: String): Set<String> =
-    columnCache.getOrPut("${raw.path}#$table") {
+    // Pulled table names come from the server and go into SQL: only plain identifiers get that far (same gate as iOS).
+    if (!PLAIN_NAME.matches(table)) emptySet() else columnCache.getOrPut("${raw.path}#$table") {
         raw.query("PRAGMA table_info(`$table`)").use { c ->
             val name = c.getColumnIndexOrThrow("name")
             buildSet { while (c.moveToNext()) add(c.getString(name)) }

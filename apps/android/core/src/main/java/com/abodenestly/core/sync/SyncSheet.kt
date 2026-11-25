@@ -63,15 +63,15 @@ internal fun SyncSheetContent(viewModel: SyncSheetViewModel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(
                         onClick = { viewModel.onEvent(SyncSheetEvent.Retry(change.seq)) },
-                        modifier = Modifier.testTag("sync.retry").semantics { contentDescription = "Retry $what" },
+                        modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("sync.retry.${change.seq}").semantics { contentDescription = "Retry $what" },
                     ) { Text("Retry") }
                     TextButton(
                         onClick = { viewModel.onEvent(SyncSheetEvent.Discard(change.seq)) },
-                        modifier = Modifier.testTag("sync.discard").semantics { contentDescription = "Discard $what" },
+                        modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("sync.discard.${change.seq}").semantics { contentDescription = "Discard $what" },
                     ) { Text("Discard") }
                 }
             }
         }
-        Button(onClick = { viewModel.onEvent(SyncSheetEvent.SyncNow) }, modifier = Modifier.testTag("sync.now")) { Text("Sync now") }
+        Button(onClick = { viewModel.onEvent(SyncSheetEvent.SyncNow) }, modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("sync.now")) { Text("Sync now") }
     }
 }
