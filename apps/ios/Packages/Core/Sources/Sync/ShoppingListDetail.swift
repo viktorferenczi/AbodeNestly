@@ -1,8 +1,7 @@
 import Foundation
 import GRDB
 
-/// A `list_item` row as the list detail and the autocomplete read it (SHOP-02). Name, key and state only; quantity,
-/// unit and note arrive with SHOP-03.
+/// A `list_item` row as the list detail, the item sheet and the autocomplete read it (SHOP-02, SHOP-03).
 public struct ListItemRecord: Sendable, Equatable, Identifiable {
     public var id: UUID
     public var listId: UUID?
@@ -14,11 +13,17 @@ public struct ListItemRecord: Sendable, Equatable, Identifiable {
     public var deletedAt: String?
     /// Millisecond UTC text, or `nil` for a row from before the server stamped it.
     public var createdAt: String?
+    public var quantity: Double?
+    public var unit: String?
+    public var note: String?
 
     public init(
         id: UUID, listId: UUID? = nil, name: String, nameKey: String? = nil, checked: Bool = false,
-        deletedAt: String? = nil, createdAt: String? = nil
+        deletedAt: String? = nil, createdAt: String? = nil, quantity: Double? = nil, unit: String? = nil, note: String? = nil
     ) {
+        self.quantity = quantity
+        self.unit = unit
+        self.note = note
         self.id = id
         self.listId = listId
         self.name = name
@@ -83,7 +88,7 @@ extension HouseholdDatabase {
             let rows = try Row.fetchAll(
                 db,
                 sql: """
-                SELECT id, list_id, name, name_key, checked, deleted_at, created_at FROM list_item
+                SELECT id, list_id, name, name_key, quantity, unit, note, checked, deleted_at, created_at FROM list_item
                 WHERE household_id = ? AND (deleted_at IS NULL OR checked = 1)
                 """,
                 arguments: [key]
@@ -93,7 +98,8 @@ extension HouseholdDatabase {
                 let checked: Bool? = row["checked"]
                 return ListItemRecord(
                     id: id, listId: list.flatMap { UUID(uuidString: $0) }, name: row["name"], nameKey: row["name_key"],
-                    checked: checked ?? false, deletedAt: row["deleted_at"], createdAt: row["created_at"]
+                    checked: checked ?? false, deletedAt: row["deleted_at"], createdAt: row["created_at"],
+                    quantity: row["quantity"], unit: row["unit"], note: row["note"]
                 )
             }
             let items = rows.filter { $0.listId == listId && $0.deletedAt == nil }

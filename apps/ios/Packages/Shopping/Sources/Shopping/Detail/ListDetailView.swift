@@ -3,14 +3,16 @@ import Sync
 import UI
 
 /// DESIGN C2, the SHOP-02 slice. States: empty ("Add your first item", the field focused), populated, offline (a note;
-/// adding works the same), gone ("This list is gone"). Items show only their name until SHOP-03-ios, and the Checked
-/// group is read-only until SHOP-04-ios. The global top bar stays above, so the title is the navigation title.
+/// adding works the same), gone ("This list is gone"). Rows show quantity, unit and note and open the item sheet
+/// (SHOP-03-ios), checked rows too; check-off waits for SHOP-04-ios. The global top bar stays above, so the title is
+/// the navigation title.
 public struct ListDetailView: View {
     @Bindable private var model: ListDetailModel
     private let fallbackTitle: String
     private let isOnline: Bool
     @State private var checkedOpen: Bool
     @FocusState private var fieldFocused: Bool
+    @Environment(\.scenePhase) private var scenePhase
 
     /// `checkedExpanded` starts the Checked group open (tests; the person opens it by tapping its header).
     public init(model: ListDetailModel, title: String, isOnline: Bool, checkedExpanded: Bool = false) {
@@ -32,7 +34,31 @@ public struct ListDetailView: View {
         .background(Tokens.bg)
         .navigationTitle(model.snapshot.list?.name ?? fallbackTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .overlay(alignment: .bottom) {
+            VStack(spacing: 8) {
+                ForEach(model.pendingDeletes) { action in
+                    UndoToast(message: action.message) { model.undoDelete(action.id) }
+                }
+            }
+        }
+        .sheet(item: $model.editing) { state in
+            ItemSheetView(
+                state: state, unitSuggestions: ItemSheetLogic.unitSuggestions(history: model.snapshot.history),
+                onSave: { fields in
+                    switch state {
+                    case .new: await model.create(fields)
+                    case .edit(let item): await model.save(item, fields)
+                    }
+                },
+                onDelete: { model.delete($0) }, onCancel: { model.closeSheet() }
+            )
+        }
         .task { await model.start() }
+        // A delete still inside its undo window is written when the person leaves, not dropped.
+        .onDisappear { Task { await model.flush() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { Task { await model.flush() } }
+        }
         .accessibilityIdentifier("list.screen")
     }
 
@@ -92,7 +118,8 @@ public struct ListDetailView: View {
                     await model.submit()
                     fieldFocused = true
                 }
-            }
+            },
+            onDetails: { model.openNew(prefill: $0) }
         )
     }
 
@@ -107,19 +134,13 @@ public struct ListDetailView: View {
     private var populated: some View {
         List {
             ForEach(model.unchecked) { item in
-                Text(item.name)
-                    .foregroundStyle(Tokens.text)
-                    .frame(maxWidth: .infinity, minHeight: Tokens.minTouchTarget, alignment: .leading)
-                    .accessibilityIdentifier("list.row.\(item.name)")
+                ItemRow(item: item, idPrefix: "list.row", color: Tokens.text) { model.open(item) }
             }
             if !model.checked.isEmpty {
                 Section {
                     DisclosureGroup(isExpanded: $checkedOpen) {
                         ForEach(model.checked) { item in
-                            Text(item.name)
-                                .foregroundStyle(Tokens.text2)
-                                .frame(maxWidth: .infinity, minHeight: Tokens.minTouchTarget, alignment: .leading)
-                                .accessibilityIdentifier("list.checked.row.\(item.name)")
+                            ItemRow(item: item, idPrefix: "list.checked.row", color: Tokens.text2) { model.open(item) }
                         }
                     } label: {
                         Text("Checked (\(model.checked.count))")
@@ -131,5 +152,44 @@ public struct ListDetailView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+    }
+}
+
+/// One item line: name, the note as a caption under it, quantity and unit trailing. The whole row opens the sheet.
+private struct ItemRow: View {
+    let item: ListItemRecord
+    let idPrefix: String
+    let color: Color
+    let onOpen: () -> Void
+
+    var body: some View {
+        let qty = ItemSheetLogic.formatQty(item.quantity, item.unit)
+        Button(action: onOpen) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name).foregroundStyle(color)
+                    if let note = item.note, !note.isEmpty {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(Tokens.text2)
+                            .lineLimit(1)
+                            .accessibilityIdentifier("\(idPrefix).\(item.name).note")
+                    }
+                }
+                Spacer(minLength: 8)
+                if !qty.isEmpty {
+                    Text(qty)
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(Tokens.text2)
+                        .accessibilityIdentifier("\(idPrefix).\(item.name).qty")
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: Tokens.minTouchTarget, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // Reads as "Milk, 2 l, lactose free".
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("\(idPrefix).\(item.name)")
     }
 }

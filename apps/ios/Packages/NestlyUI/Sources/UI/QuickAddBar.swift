@@ -19,11 +19,14 @@ public struct QuickAddBar: View {
     private var focused: FocusState<Bool>.Binding
     private let onPick: (Suggestion) -> Void
     private let onSubmit: () -> Void
+    private let onDetails: ((String) -> Void)?
 
+    /// `onDetails` shows a "Details" button that hands over the typed text (SHOP-03: opens the item sheet).
     public init(
         text: Binding<String>, suggestions: [Suggestion], placeholder: String, focused: FocusState<Bool>.Binding,
-        onPick: @escaping (Suggestion) -> Void, onSubmit: @escaping () -> Void
+        onPick: @escaping (Suggestion) -> Void, onSubmit: @escaping () -> Void, onDetails: ((String) -> Void)? = nil
     ) {
+        self.onDetails = onDetails
         _text = text
         self.suggestions = suggestions
         self.placeholder = placeholder
@@ -66,6 +69,13 @@ public struct QuickAddBar: View {
                     .background(Tokens.surface2, in: RoundedRectangle(cornerRadius: Tokens.cardRadius))
                     .accessibilityLabel("Add item")
                     .accessibilityIdentifier("quickadd.field")
+                if let onDetails {
+                    Button { onDetails(text) } label: { Image(systemName: "slider.horizontal.3") }
+                        .tint(Tokens.accent)
+                        .frame(minWidth: Tokens.minTouchTarget, minHeight: Tokens.minTouchTarget)
+                        .accessibilityLabel("Details")
+                        .accessibilityIdentifier("quickadd.details")
+                }
                 Button("Add", action: onSubmit)
                     .buttonStyle(.borderedProminent)
                     .tint(Tokens.accent)
