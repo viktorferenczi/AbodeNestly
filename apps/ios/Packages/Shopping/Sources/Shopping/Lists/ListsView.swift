@@ -192,23 +192,3 @@ public struct ListsView: View {
         .accessibilityIdentifier("lists.archived.row")
     }
 }
-
-/// The destination of a tapped list until SHOP-02-ios builds the list detail (C2): just its name.
-public struct ListPlaceholderView: View {
-    private let name: String
-
-    public init(name: String) {
-        self.name = name
-    }
-
-    public var body: some View {
-        Text(name)
-            .font(.title2.weight(.semibold))
-            .foregroundStyle(Tokens.text)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Tokens.bg)
-            .navigationTitle(name)
-            .navigationBarTitleDisplayMode(.inline)
-            .accessibilityIdentifier("list.placeholder")
-    }
-}

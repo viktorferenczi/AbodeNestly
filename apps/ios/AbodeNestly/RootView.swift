@@ -363,7 +363,7 @@ private struct MainTabs: View {
                 }
             }
         } else if tab == .shopping, let householdId = household?.id ?? session.currentHouseholdId {
-            ShoppingScreen(householdId: householdId, environment: environment)
+            ShoppingScreen(householdId: householdId, userId: session.userId, environment: environment)
         } else {
             Text(title(tab))
                 .foregroundStyle(Tokens.text)
@@ -397,6 +397,7 @@ private struct ShoppingScreen: View {
     @State private var model: ListsModel
     @State private var path: [ListRoute] = []
     let householdId: UUID
+    let userId: UUID?
     let environment: AppEnvironment
 
     struct ListRoute: Hashable {
@@ -404,8 +405,9 @@ private struct ShoppingScreen: View {
         let name: String
     }
 
-    init(householdId: UUID, environment: AppEnvironment) {
+    init(householdId: UUID, userId: UUID?, environment: AppEnvironment) {
         self.householdId = householdId
+        self.userId = userId
         self.environment = environment
         let sync = environment.sync
         _model = State(initialValue: ListsModel(
@@ -426,8 +428,33 @@ private struct ShoppingScreen: View {
                     .clipped()
             }
             #endif
-            .navigationDestination(for: ListRoute.self) { ListPlaceholderView(name: $0.name) }
+            .navigationDestination(for: ListRoute.self) { route in
+                ListDetailScreen(
+                    route: route, householdId: householdId, userId: userId, environment: environment
+                )
+            }
         }
+    }
+}
+
+/// A list's detail (SHOP-02). Owns its `ListDetailModel`, so a re-render of the stack never resets what was typed.
+private struct ListDetailScreen: View {
+    @State private var model: ListDetailModel
+    let title: String
+    let environment: AppEnvironment
+
+    init(route: ShoppingScreen.ListRoute, householdId: UUID, userId: UUID?, environment: AppEnvironment) {
+        title = route.name
+        self.environment = environment
+        let sync = environment.sync
+        _model = State(initialValue: ListDetailModel(
+            householdId: householdId, listId: route.id, userId: userId, database: environment.database,
+            kick: { await sync.kick() }
+        ))
+    }
+
+    var body: some View {
+        ListDetailView(model: model, title: title, isOnline: environment.network.isOnline)
     }
 }
 
