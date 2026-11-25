@@ -23,6 +23,7 @@
 		A10000000000000000000E16 /* Contract in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E15 /* Contract */; };
 		A10000000000000000000E22 /* Shared in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E21 /* Shared */; };
 		A10000000000000000000E24 /* Sync in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E23 /* Sync */; };
+		A10000000000000000000E32 /* Shopping in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000E31 /* Shopping */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -109,6 +110,7 @@
 				A10000000000000000000E16 /* Contract in Frameworks */,
 				A10000000000000000000E22 /* Shared in Frameworks */,
 				A10000000000000000000E24 /* Sync in Frameworks */,
+				A10000000000000000000E32 /* Shopping in Frameworks */,
 				A10000000000000000000E03 /* ViewInspector in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -211,6 +213,7 @@
 				A10000000000000000000E15 /* Contract */,
 				A10000000000000000000E21 /* Shared */,
 				A10000000000000000000E23 /* Sync */,
+				A10000000000000000000E31 /* Shopping */,
 				A10000000000000000000E02 /* ViewInspector */,
 			);
 			productName = AbodeNestlyTests;
@@ -686,6 +689,10 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A10000000000000000000C01 /* XCLocalSwiftPackageReference "Packages/Core" */;
 			productName = Sync;
+		};
+		A10000000000000000000E31 /* Shopping */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Shopping;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

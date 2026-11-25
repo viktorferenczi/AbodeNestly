@@ -7,5 +7,19 @@ let package = Package(
     name: "Shopping",
     platforms: [.iOS(.v17)],
     products: [.library(name: "Shopping", targets: ["Shopping"])],
-    targets: [.target(name: "Shopping")]
+    dependencies: [
+        .package(path: "../Core"),
+        .package(path: "../Contract"),
+        .package(path: "../NestlyUI"),
+    ],
+    targets: [
+        .target(
+            name: "Shopping",
+            dependencies: [
+                "Contract",
+                .product(name: "Sync", package: "Core"),
+                .product(name: "NestlyUI", package: "NestlyUI"),
+            ]
+        )
+    ]
 )

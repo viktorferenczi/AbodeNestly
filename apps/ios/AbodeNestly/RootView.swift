@@ -1,6 +1,7 @@
 import Contract
 import Core
 import Foundation
+import Shopping
 import SwiftUI
 import Sync
 import UI
@@ -361,18 +362,13 @@ private struct MainTabs: View {
                         .background(Tokens.bg)
                 }
             }
+        } else if tab == .shopping, let householdId = household?.id ?? session.currentHouseholdId {
+            ShoppingScreen(householdId: householdId, environment: environment)
         } else {
-            VStack(spacing: 12) {
-                Text(title(tab))
-                    .foregroundStyle(Tokens.text)
-                    .accessibilityIdentifier("tab.\(tab.rawValue).content")
-                #if DEBUG
-                if tab == .shopping, let householdId = household?.id ?? session.currentHouseholdId {
-                    LocalListsDebugView(householdId: householdId, database: environment.database)
-                }
-                #endif
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Text(title(tab))
+                .foregroundStyle(Tokens.text)
+                .accessibilityIdentifier("tab.\(tab.rawValue).content")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -391,6 +387,46 @@ private struct MainTabs: View {
         case .pantry: "refrigerator"
         case .maintenance: "wrench.and.screwdriver"
         case .home: "house"
+        }
+    }
+}
+
+/// The Shopping tab: the lists overview (SHOP-01) on its own stack. Owns the `ListsModel`, so a re-render of the tabs
+/// never resets it; the tabs are rebuilt (`.id`) for a different household.
+private struct ShoppingScreen: View {
+    @State private var model: ListsModel
+    @State private var path: [ListRoute] = []
+    let householdId: UUID
+    let environment: AppEnvironment
+
+    struct ListRoute: Hashable {
+        let id: UUID
+        let name: String
+    }
+
+    init(householdId: UUID, environment: AppEnvironment) {
+        self.householdId = householdId
+        self.environment = environment
+        let sync = environment.sync
+        _model = State(initialValue: ListsModel(
+            householdId: householdId, database: environment.database, kick: { await sync.kick() }
+        ))
+    }
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            ListsView(model: model, isOnline: environment.network.isOnline) { row in
+                path.append(ListRoute(id: row.id, name: row.name))
+            }
+            #if DEBUG
+            // E2E reads the text by identifier; it takes no room, so the heading stays the top of the screen.
+            .overlay(alignment: .topLeading) {
+                LocalListsDebugView(householdId: householdId, database: environment.database)
+                    .frame(width: 1, height: 1)
+                    .clipped()
+            }
+            #endif
+            .navigationDestination(for: ListRoute.self) { ListPlaceholderView(name: $0.name) }
         }
     }
 }
