@@ -40,7 +40,7 @@ public enum QuickAdd {
             var count: Int
         }
         var groups: [String: Group] = [:]
-        for item in history {
+        for item in history where item.deletedAt == nil || item.checked {
             let k = key(item)
             let created = item.createdAt ?? ""
             if var group = groups[k] {

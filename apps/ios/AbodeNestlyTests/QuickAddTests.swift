@@ -26,12 +26,15 @@ final class DetailHarness {
     let model: ListDetailModel
     private let kicks = KickCounter()
     private var follower: Task<Void, Never>?
+    /// Seeding goes through `upsert`, which queues; the tests only look at what the model queued after that.
+    private var seededOutbox = 0
 
     init(seed: (HouseholdDatabase, UUID) async throws -> Void = { _, _ in }, makeId: @escaping @MainActor () -> UUID = { UUID() }) async throws {
         let db = try await openSyncDatabase(household)
         self.db = db
         try await seedList(db, id: list, name: "Groceries")
         try await seed(db, list)
+        seededOutbox = try await db.outboxForTesting().filter { $0.table == "list_item" }.count
         let kicks = kicks
         model = ListDetailModel(
             householdId: household, listId: list, userId: user, database: db, kick: { await kicks.add() }, now: { fixedNow }, makeId: makeId
@@ -48,7 +51,7 @@ final class DetailHarness {
     }
 
     func outbox() async throws -> [(op: String, rowId: String, data: String)] {
-        try await db.outboxForTesting().filter { $0.table == "list_item" }.map { ($0.op, $0.rowId, $0.data) }
+        try await db.outboxForTesting().filter { $0.table == "list_item" }.dropFirst(seededOutbox).map { ($0.op, $0.rowId, $0.data) }
     }
 
     deinit { follower?.cancel() }

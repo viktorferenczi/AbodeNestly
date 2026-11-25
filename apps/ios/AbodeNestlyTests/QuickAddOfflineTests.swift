@@ -44,9 +44,10 @@ struct QuickAddOfflineTests {
         await engine.kick()
         let pushed = try #require(bodies.withLock { $0.first })
         let body = try JSONDecoder().decode(SyncPushBody.self, from: pushed)
-        #expect(body.mutations.map(\.table) == ["list_item"])
-        #expect(body.mutations.first?.data?["name"] == .string("Milk"))
-        #expect(body.mutations.first?.data?["list_id"] == .string(h.list.uuidString.lowercased()))
+        // The seeded history row rides along in the same push; the new row is the one on this list.
+        let added = body.mutations.filter { $0.table == "list_item" && $0.data?["list_id"] == .string(h.list.uuidString.lowercased()) }
+        #expect(added.count == 1)
+        #expect(added.first?.data?["name"] == .string("Milk"))
         #expect(try await h.outbox().isEmpty)
         #expect(await engine.currentPhase == .idle)
     }
