@@ -40,6 +40,7 @@ public enum QuantityText {
 public struct QuantityStepper: View {
     @Binding private var text: String
     @State private var repeating: Task<Void, Never>?
+    @State private var held = false
 
     public init(text: Binding<String>) { _text = text }
 
@@ -59,29 +60,38 @@ public struct QuantityStepper: View {
     }
 
     private func button(systemName: String, label: String, id: String, direction: Int) -> some View {
-        Image(systemName: systemName)
-            .font(.body.weight(.semibold))
-            .foregroundStyle(Tokens.accent)
-            .frame(width: Tokens.minTouchTarget, height: Tokens.minTouchTarget)
-            .background(Tokens.accentBg, in: Circle())
-            .contentShape(Circle())
-            .onTapGesture { text = QuantityText.step(text, by: direction) }
-            // Held down: after 0.4 s keep stepping every 0.1 s until the finger lifts.
-            .onLongPressGesture(minimumDuration: 0.4, perform: {}, onPressingChanged: { pressing in
-                repeating?.cancel()
-                guard pressing else { return }
-                repeating = Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(400))
-                    while !Task.isCancelled {
-                        text = QuantityText.step(text, by: direction)
-                        try? await Task.sleep(for: .milliseconds(100))
+        // A tap steps once. A hold steps after 0.4 s and then every 0.1 s; the tap that ends a hold is swallowed so it
+        // does not step again (web twin: `held` in `web/src/ui/Stepper.tsx`).
+        Button {
+            if held { held = false } else { text = QuantityText.step(text, by: direction) }
+        } label: {
+            Image(systemName: systemName)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Tokens.accent)
+                .frame(width: Tokens.minTouchTarget, height: Tokens.minTouchTarget)
+                .background(Tokens.accentBg, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard repeating == nil else { return }
+                    repeating = Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(400))
+                        while !Task.isCancelled {
+                            held = true
+                            text = QuantityText.step(text, by: direction)
+                            try? await Task.sleep(for: .milliseconds(100))
+                        }
                     }
                 }
-            })
-            .accessibilityElement()
-            .accessibilityLabel(label)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction { text = QuantityText.step(text, by: direction) }
-            .accessibilityIdentifier(id)
+                .onEnded { _ in
+                    repeating?.cancel()
+                    repeating = nil
+                }
+        )
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(id)
     }
 }

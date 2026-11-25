@@ -77,7 +77,7 @@ struct ItemSheetViewTests {
         try sut.inspect().find(viewWithAccessibilityIdentifier: "stepper.field").textField().setInput("0")
         let view = try sut.inspect()
         #expect(has(view, "item.qtyError"))
-        _ = try view.find(text: "Enter a number above 0")
+        _ = try view.find(text: "Enter a number above 0, with at most 3 decimals")
         #expect(try view.find(viewWithAccessibilityIdentifier: "item.save").button().isDisabled())
     }
 
@@ -88,11 +88,50 @@ struct ItemSheetViewTests {
         #expect(try sut.inspect().find(viewWithAccessibilityIdentifier: "item.unit").textField().input() == "bunch")
     }
 
-    @Test("SHOP-03: the stepper buttons step the quantity")
+    @Test("SHOP-03: the stepper buttons step the quantity: + on empty gives 1, - from 1 clears, a comma is accepted")
     func stepper() throws {
-        let sut = sheetView(.new(prefill: "Rice"))
-        try sut.inspect().find(viewWithAccessibilityIdentifier: "stepper.field").textField().setInput("0,5")
-        #expect(!has(try sut.inspect(), "item.qtyError"))
+        let view = sheetView(.new(prefill: "Rice"))
+        func field() throws -> String { try view.inspect().find(viewWithAccessibilityIdentifier: "stepper.field").textField().input() }
+        try view.inspect().find(viewWithAccessibilityIdentifier: "stepper.plus").button().tap()
+        #expect(try field() == "1")
+        try view.inspect().find(viewWithAccessibilityIdentifier: "stepper.plus").button().tap()
+        #expect(try field() == "2")
+        try view.inspect().find(viewWithAccessibilityIdentifier: "stepper.minus").button().tap()
+        try view.inspect().find(viewWithAccessibilityIdentifier: "stepper.minus").button().tap()
+        #expect(try field() == "")
+        try view.inspect().find(viewWithAccessibilityIdentifier: "stepper.field").textField().setInput("0,5")
+        #expect(!has(try view.inspect(), "item.qtyError"))
+    }
+
+    @Test("SHOP-03: AC3 clearing the note saves note nil and keeps the quantity and unit")
+    func clearNote() async throws {
+        let calls = Calls()
+        let view = sheetView(.edit(milk), calls: calls)
+        try view.inspect().find(viewWithAccessibilityIdentifier: "item.note").textField().setInput("")
+        try view.inspect().find(viewWithAccessibilityIdentifier: "item.save").button().tap()
+        for _ in 0..<200 where calls.saved.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(calls.saved == [ItemFields(name: "Milk", quantity: 2, unit: "l", note: nil)])
+    }
+
+    @Test("SHOP-03: renaming saves the new trimmed name")
+    func rename() async throws {
+        let calls = Calls()
+        let view = sheetView(.edit(milk), calls: calls)
+        try view.inspect().find(viewWithAccessibilityIdentifier: "item.name").textField().setInput("  Oat milk ")
+        try view.inspect().find(viewWithAccessibilityIdentifier: "item.save").button().tap()
+        for _ in 0..<200 where calls.saved.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(calls.saved.first?.name == "Oat milk" && calls.saved.first?.note == "lactose free")
+    }
+
+    @Test("SHOP-03: a failed save keeps the sheet open, keeps the input and shows the message")
+    func saveFails() async throws {
+        let calls = Calls()
+        let view = ItemSheetView(state: .new(prefill: "Eggs"), unitSuggestions: [], onSave: { calls.saved.append($0); return false }, onDelete: { _ in }, onCancel: { calls.cancels += 1 })
+        try view.inspect().find(viewWithAccessibilityIdentifier: "item.save").button().tap()
+        for _ in 0..<200 where calls.saved.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(calls.cancels == 0)
+        #expect(try view.inspect().find(viewWithAccessibilityIdentifier: "item.name").textField().input() == "Eggs")
     }
 
     @Test("SHOP-03: Cancel writes nothing; Delete hands the item over")

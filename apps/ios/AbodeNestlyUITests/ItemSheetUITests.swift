@@ -64,8 +64,10 @@ final class ItemSheetUITests: XCTestCase {
         note.tap()
         note.typeText("lactose free")
         app.buttons["item.save"].tap()
-        XCTAssertTrue(app.staticTexts["2 l"].waitForExistence(timeout: 10), app.debugDescription)
-        XCTAssertTrue(app.staticTexts["lactose free"].exists, app.debugDescription)
+        // The row is one accessibility element; its label reads "Milk, 2 l, lactose free".
+        let saved = app.buttons["list.row.Milk"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(saved.label.contains("2 l") && saved.label.contains("lactose free"), saved.label)
 
         // AC3: clear the note; the quantity stays.
         app.buttons["list.row.Milk"].tap()
@@ -76,8 +78,10 @@ final class ItemSheetUITests: XCTestCase {
         app.menuItems["Select All"].tap()
         editNote.typeText(XCUIKeyboardKey.delete.rawValue)
         app.buttons["item.save"].tap()
-        XCTAssertTrue(app.staticTexts["2 l"].waitForExistence(timeout: 10), app.debugDescription)
-        XCTAssertFalse(app.staticTexts["lactose free"].exists, app.debugDescription)
+        let cleared = app.buttons["list.row.Milk"]
+        XCTAssertTrue(cleared.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(cleared.label.contains("2 l"), cleared.label)
+        XCTAssertFalse(cleared.label.contains("lactose free"), cleared.label)
 
         // The server row ends with quantity 2, unit "l", note null.
         var found: [String: Any]?

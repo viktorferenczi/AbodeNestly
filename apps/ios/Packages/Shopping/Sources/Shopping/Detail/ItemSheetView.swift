@@ -21,6 +21,7 @@ struct ItemSheetView: View {
 
     @State private var box: ItemFormBox
     @State private var saving = false
+    @State private var saveFailed = false
 
     init(
         state: ItemSheetState, unitSuggestions: [String], onSave: @escaping (ItemFields) async -> Bool,
@@ -61,7 +62,7 @@ struct ItemSheetView: View {
                 Section("Quantity") {
                     QuantityStepper(text: $box.form.quantityText)
                     if ItemSheetLogic.quantityInvalid(form) {
-                        Text("Enter a number above 0")
+                        Text("Enter a number above 0, with at most 3 decimals")
                             .font(.footnote)
                             .foregroundStyle(Tokens.danger)
                             .accessibilityIdentifier("item.qtyError")
@@ -82,6 +83,13 @@ struct ItemSheetView: View {
                                 }
                             }
                         }
+                    }
+                }
+                if saveFailed {
+                    Section {
+                        Text("Could not save the item. Try again.")
+                            .foregroundStyle(Tokens.danger)
+                            .accessibilityIdentifier("item.saveError")
                     }
                 }
                 Section("Note") {
@@ -109,7 +117,9 @@ struct ItemSheetView: View {
                         saving = true
                         Task {
                             // A failed write keeps the sheet open with the input as typed.
-                            if await onSave(fields) { onCancel() }
+                            let saved = await onSave(fields)
+                            saveFailed = !saved
+                            if saved { onCancel() }
                             saving = false
                         }
                     }
