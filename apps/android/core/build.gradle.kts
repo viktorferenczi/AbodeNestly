@@ -58,7 +58,8 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.okhttp)
+    // api: HttpApiService takes an OkHttpClient in its constructor, so :app compiles against it.
+    api(libs.okhttp)
 
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.auth)
