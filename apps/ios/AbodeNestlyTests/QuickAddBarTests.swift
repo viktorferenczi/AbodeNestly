@@ -8,12 +8,14 @@ private struct BarHost: View {
     @State var text: String
     let suggestions: [QuickAddBar.Suggestion]
     let picked: Box
+    var withDetails = false
     @FocusState private var focused: Bool
 
     var body: some View {
         QuickAddBar(
             text: $text, suggestions: suggestions, placeholder: "Add item", focused: $focused,
-            onPick: { picked.picks.append($0.label) }, onSubmit: { picked.submits += 1 }
+            onPick: { picked.picks.append($0.label) }, onSubmit: { picked.submits += 1 },
+            onDetails: withDetails ? { picked.details.append($0) } : nil
         )
     }
 }
@@ -22,6 +24,7 @@ private struct BarHost: View {
 final class Box {
     var picks: [String] = []
     var submits = 0
+    var details: [String] = []
 }
 
 @MainActor
@@ -52,5 +55,14 @@ struct QuickAddBarTests {
     func addDisabled() throws {
         #expect(try bar(text: "  ").find(viewWithAccessibilityIdentifier: "quickadd.add").button().isDisabled())
         #expect(try !bar(text: "Eggs").find(viewWithAccessibilityIdentifier: "quickadd.add").button().isDisabled())
+    }
+
+    @Test("SHOP-03: Details shows only with onDetails and hands over the typed text")
+    func details() throws {
+        #expect((try? bar(text: "Eggs").find(viewWithAccessibilityIdentifier: "quickadd.details")) == nil)
+        let box = Box()
+        let view = try BarHost(text: "Eggs", suggestions: [], picked: box, withDetails: true).inspect()
+        try view.find(viewWithAccessibilityIdentifier: "quickadd.details").button().tap()
+        #expect(box.details == ["Eggs"])
     }
 }

@@ -59,11 +59,11 @@ final class QuickAddUITests: XCTestCase {
         let suggestion = app.buttons["quickadd.suggestion.Milk"]
         XCTAssertTrue(suggestion.waitForExistence(timeout: 10), app.debugDescription)
         suggestion.tap()
-        XCTAssertTrue(app.staticTexts["list.row.Milk"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.buttons["list.row.Milk"].waitForExistence(timeout: 10), app.debugDescription)
 
         // AC3: a name with no history is added as typed.
         field.typeText("Lightbulbs\n")
-        XCTAssertTrue(app.staticTexts["list.row.Lightbulbs"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.buttons["list.row.Lightbulbs"].waitForExistence(timeout: 10), app.debugDescription)
 
         // Both rows reach the server, unchecked, in this list.
         var names: Set<String> = []
