@@ -40,8 +40,8 @@ class SyncMigrationTest {
                 db.execSQL(e["createSql"]!!.jsonPrimitive.content.replace("\${TABLE_NAME}", table))
                 e["indices"]?.jsonArray?.forEach { db.execSQL(it.jsonObject["createSql"]!!.jsonPrimitive.content.replace("\${TABLE_NAME}", table)) }
             }
-            db.execSQL("INSERT INTO shopping_list (id, household_id, name) VALUES ('l1', '$household', 'Groceries')")
-            db.execSQL("INSERT INTO list_item (id, household_id, list_id, name) VALUES ('i1', '$household', 'l1', 'Milk')")
+            db.execSQL("INSERT INTO shopping_list (id, household_id, name) VALUES ('${uuid(10)}', '$household', 'Groceries')")
+            db.execSQL("INSERT INTO list_item (id, household_id, list_id, name) VALUES ('i1', '$household', '${uuid(10)}', 'Milk')")
             db.execSQL("INSERT INTO outbox (id, table_name, op, row_id, data, client_ts) VALUES ('m1', 'list_item', 'upsert', 'i1', '{}', 't')")
             db.execSQL("INSERT INTO meta (`key`, value) VALUES ('cursor', '42')")
             db.execSQL("PRAGMA user_version = 5")

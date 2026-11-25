@@ -33,6 +33,8 @@ suspend fun DatabaseRegistry.applyPull(householdId: UUID, page: SyncPullPage): B
                     val id = (row["id"] as? JsonPrimitive)?.contentOrNull
                     if (id != null && "$table:$id" in queued) continue
                     val cv = contentValues(raw, table, row)
+                    // Rows pulled for this household belong to it even when the server leaves the column out.
+                    if (cv.size() > 0 && !cv.containsKey("household_id") && "household_id" in columnsOf(raw, table)) cv.put("household_id", householdId.toString())
                     if (cv.size() > 0) raw.insert(table, SQLiteDatabase.CONFLICT_REPLACE, cv)
                 }
             }
