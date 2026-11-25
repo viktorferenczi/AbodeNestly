@@ -4,8 +4,9 @@ import UI
 
 /// DESIGN C2, the SHOP-02 slice. States: empty ("Add your first item", the field focused), populated, offline (a note;
 /// adding works the same), gone ("This list is gone"). Rows show quantity, unit and note and open the item sheet
-/// (SHOP-03-ios), checked rows too; check-off waits for SHOP-04-ios. The global top bar stays above, so the title is
-/// the navigation title.
+/// (SHOP-03-ios), checked rows too. SHOP-04-ios adds the checkbox beside each row (undoable for 5 s, written when the
+/// window ends), the all-checked state and "Clear checked". The global top bar stays above, so the title is the
+/// navigation title.
 public struct ListDetailView: View {
     @Bindable private var model: ListDetailModel
     private let fallbackTitle: String
@@ -36,8 +37,8 @@ public struct ListDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .overlay(alignment: .bottom) {
             VStack(spacing: 8) {
-                ForEach(model.pendingDeletes) { action in
-                    UndoToast(message: action.message) { model.undoDelete(action.id) }
+                ForEach(model.pendingActions) { action in
+                    UndoToast(message: action.message) { model.undo(action.id) }
                 }
             }
         }
@@ -53,8 +54,23 @@ public struct ListDetailView: View {
                 onDelete: { model.delete($0) }, onCancel: { model.closeSheet() }
             )
         }
+        .toolbar {
+            // Only item for now (Share, Template and Archive land later), and only when there is something to clear.
+            if !model.checked.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("Clear checked") { model.clearChecked() }
+                            .accessibilityIdentifier("list.actions.clearChecked")
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel("List actions")
+                    .accessibilityIdentifier("list.actions")
+                }
+            }
+        }
         .task { await model.start() }
-        // A delete still inside its undo window is written when the person leaves, not dropped.
+        // An action still inside its undo window is written when the person leaves, not dropped.
         .onDisappear { Task { await model.flush() } }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { Task { await model.flush() } }
@@ -133,14 +149,35 @@ public struct ListDetailView: View {
 
     private var populated: some View {
         List {
+            if model.allChecked {
+                VStack(spacing: 8) {
+                    Text("All done")
+                        .font(.headline)
+                        .foregroundStyle(Tokens.text)
+                        .accessibilityIdentifier("list.allDone")
+                    Button("Clear checked") { model.clearChecked() }
+                        .buttonStyle(.bordered)
+                        .tint(Tokens.accent)
+                        .accessibilityIdentifier("list.clearChecked")
+                }
+                .frame(maxWidth: .infinity)
+                .listRowBackground(Color.clear)
+            }
             ForEach(model.unchecked) { item in
-                ItemRow(item: item, idPrefix: "list.row", color: Tokens.text) { model.open(item) }
+                let pending = model.isPendingCheck(item.id)
+                ItemRow(
+                    item: item, idPrefix: "list.row", color: pending ? Tokens.text2 : Tokens.text, ticked: pending, strikethrough: pending,
+                    onOpen: { model.open(item) }, onToggle: { model.check(item) }
+                )
             }
             if !model.checked.isEmpty {
                 Section {
                     DisclosureGroup(isExpanded: $checkedOpen) {
                         ForEach(model.checked) { item in
-                            ItemRow(item: item, idPrefix: "list.checked.row", color: Tokens.text2) { model.open(item) }
+                            ItemRow(
+                                item: item, idPrefix: "list.checked.row", color: Tokens.text2, ticked: true, strikethrough: false,
+                                onOpen: { model.open(item) }, onToggle: { Task { await model.uncheck(item) } }
+                            )
                         }
                     } label: {
                         Text("Checked (\(model.checked.count))")
@@ -155,41 +192,59 @@ public struct ListDetailView: View {
     }
 }
 
-/// One item line: name, the note as a caption under it, quantity and unit trailing. The whole row opens the sheet.
+/// One item line: a checkbox, then the name with the note as a caption under it and quantity and unit trailing. The
+/// checkbox sits beside the open button, both borderless, so a `List` row never fires both.
 private struct ItemRow: View {
     let item: ListItemRecord
     let idPrefix: String
     let color: Color
+    let ticked: Bool
+    let strikethrough: Bool
     let onOpen: () -> Void
+    let onToggle: () -> Void
 
     var body: some View {
         let qty = ItemSheetLogic.formatQty(item.quantity, item.unit)
-        Button(action: onOpen) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.name).foregroundStyle(color)
-                    if let note = item.note, !note.isEmpty {
-                        Text(note)
-                            .font(.caption)
+        HStack(spacing: 4) {
+            Button(action: onToggle) {
+                Image(systemName: ticked ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(Tokens.accent)
+                    .frame(width: Tokens.minTouchTarget, height: Tokens.minTouchTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .sensoryFeedback(.success, trigger: ticked) { old, new in !old && new }
+            .accessibilityLabel(item.checked ? "Uncheck \(item.name)" : "Check off \(item.name)")
+            .accessibilityIdentifier("\(idPrefix).\(item.name).check")
+            Button(action: onOpen) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name).strikethrough(strikethrough).foregroundStyle(color)
+                        if let note = item.note, !note.isEmpty {
+                            Text(note)
+                                .font(.caption)
+                                .foregroundStyle(Tokens.text2)
+                                .lineLimit(1)
+                                .accessibilityIdentifier("\(idPrefix).\(item.name).note")
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    if !qty.isEmpty {
+                        Text(qty)
+                            .font(.subheadline.monospacedDigit())
                             .foregroundStyle(Tokens.text2)
-                            .lineLimit(1)
-                            .accessibilityIdentifier("\(idPrefix).\(item.name).note")
+                            .accessibilityIdentifier("\(idPrefix).\(item.name).qty")
                     }
                 }
-                Spacer(minLength: 8)
-                if !qty.isEmpty {
-                    Text(qty)
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(Tokens.text2)
-                        .accessibilityIdentifier("\(idPrefix).\(item.name).qty")
-                }
+                .frame(maxWidth: .infinity, minHeight: Tokens.minTouchTarget, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, minHeight: Tokens.minTouchTarget, alignment: .leading)
-            .contentShape(Rectangle())
+            .buttonStyle(.borderless)
+            // Reads as "Milk, 2 l, lactose free"; the checkbox stays its own element beside it.
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("\(idPrefix).\(item.name)")
         }
-        .buttonStyle(.plain)
-        // Reads as "Milk, 2 l, lactose free".
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("\(idPrefix).\(item.name)")
+        .accessibilityAction(named: item.checked ? "Uncheck" : "Check off", onToggle)
     }
 }
