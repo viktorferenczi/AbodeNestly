@@ -8,12 +8,17 @@ public struct ListsView: View {
     @Bindable private var model: ListsModel
     private let isOnline: Bool
     private let onOpen: (ListRow) -> Void
+    private let onOpenStores: () -> Void
     @State private var showSheet = false
     @State private var archivedOpen: Bool
     @Environment(\.scenePhase) private var scenePhase
 
     /// `archivedExpanded` starts the Archived section open (tests; the person opens it by tapping its header).
-    public init(model: ListsModel, isOnline: Bool, archivedExpanded: Bool = false, onOpen: @escaping (ListRow) -> Void) {
+    public init(
+        model: ListsModel, isOnline: Bool, archivedExpanded: Bool = false, onOpenStores: @escaping () -> Void = {},
+        onOpen: @escaping (ListRow) -> Void
+    ) {
+        self.onOpenStores = onOpenStores
         _archivedOpen = State(initialValue: archivedExpanded)
         self.model = model
         self.isOnline = isOnline
@@ -77,6 +82,14 @@ public struct ListsView: View {
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("tab.shopping.content")
             Spacer()
+            Button(action: onOpenStores) {
+                Image(systemName: "storefront")
+                    .frame(width: Tokens.minTouchTarget, height: Tokens.minTouchTarget)
+                    .contentShape(Rectangle())
+            }
+            .foregroundStyle(Tokens.accent)
+            .accessibilityLabel("Stores")
+            .accessibilityIdentifier("lists.stores")
             Button { showSheet = true } label: {
                 Image(systemName: "plus")
                     .frame(width: Tokens.minTouchTarget, height: Tokens.minTouchTarget)

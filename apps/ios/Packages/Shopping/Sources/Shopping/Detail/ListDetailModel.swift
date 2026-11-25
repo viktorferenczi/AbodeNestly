@@ -130,6 +130,31 @@ public final class ListDetailModel {
         return true
     }
 
+    /// Creates a store from the picker's inline field and returns its id (the picker selects it). Same row and checks
+    /// as the Stores screen.
+    public func createStore(name: String) async -> UUID? {
+        guard Stores.validate(name: name, stores: snapshot.stores) == nil else { return nil }
+        let id = makeId()
+        let stored = await write {
+            try await database.upsert(
+                table: "store", row: Stores.row(id: id, householdId: householdId, name: name, now: now()), now: now()
+            )
+        }
+        guard stored else { return nil }
+        await kick()
+        return id
+    }
+
+    /// Points the list at a store, or at none. Only `store_id` is queued; nothing is written when it did not change.
+    @discardableResult
+    public func setStore(_ storeId: UUID?) async -> Bool {
+        guard snapshot.list?.storeId != storeId else { return true }
+        let fields: [String: JSONValue] = ["store_id": storeId.map { .string($0.uuidString.lowercased()) } ?? .null]
+        guard await write({ try await database.patch(table: "shopping_list", id: listId, fields: fields, now: now()) }) else { return false }
+        await kick()
+        return true
+    }
+
     public func openNew(prefill: String) { editing = .new(prefill: prefill) }
     public func open(_ item: ListItemRecord) { editing = .edit(item) }
     public func closeSheet() { editing = nil }

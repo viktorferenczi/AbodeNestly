@@ -395,7 +395,8 @@ private struct MainTabs: View {
 /// never resets it; the tabs are rebuilt (`.id`) for a different household.
 private struct ShoppingScreen: View {
     @State private var model: ListsModel
-    @State private var path: [ListRoute] = []
+    @State private var path: [ShoppingRoute] = []
+    @State private var stores: StoresModel
     let householdId: UUID
     let userId: UUID?
     let environment: AppEnvironment
@@ -403,6 +404,11 @@ private struct ShoppingScreen: View {
     struct ListRoute: Hashable {
         let id: UUID
         let name: String
+    }
+
+    enum ShoppingRoute: Hashable {
+        case list(ListRoute)
+        case stores
     }
 
     init(householdId: UUID, userId: UUID?, environment: AppEnvironment) {
@@ -413,13 +419,17 @@ private struct ShoppingScreen: View {
         _model = State(initialValue: ListsModel(
             householdId: householdId, database: environment.database, kick: { await sync.kick() }
         ))
+        _stores = State(initialValue: StoresModel(
+            householdId: householdId, database: environment.database, kick: { await sync.kick() }
+        ))
     }
 
     var body: some View {
         NavigationStack(path: $path) {
-            ListsView(model: model, isOnline: environment.network.isOnline) { row in
-                path.append(ListRoute(id: row.id, name: row.name))
-            }
+            ListsView(
+                model: model, isOnline: environment.network.isOnline, onOpenStores: { path.append(.stores) },
+                onOpen: { row in path.append(.list(ListRoute(id: row.id, name: row.name))) }
+            )
             #if DEBUG
             // E2E reads the text by identifier; it takes no room, so the heading stays the top of the screen.
             .overlay(alignment: .topLeading) {
@@ -428,10 +438,16 @@ private struct ShoppingScreen: View {
                     .clipped()
             }
             #endif
-            .navigationDestination(for: ListRoute.self) { route in
-                ListDetailScreen(
-                    route: route, householdId: householdId, userId: userId, environment: environment
-                )
+            .navigationDestination(for: ShoppingRoute.self) { route in
+                switch route {
+                case .list(let route):
+                    ListDetailScreen(
+                        route: route, householdId: householdId, userId: userId, environment: environment,
+                        onManageStores: { path.append(.stores) }
+                    )
+                case .stores:
+                    StoresView(model: stores, isOnline: environment.network.isOnline)
+                }
             }
         }
     }
@@ -442,8 +458,13 @@ private struct ListDetailScreen: View {
     @State private var model: ListDetailModel
     let title: String
     let environment: AppEnvironment
+    let onManageStores: () -> Void
 
-    init(route: ShoppingScreen.ListRoute, householdId: UUID, userId: UUID?, environment: AppEnvironment) {
+    init(
+        route: ShoppingScreen.ListRoute, householdId: UUID, userId: UUID?, environment: AppEnvironment,
+        onManageStores: @escaping () -> Void
+    ) {
+        self.onManageStores = onManageStores
         title = route.name
         self.environment = environment
         let sync = environment.sync
@@ -454,7 +475,9 @@ private struct ListDetailScreen: View {
     }
 
     var body: some View {
-        ListDetailView(model: model, title: title, isOnline: environment.network.isOnline)
+        ListDetailView(
+            model: model, title: title, isOnline: environment.network.isOnline, onManageStores: onManageStores
+        )
     }
 }
 

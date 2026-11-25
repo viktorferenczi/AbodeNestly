@@ -44,14 +44,20 @@ public struct ListDetailSnapshot: Sendable, Equatable {
     public var list: ListRecord?
     /// The list's store, when it points to a live store.
     public var storeName: String?
+    /// The household's live stores, for the store picker.
+    public var stores: [StoreRecord]
     /// This list's live items.
     public var items: [ListItemRecord]
     /// The household's item history: live rows plus rows that were checked at some point, on every list.
     public var history: [ListItemRecord]
 
-    public init(list: ListRecord? = nil, storeName: String? = nil, items: [ListItemRecord] = [], history: [ListItemRecord] = []) {
+    public init(
+        list: ListRecord? = nil, storeName: String? = nil, stores: [StoreRecord] = [], items: [ListItemRecord] = [],
+        history: [ListItemRecord] = []
+    ) {
         self.list = list
         self.storeName = storeName
+        self.stores = stores
         self.items = items
         self.history = history
     }
@@ -95,13 +101,12 @@ extension HouseholdDatabase {
                     archivedAt: row["archived_at"], createdAt: row["created_at"]
                 )
             }
-            var storeName: String?
-            if let storeId = list?.storeId {
-                storeName = try String.fetchOne(
-                    db, sql: "SELECT name FROM store WHERE household_id = ? AND id = ? AND deleted_at IS NULL",
-                    arguments: [key, storeId.uuidString.lowercased()]
-                )
+            let stores = try Row.fetchAll(
+                db, sql: "SELECT id, name FROM store WHERE household_id = ? AND deleted_at IS NULL", arguments: [key]
+            ).compactMap { row -> StoreRecord? in
+                UUID(uuidString: row["id"]).map { StoreRecord(id: $0, name: row["name"]) }
             }
+            let storeName = list?.storeId.flatMap { id in stores.first { $0.id == id }?.name }
             let rows = try Row.fetchAll(
                 db,
                 sql: """
@@ -120,7 +125,7 @@ extension HouseholdDatabase {
                 )
             }
             let items = rows.filter { $0.listId == listId && $0.deletedAt == nil }
-            return ListDetailSnapshot(list: list, storeName: storeName, items: items, history: rows)
+            return ListDetailSnapshot(list: list, storeName: storeName, stores: stores, items: items, history: rows)
         }
         return AsyncStream { continuation in
             let task = Task {
