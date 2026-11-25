@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 import java.util.UUID
@@ -34,19 +35,25 @@ class LiveSyncEngine(
     private val pending = AtomicBoolean(false)
 
     override fun kick() {
-        scope.launch { run() }
+        scope.launch {
+            pending.set(true)
+            // The outer check catches a request that landed between the holder's last look and its unlock.
+            while (pending.get()) {
+                if (!running.tryLock()) return@launch // the holder's loop picks the request up
+                try {
+                    while (pending.getAndSet(false)) once()
+                } finally {
+                    running.unlock()
+                }
+            }
+        }
     }
 
+    /** Returns when the pass that covers this request, and any queued behind it, is done (a background worker must not return earlier). */
     override suspend fun run() {
         pending.set(true)
-        // The outer check catches a request that landed between the holder's last look and its unlock.
-        while (pending.get()) {
-            if (!running.tryLock()) return
-            try {
-                while (pending.getAndSet(false)) once()
-            } finally {
-                running.unlock()
-            }
+        running.withLock {
+            while (pending.getAndSet(false)) once()
         }
     }
 

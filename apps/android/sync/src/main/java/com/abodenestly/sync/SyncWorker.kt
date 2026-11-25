@@ -16,7 +16,14 @@ import java.util.concurrent.TimeUnit
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val provider = applicationContext as? SyncEngineProvider ?: return Result.failure()
-        runCatching { provider.prepareBackgroundSync() }
+        // A failed open is retried by WorkManager; cancellation propagates.
+        try {
+            provider.prepareBackgroundSync()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return Result.retry()
+        }
         provider.syncEngine.run()
         return Result.success()
     }
