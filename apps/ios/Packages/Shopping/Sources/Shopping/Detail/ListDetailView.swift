@@ -11,13 +11,20 @@ public struct ListDetailView: View {
     @Bindable private var model: ListDetailModel
     private let fallbackTitle: String
     private let isOnline: Bool
+    private let onManageStores: () -> Void
     @State private var checkedOpen: Bool
+    @State private var showStorePicker = false
+    /// "Manage stores" pushes once the picker has finished dismissing; a push during the dismissal is dropped.
+    @State private var manageAfterDismiss = false
     @FocusState private var fieldFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
 
     /// `checkedExpanded` starts the Checked group open (tests; the person opens it by tapping its header).
-    public init(model: ListDetailModel, title: String, isOnline: Bool, checkedExpanded: Bool = false) {
+    public init(
+        model: ListDetailModel, title: String, isOnline: Bool, checkedExpanded: Bool = false, onManageStores: @escaping () -> Void = {}
+    ) {
         self.model = model
+        self.onManageStores = onManageStores
         fallbackTitle = title
         self.isOnline = isOnline
         _checkedOpen = State(initialValue: checkedExpanded)
@@ -54,6 +61,26 @@ public struct ListDetailView: View {
                 onDelete: { model.delete($0) }, onCancel: { model.closeSheet() }
             )
         }
+        .sheet(isPresented: $showStorePicker, onDismiss: {
+            guard manageAfterDismiss else { return }
+            manageAfterDismiss = false
+            onManageStores()
+        }) {
+            StorePickerSheet(
+                stores: model.snapshot.stores, current: model.snapshot.list?.storeId,
+                onCreate: { await model.createStore(name: $0) },
+                onSave: { choice in
+                    guard await model.setStore(choice) else { return false }
+                    showStorePicker = false
+                    return true
+                },
+                onManage: {
+                    manageAfterDismiss = true
+                    showStorePicker = false
+                },
+                onClose: { showStorePicker = false }
+            )
+        }
         .toolbar {
             // Only item for now (Share, Template and Archive land later), and only when there is something to clear.
             if !model.checked.isEmpty {
@@ -88,19 +115,23 @@ public struct ListDetailView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if let store = model.snapshot.storeName {
-            HStack {
-                Text(store)
+        HStack {
+            let store = model.snapshot.storeName
+            Button { showStorePicker = true } label: {
+                Text(store ?? "Add store")
                     .font(.caption)
-                    .foregroundStyle(Tokens.accent)
+                    .foregroundStyle(store == nil ? Tokens.text2 : Tokens.accent)
                     .padding(.horizontal, 8).padding(.vertical, 2)
-                    .background(Tokens.accentBg, in: Capsule())
-                    .accessibilityIdentifier("list.store")
-                Spacer()
+                    .background(store == nil ? Tokens.text2.opacity(0.12) : Tokens.accentBg, in: Capsule())
+                    .frame(minHeight: Tokens.minTouchTarget)
+                    .contentShape(Rectangle())
             }
-            .padding(.horizontal, Tokens.screenPadding)
-            .padding(.top, 8)
+            // Voice Control activates by the visible words, so the empty chip is named "Add store".
+            .accessibilityLabel(store.map { "Store: \($0)" } ?? "Add store")
+            .accessibilityIdentifier("list.store")
+            Spacer()
         }
+        .padding(.horizontal, Tokens.screenPadding)
         if model.writeFailed {
             Text("Could not save the change. Try again.")
                 .font(.subheadline)
