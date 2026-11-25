@@ -31,6 +31,8 @@ struct CheckOffOfflineTests {
         await h.settle { model.pendingActions.isEmpty && model.checked.count == 1 }
         #expect(model.checked.count == 1)
         #expect(try await h.outbox().count == 1)
+        // The kick runs after the pending state clears, so wait for the failed push to flip the phase.
+        for _ in 0..<400 where await engine.currentPhase != .offline { try await Task.sleep(for: .milliseconds(5)) }
         #expect(await engine.currentPhase == .offline)
 
         OfflineStubProtocol.own.withLock {
