@@ -27,4 +27,7 @@ interface SyncEngine {
 /** The application implements this so [SyncWorker] can reach the engine without a dependency on the app module. */
 interface SyncEngineProvider {
     val syncEngine: SyncEngine
+
+    /** Opens the household a cold background start should sync (the last one used); a no-op when one is open. */
+    suspend fun prepareBackgroundSync() {}
 }

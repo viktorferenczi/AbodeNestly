@@ -107,6 +107,7 @@ class AppGraph(context: Context) {
             private var ticker: Job? = null
 
             override fun onStart(owner: LifecycleOwner) {
+                sync.kick()
                 ticker = appScope.launch { while (true) { delay(FOREGROUND_TICK_MS); sync.kick() } }
             }
 

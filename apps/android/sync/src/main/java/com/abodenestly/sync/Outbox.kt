@@ -67,7 +67,9 @@ suspend fun DatabaseRegistry.patch(householdId: UUID, table: String, id: String,
             // A table with a local copy but no such row: nothing changed, so nothing is queued (a bare partial upsert would insert a bare row on the server).
             if (hasLocalTable(raw, table) && !rowExists(raw, table, id)) return@Callable Unit
             if (cv.size() > 0) raw.update(table, SQLiteDatabase.CONFLICT_NONE, cv, "id = ?", arrayOf(id))
-            if (!localOnly) queue(raw, table, "upsert", id, fields.without(SERVER_OWNED_KEYS), now)
+            // Nothing left after dropping server-owned columns (SPEC §6.2): nothing to send.
+            val sendable = fields.without(SERVER_OWNED_KEYS)
+            if (!localOnly && sendable.isNotEmpty()) queue(raw, table, "upsert", id, sendable, now)
             Unit
         })
     }
