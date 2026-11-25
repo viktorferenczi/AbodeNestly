@@ -19,6 +19,7 @@ public enum NameKey {
                 inSpace = false
             }
         }
-        return out.lowercased()
+        // Not the phone's locale: a Turkish "I" must still key as "i", as in SQL lower() and web toLowerCase().
+        return out.lowercased(with: nil)
     }
 }
