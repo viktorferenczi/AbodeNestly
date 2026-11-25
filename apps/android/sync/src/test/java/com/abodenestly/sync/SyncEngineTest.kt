@@ -286,6 +286,21 @@ class SyncEngineTest {
     }
 
     @Test
+    fun `Discard leaves the cursor alone while another change still targets the row`() = runBlocking {
+        registry.open(household)
+        registry.upsert(household, "list_item", listItem("i1", "Milk"))
+        registry.upsert(household, "list_item", listItem("i1", "Milk 2"))
+        transport.pushDefault = rejecting("validation")
+        engine().run()
+        registry.writeCursor(9)
+        val failed = registry.withOpen { it.outbox().failed() }
+        registry.discardFailed(household, failed[0].seq)
+        assertEquals(9L, registry.cursorOf(household))
+        registry.discardFailed(household, failed[1].seq)
+        assertEquals(0L, registry.cursorOf(household))
+    }
+
+    @Test
     fun `Discard keeps the local row while another change still targets it`() = runBlocking {
         registry.open(household)
         registry.upsert(household, "list_item", listItem("i1", "Milk"))

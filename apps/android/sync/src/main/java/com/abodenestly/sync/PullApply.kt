@@ -99,8 +99,8 @@ internal suspend fun DatabaseRegistry.discardFailed(householdId: UUID, seq: Long
             val otherwise = dao.countTargeting(failed.tableName, failed.rowId) + dao.countFailedTargeting(failed.tableName, failed.rowId)
             if (otherwise == 0 && failed.tableName in PUSHABLE_TABLES) {
                 db.openHelper.writableDatabase.delete(failed.tableName, "id = ?", arrayOf(failed.rowId))
+                db.meta().put(MetaEntity(DatabaseRegistry.CURSOR, "0"))
             }
-            db.meta().put(MetaEntity(DatabaseRegistry.CURSOR, "0"))
         }
     }
 }
