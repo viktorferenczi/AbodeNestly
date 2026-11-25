@@ -34,19 +34,9 @@ class LiveSyncEngine(
     private val running = Mutex()
     private val pending = AtomicBoolean(false)
 
+    // Waiters queue on the lock; the first one's loop takes every request made so far, so the rest add no pass.
     override fun kick() {
-        scope.launch {
-            pending.set(true)
-            // The outer check catches a request that landed between the holder's last look and its unlock.
-            while (pending.get()) {
-                if (!running.tryLock()) return@launch // the holder's loop picks the request up
-                try {
-                    while (pending.getAndSet(false)) once()
-                } finally {
-                    running.unlock()
-                }
-            }
-        }
+        scope.launch { run() }
     }
 
     /** Returns when the pass that covers this request, and any queued behind it, is done (a background worker must not return earlier). */

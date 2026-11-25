@@ -104,6 +104,7 @@ class SyncSheetComposeTest {
         waitForText("3 to sync")
         rule.onNodeWithTag("sync.chip").assertIsDisplayed()
         rule.onNodeWithTag("sync.pending").assertTextContains("Pending changes: 3")
+        rule.onNodeWithTag("sync.status").assertTextContains("Changes are waiting to sync")
         rule.onNodeWithTag("sync.chip").performClick()
         assertEquals(1, chipClicks)
     }
@@ -113,6 +114,7 @@ class SyncSheetComposeTest {
         show(rejected = true)
         waitForText("list_item · save · Couldn't save: invalid")
         rule.onNodeWithTag("sync.failedCount").assertTextContains("Failed changes: 1")
+        rule.onNodeWithTag("sync.status").assertTextContains("Changes are waiting to sync")
         rule.onNodeWithTag("sync.retry.${failedSeq()}").performClick()
         rule.waitUntil(5_000) { engine.retried.isNotEmpty() }
         rule.onNodeWithTag("sync.discard.${failedSeq()}").performClick()

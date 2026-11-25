@@ -31,6 +31,7 @@ data class SyncSheetState(
         get() = when {
             phase == SyncPhase.Syncing -> "Syncing…"
             offline -> "Offline — changes will sync when you're back online"
+            pending > 0 || failed.isNotEmpty() -> "Changes are waiting to sync"
             else -> "Up to date"
         }
 }
