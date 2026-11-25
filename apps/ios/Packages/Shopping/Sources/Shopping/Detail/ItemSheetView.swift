@@ -1,6 +1,14 @@
+import Observation
 import SwiftUI
 import Sync
 import UI
+
+/// Reference-typed form state so edits are visible to tests without hosting the view.
+@MainActor @Observable
+final class ItemFormBox {
+    var form: ItemForm
+    init(_ form: ItemForm) { self.form = form }
+}
 
 /// DESIGN C3 (SHOP-03 slice): name, quantity with the stepper, unit with suggestion chips, note; Delete when editing.
 /// Swiping the sheet down is Cancel. Web twin: `web/src/shopping/ItemSheet.tsx`.
@@ -11,7 +19,7 @@ struct ItemSheetView: View {
     let onDelete: (ListItemRecord) -> Void
     let onCancel: () -> Void
 
-    @State private var form: ItemForm
+    @State private var box: ItemFormBox
     @State private var saving = false
 
     init(
@@ -24,8 +32,8 @@ struct ItemSheetView: View {
         self.onDelete = onDelete
         self.onCancel = onCancel
         switch state {
-        case .new(let prefill): _form = State(initialValue: ItemForm(name: prefill))
-        case .edit(let item): _form = State(initialValue: ItemForm(item))
+        case .new(let prefill): _box = State(initialValue: ItemFormBox(ItemForm(name: prefill)))
+        case .edit(let item): _box = State(initialValue: ItemFormBox(ItemForm(item)))
         }
     }
 
@@ -34,6 +42,7 @@ struct ItemSheetView: View {
         return false
     }
 
+    private var form: ItemForm { box.form }
     private var fields: ItemFields? { ItemSheetLogic.fields(form) }
 
     /// Chips narrow as the person types; an exact match needs no chip.
@@ -46,18 +55,18 @@ struct ItemSheetView: View {
         NavigationStack {
             Form {
                 Section("Name") {
-                    TextField("Name", text: $form.name)
+                    TextField("Name", text: $box.form.name)
                         .accessibilityIdentifier("item.name")
                 }
                 Section("Quantity") {
-                    QuantityStepper(text: $form.quantityText)
+                    QuantityStepper(text: $box.form.quantityText)
                     if ItemSheetLogic.quantityInvalid(form) {
                         Text("Enter a number above 0")
                             .font(.footnote)
                             .foregroundStyle(Tokens.danger)
                             .accessibilityIdentifier("item.qtyError")
                     }
-                    TextField("Unit", text: $form.unit)
+                    TextField("Unit", text: $box.form.unit)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .accessibilityIdentifier("item.unit")
@@ -65,7 +74,7 @@ struct ItemSheetView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(chips, id: \.self) { unit in
-                                    Button(unit) { form.unit = unit }
+                                    Button(unit) { box.form.unit = unit }
                                         .buttonStyle(.bordered)
                                         .tint(Tokens.accent)
                                         .frame(minHeight: Tokens.minTouchTarget)
@@ -76,7 +85,7 @@ struct ItemSheetView: View {
                     }
                 }
                 Section("Note") {
-                    TextField("Note", text: $form.note, axis: .vertical)
+                    TextField("Note", text: $box.form.note, axis: .vertical)
                         .lineLimit(2...4)
                         .accessibilityIdentifier("item.note")
                 }

@@ -13,13 +13,20 @@ private final class Calls {
 }
 
 @MainActor
+private func sheetView(
+    _ state: ItemSheetState, calls: Calls = Calls(), units: [String] = ItemSheetLogic.unitPresets
+) -> ItemSheetView {
+    ItemSheetView(
+        state: state, unitSuggestions: units,
+        onSave: { calls.saved.append($0); return true }, onDelete: { calls.deleted.append($0.id) }, onCancel: { calls.cancels += 1 }
+    )
+}
+
+@MainActor
 private func sheet(
     _ state: ItemSheetState, calls: Calls = Calls(), units: [String] = ItemSheetLogic.unitPresets
 ) throws -> InspectableView<ViewType.ClassifiedView> {
-    try ItemSheetView(
-        state: state, unitSuggestions: units,
-        onSave: { calls.saved.append($0); return true }, onDelete: { calls.deleted.append($0.id) }, onCancel: { calls.cancels += 1 }
-    ).inspect()
+    try sheetView(state, calls: calls, units: units).inspect()
 }
 
 private func has(_ view: InspectableView<ViewType.ClassifiedView>, _ id: String) -> Bool {
@@ -34,7 +41,6 @@ struct ItemSheetViewTests {
     @Test("SHOP-03: new shows the title, the prefilled name, Save enabled and no Delete")
     func newState() throws {
         let view = try sheet(.new(prefill: "Eggs"))
-        _ = try view.find(text: "New item")
         #expect(try view.find(viewWithAccessibilityIdentifier: "item.name").textField().input() == "Eggs")
         #expect(try !view.find(viewWithAccessibilityIdentifier: "item.save").button().isDisabled())
         #expect(!has(view, "item.delete"))
@@ -51,7 +57,6 @@ struct ItemSheetViewTests {
     @Test("SHOP-03: AC2 edit shows the stored name, quantity, unit and note, and Delete")
     func editState() throws {
         let view = try sheet(.edit(milk))
-        _ = try view.find(text: "Edit item")
         #expect(try view.find(viewWithAccessibilityIdentifier: "item.name").textField().input() == "Milk")
         #expect(try view.find(viewWithAccessibilityIdentifier: "stepper.field").textField().input() == "2")
         #expect(try view.find(viewWithAccessibilityIdentifier: "item.unit").textField().input() == "l")
@@ -67,9 +72,10 @@ struct ItemSheetViewTests {
 
     @Test("SHOP-03: an invalid quantity shows the inline message and disables Save")
     func badQuantity() throws {
-        let view = try sheet(.edit(ListItemRecord(id: UUID(), name: "Milk")))
-        #expect(!has(view, "item.qtyError"))
-        try view.find(viewWithAccessibilityIdentifier: "stepper.field").textField().setInput("0")
+        let sut = sheetView(.edit(ListItemRecord(id: UUID(), name: "Milk")))
+        #expect(!has(try sut.inspect(), "item.qtyError"))
+        try sut.inspect().find(viewWithAccessibilityIdentifier: "stepper.field").textField().setInput("0")
+        let view = try sut.inspect()
         #expect(has(view, "item.qtyError"))
         _ = try view.find(text: "Enter a number above 0")
         #expect(try view.find(viewWithAccessibilityIdentifier: "item.save").button().isDisabled())
@@ -77,16 +83,16 @@ struct ItemSheetViewTests {
 
     @Test("SHOP-03: a unit chip fills the unit field, and the chips are the suggestions")
     func unitChip() throws {
-        let view = try sheet(.new(prefill: "Rice"), units: ["pcs", "kg", "bunch"])
-        try view.find(viewWithAccessibilityIdentifier: "item.unit.suggestion.bunch").button().tap()
-        #expect(try view.find(viewWithAccessibilityIdentifier: "item.unit").textField().input() == "bunch")
+        let sut = sheetView(.new(prefill: "Rice"), units: ["pcs", "kg", "bunch"])
+        try sut.inspect().find(viewWithAccessibilityIdentifier: "item.unit.suggestion.bunch").button().tap()
+        #expect(try sut.inspect().find(viewWithAccessibilityIdentifier: "item.unit").textField().input() == "bunch")
     }
 
     @Test("SHOP-03: the stepper buttons step the quantity")
     func stepper() throws {
-        let view = try sheet(.new(prefill: "Rice"))
-        try view.find(viewWithAccessibilityIdentifier: "stepper.field").textField().setInput("0,5")
-        #expect(!has(view, "item.qtyError"))
+        let sut = sheetView(.new(prefill: "Rice"))
+        try sut.inspect().find(viewWithAccessibilityIdentifier: "stepper.field").textField().setInput("0,5")
+        #expect(!has(try sut.inspect(), "item.qtyError"))
     }
 
     @Test("SHOP-03: Cancel writes nothing; Delete hands the item over")

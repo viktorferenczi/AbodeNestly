@@ -44,7 +44,9 @@ struct ItemSheetOfflineTests {
         let pushed = try #require(bodies.withLock { $0.first })
         let body = try JSONDecoder().decode(SyncPushBody.self, from: pushed)
         let patch = body.mutations.filter { $0.table == "list_item" && $0.rowId == item.id.uuidString.lowercased() }.last
-        #expect(patch?.data == ["quantity": .double(3)])
+        // The wire carries `3`, which decodes as an integer; only the quantity column is sent.
+        #expect(patch?.data?.keys.sorted() == ["quantity"])
+        #expect(patch?.data?["quantity"] == .int(3) || patch?.data?["quantity"] == .double(3))
         #expect(try await h.outbox().isEmpty)
         #expect(await engine.currentPhase == .idle)
     }
