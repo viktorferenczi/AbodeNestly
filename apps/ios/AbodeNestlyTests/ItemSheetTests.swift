@@ -136,9 +136,9 @@ struct ItemSheetModelTests {
         let h = try await DetailHarness(seed: { db, list in try await seedFull(db, list: list, name: "Milk") }, undoWindow: .milliseconds(150))
         await h.settle { h.model.unchecked.count == 1 }
         h.model.delete(try #require(h.model.unchecked.first))
-        #expect(h.model.unchecked.isEmpty && h.model.pendingDeletes.count == 1)
+        #expect(h.model.unchecked.isEmpty && h.model.pendingActions.count == 1)
         #expect(try await h.outbox().isEmpty)
-        await h.settle { h.model.pendingDeletes.isEmpty }
+        await h.settle { h.model.pendingActions.isEmpty }
         let queued = try await h.outbox()
         #expect(queued.count == 1 && queued[0].op == "delete")
     }
@@ -149,7 +149,7 @@ struct ItemSheetModelTests {
         await h.settle { h.model.unchecked.count == 1 }
         let item = try #require(h.model.unchecked.first)
         h.model.delete(item)
-        h.model.undoDelete(item.id)
+        h.model.undo(item.id)
         try await Task.sleep(for: .milliseconds(300))
         #expect(h.model.unchecked.count == 1)
         #expect(try await h.outbox().isEmpty)
@@ -163,7 +163,7 @@ struct ItemSheetModelTests {
         await h.model.flush()
         let queued = try await h.outbox()
         #expect(queued.count == 1 && queued[0].op == "delete")
-        #expect(h.model.pendingDeletes.isEmpty)
+        #expect(h.model.pendingActions.isEmpty)
     }
 
     @Test("SHOP-03: the sheet closes when the edited row disappears")

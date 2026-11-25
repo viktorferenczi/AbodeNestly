@@ -16,11 +16,15 @@ public struct ListItemRecord: Sendable, Equatable, Identifiable {
     public var quantity: Double?
     public var unit: String?
     public var note: String?
+    /// Millisecond UTC text of the check-off, or `nil` while unchecked (or for a row from before it was stamped).
+    public var checkedAt: String?
 
     public init(
         id: UUID, listId: UUID? = nil, name: String, nameKey: String? = nil, checked: Bool = false,
-        deletedAt: String? = nil, createdAt: String? = nil, quantity: Double? = nil, unit: String? = nil, note: String? = nil
+        deletedAt: String? = nil, createdAt: String? = nil, quantity: Double? = nil, unit: String? = nil, note: String? = nil,
+        checkedAt: String? = nil
     ) {
+        self.checkedAt = checkedAt
         self.quantity = quantity
         self.unit = unit
         self.note = note
@@ -54,6 +58,19 @@ public struct ListDetailSnapshot: Sendable, Equatable {
 }
 
 extension HouseholdDatabase {
+    /// The stored state of one item, read straight from the database (not the observed snapshot, which can lag a sync
+    /// apply). `nil` when there is no such row.
+    public func listItemState(id: UUID) throws -> (checked: Bool, deletedAt: String?)? {
+        guard let pool else { throw HouseholdDatabaseError.notOpen }
+        return try pool.read { db in
+            try Row.fetchOne(db, sql: "SELECT checked, deleted_at FROM list_item WHERE id = ?", arguments: [id.uuidString.lowercased()])
+                .map { row in
+                    let checked: Bool? = row["checked"]
+                    return (checked ?? false, row["deleted_at"])
+                }
+        }
+    }
+
     /// One list with its store name, its live items and the household's item history, re-emitted whenever any of them
     /// changes. Finishes at once when the household is not open.
     public func observeListDetail(householdId: UUID, listId: UUID) -> AsyncStream<ListDetailSnapshot> {
@@ -88,7 +105,7 @@ extension HouseholdDatabase {
             let rows = try Row.fetchAll(
                 db,
                 sql: """
-                SELECT id, list_id, name, name_key, quantity, unit, note, checked, deleted_at, created_at FROM list_item
+                SELECT id, list_id, name, name_key, quantity, unit, note, checked, checked_at, deleted_at, created_at FROM list_item
                 WHERE household_id = ? AND (deleted_at IS NULL OR checked = 1)
                 """,
                 arguments: [key]
@@ -99,7 +116,7 @@ extension HouseholdDatabase {
                 return ListItemRecord(
                     id: id, listId: list.flatMap { UUID(uuidString: $0) }, name: row["name"], nameKey: row["name_key"],
                     checked: checked ?? false, deletedAt: row["deleted_at"], createdAt: row["created_at"],
-                    quantity: row["quantity"], unit: row["unit"], note: row["note"]
+                    quantity: row["quantity"], unit: row["unit"], note: row["note"], checkedAt: row["checked_at"]
                 )
             }
             let items = rows.filter { $0.listId == listId && $0.deletedAt == nil }
