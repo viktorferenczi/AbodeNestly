@@ -43,11 +43,17 @@ data class ListDetailUiState(
     val listId: String = "",
     val sheet: SheetState? = null,
     val saveFailed: Boolean = false,
+    /** SHOP-05: the store picker is open; [pickerFailed] keeps its message up when the choice could not be stored. */
+    val picker: Boolean = false,
+    val pickerFailed: Boolean = false,
     val pending: List<PendingAction> = emptyList(),
     val settling: Set<String> = emptySet(),
     val settlingChecks: Set<String> = emptySet(),
 ) {
     val isGone: Boolean get() = loaded && detail.list == null
+
+    /** The list's store when it points to a live store: what the chip shows and the picker starts on. */
+    val currentStoreId: String? get() = detail.list?.storeId?.takeIf { id -> detail.stores.any { it.id == id } }
 
     val suggestions: List<Suggestion> get() = QuickAdd.suggest(detail.history, query, listId)
 
@@ -116,6 +122,15 @@ sealed interface ListDetailEvent {
 
     /** Soft-deletes the rows that are checked now, after an undo window. */
     data object ClearChecked : ListDetailEvent
+
+    /** The store chip: opens the C2 store picker (SHOP-05). */
+    data object OpenPicker : ListDetailEvent
+
+    /** Cancel or a dismissed picker: nothing is written. */
+    data object ClosePicker : ListDetailEvent
+
+    /** The picker's Save: the list's store, or null for no store. Writes only when it differs from what the list has. */
+    data class SetStore(val storeId: String?) : ListDetailEvent
 
     /** Leaving the screen or the app writes what is still waiting rather than dropping it. */
     data object Flush : ListDetailEvent
@@ -190,8 +205,67 @@ class ListDetailViewModel(
             is ListDetailEvent.Check -> check(event.itemId)
             is ListDetailEvent.Uncheck -> uncheck(event.itemId)
             ListDetailEvent.ClearChecked -> clearChecked()
+            ListDetailEvent.OpenPicker -> openPicker()
+            ListDetailEvent.ClosePicker -> mutableState.update { it.copy(picker = false, pickerFailed = false) }
+            is ListDetailEvent.SetStore -> setStore(event.storeId)
             ListDetailEvent.Flush -> flush()
         }
+    }
+
+    // --- Store picker (SHOP-05) ---
+
+    private fun openPicker() {
+        // Same guard as the item sheet: a picker for a list that is not shown (or is gone) could only queue a patch for nothing.
+        val current = mutableState.value
+        if (!current.loaded || current.detail.list == null) return
+        mutableState.update { it.copy(picker = true, pickerFailed = false) }
+    }
+
+    /**
+     * Saves the picker's choice: one `patch` of `store_id` only (a rename made on another device is not overwritten). The
+     * picker closes once the write is stored; the same store as the list already has writes nothing. A write that cannot be
+     * stored keeps the picker open with [ListDetailUiState.pickerFailed].
+     */
+    private fun setStore(storeId: String?) {
+        val list = mutableState.value.detail.list
+        if (list == null || list.storeId == storeId) {
+            mutableState.update { it.copy(picker = false, pickerFailed = false) }
+            return
+        }
+        scope.launch {
+            val written = try {
+                setListStore(database, householdId, listId, storeId, now())
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+            mutableState.update { if (written) it.copy(picker = false, pickerFailed = false) else it.copy(pickerFailed = true) }
+            if (written) kick()
+        }
+    }
+
+    /**
+     * The picker's inline "New store": validates against the live stores, writes the store and returns its id, or null
+     * when the name is not valid or could not be stored. The picker selects the id it gets back.
+     */
+    suspend fun addStore(name: String): String? {
+        if (Stores.validate(name, mutableState.value.detail.stores) != null) return null
+        val id = newId()
+        val saved = withContext(NonCancellable) {
+            try {
+                createStore(database, householdId, name, now(), id)
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+        }
+        if (!saved) return null
+        kick()
+        return id
     }
 
     // --- Quick add (SHOP-02) ---

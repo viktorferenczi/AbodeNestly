@@ -1,5 +1,6 @@
 package com.abodenestly.shopping
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
@@ -24,6 +26,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -69,14 +72,23 @@ import com.abodenestly.ui.UndoToast
  * Back to the overview. Leaving the screen or the app writes the deletes, check-offs and clears still inside their undo window.
  */
 @Composable
-fun ListDetailScreen(viewModel: ListDetailViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    ListDetailScreenHost(viewModel, onBack, modifier) { isNew, initial, history, failed, onSave, onDelete, onClose ->
+fun ListDetailScreen(viewModel: ListDetailViewModel, onBack: () -> Unit, modifier: Modifier = Modifier, onManageStores: () -> Unit = {}) {
+    ListDetailScreenHost(viewModel, onBack, modifier, onManageStores) { isNew, initial, history, failed, onSave, onDelete, onClose ->
         ItemSheet(isNew, initial, history, failed, onSave, onDelete, onClose)
     }
 }
 
 @Composable
-internal fun ListDetailScreenHost(viewModel: ListDetailViewModel, onBack: () -> Unit, modifier: Modifier = Modifier, sheet: ItemSheetSlot) {
+internal fun ListDetailScreenHost(
+    viewModel: ListDetailViewModel,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onManageStores: () -> Unit = {},
+    picker: StorePickerSlot = { stores, current, failed, onCreate, onSave, onManage, onClose ->
+        StorePickerSheet(stores, current, failed, onCreate, onSave, onManage, onClose)
+    },
+    sheet: ItemSheetSlot,
+) {
     val ui by viewModel.state.collectAsState()
     // A configuration change (rotation, font scale) is not leaving: the same view model keeps its timers, so the undo
     // window stays open. A real stop or leaving the list writes what is waiting.
@@ -86,6 +98,20 @@ internal fun ListDetailScreenHost(viewModel: ListDetailViewModel, onBack: () -> 
     }
     DisposableEffect(viewModel) { onDispose { if (activity?.isChangingConfigurations != true) viewModel.onEvent(ListDetailEvent.Flush) } }
     ListDetailContent(ui, viewModel::onEvent, onBack, modifier)
+    if (ui.picker && ui.detail.list != null) {
+        picker(
+            ui.detail.stores,
+            ui.currentStoreId,
+            ui.pickerFailed,
+            viewModel::addStore,
+            { storeId -> viewModel.onEvent(ListDetailEvent.SetStore(storeId)) },
+            {
+                viewModel.onEvent(ListDetailEvent.ClosePicker)
+                onManageStores()
+            },
+            { viewModel.onEvent(ListDetailEvent.ClosePicker) },
+        )
+    }
     val open = ui.sheet
     if (open != null) {
         val item = ui.editing
@@ -150,8 +176,7 @@ internal fun ListDetailContent(ui: ListDetailUiState, onEvent: (ListDetailEvent)
                         }
                     }
                 }
-                // Display only until SHOP-05-android adds the picker.
-                ui.detail.storeName?.let { ListRowChip(it, Modifier.padding(top = 4.dp).testTag("list.store")) }
+                StoreChip(ui.detail.storeName) { onEvent(ListDetailEvent.OpenPicker) }
             }
             ui.error?.let {
                 Text(
@@ -303,6 +328,33 @@ private fun ItemRow(
                 customActions = listOf(CustomAccessibilityAction(if (ticked) "Uncheck" else "Check off") { onToggle(); true })
             },
         )
+    }
+}
+
+/**
+ * The list's store chip (DESIGN C2): the store name, or a muted "Add store" when the list has none or its store was
+ * deleted. Always a button that opens the picker; the 48 dp target is the row around the capsule.
+ */
+@Composable
+private fun StoreChip(storeName: String?, onClick: () -> Unit) {
+    val tokens = LocalTokens.current
+    Row(
+        Modifier.heightIn(min = Tokens.MinTouchTarget)
+            .clickable(role = Role.Button, onClick = onClick)
+            .testTag("list.store")
+            .semantics { contentDescription = "Store: ${storeName ?: "none"}" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (storeName != null) {
+            ListRowChip(storeName)
+        } else {
+            Surface(shape = RoundedCornerShape(percent = 50), color = tokens.surface2, border = BorderStroke(1.dp, tokens.line)) {
+                Text(
+                    "Add store", Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall, color = tokens.text2, maxLines = 1,
+                )
+            }
+        }
     }
 }
 
