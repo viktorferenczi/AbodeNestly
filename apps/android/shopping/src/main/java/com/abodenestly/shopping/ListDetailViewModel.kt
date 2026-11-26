@@ -167,6 +167,9 @@ class ListDetailViewModel(
     /** A sheet save is running: a second tap on Save must not queue a second row. */
     private var savingSheet = false
 
+    /** A store choice is being written: a second tap on the picker's Save must not queue a second patch. */
+    private var savingStore = false
+
     /** Actions whose write has started, so the timer and a flush can never both queue it. */
     private val committing = java.util.concurrent.ConcurrentHashMap.newKeySet<PendingAction>()
 
@@ -228,10 +231,13 @@ class ListDetailViewModel(
      */
     private fun setStore(storeId: String?) {
         val list = mutableState.value.detail.list
+        // A second Save tap while the first write runs must not queue a second patch (same rule as the item sheet).
+        if (savingStore) return
         if (list == null || list.storeId == storeId) {
             mutableState.update { it.copy(picker = false, pickerFailed = false) }
             return
         }
+        savingStore = true
         scope.launch {
             val written = try {
                 setListStore(database, householdId, listId, storeId, now())
@@ -241,6 +247,7 @@ class ListDetailViewModel(
             } catch (_: Exception) {
                 false
             }
+            savingStore = false
             mutableState.update { if (written) it.copy(picker = false, pickerFailed = false) else it.copy(pickerFailed = true) }
             if (written) kick()
         }

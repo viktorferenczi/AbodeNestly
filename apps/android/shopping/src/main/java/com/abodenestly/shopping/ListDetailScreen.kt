@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -339,7 +340,7 @@ private fun ItemRow(
 private fun StoreChip(storeName: String?, onClick: () -> Unit) {
     val tokens = LocalTokens.current
     Row(
-        Modifier.heightIn(min = Tokens.MinTouchTarget)
+        Modifier.defaultMinSize(minWidth = Tokens.MinTouchTarget, minHeight = Tokens.MinTouchTarget)
             .clickable(role = Role.Button, onClick = onClick)
             .testTag("list.store")
             .semantics { contentDescription = "Store: ${storeName ?: "none"}" },

@@ -25,7 +25,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -101,10 +100,12 @@ internal fun StorePickerContent(
     var newName by rememberSaveable { mutableStateOf("") }
     var adding by remember { mutableStateOf(false) }
     var addFailed by remember { mutableStateOf(false) }
-    // Stores created here and not yet seen in [stores]; each is dropped as soon as the observation has it.
+    // Stores created here, shown until the observation has them. Ids are recorded as seen during composition (not in an
+    // effect a batched emission could skip), so a created store that was seen and then deleted elsewhere is never offered again.
     val created = remember { mutableStateListOf<StoreRecord>() }
-    LaunchedEffect(stores) { created.removeAll { c -> stores.any { it.id == c.id } } }
-    val shown = (stores + created.filter { c -> stores.none { it.id == c.id } }).sortedWith(compareBy<StoreRecord>({ it.name.lowercase() }, { it.id }))
+    val seen = remember { HashSet<String>() }
+    stores.forEach { seen.add(it.id) }
+    val shown = (stores + created.filter { c -> c.id !in seen }).sortedWith(compareBy<StoreRecord>({ it.name.lowercase() }, { it.id }))
     val chosen = choice?.takeIf { id -> shown.any { it.id == id } } ?: if (choice == null) null else current
     val problem = Stores.validate(newName, shown)
     val shownProblem = problem.takeUnless { it == StoreNameProblem.Empty && newName.isEmpty() }

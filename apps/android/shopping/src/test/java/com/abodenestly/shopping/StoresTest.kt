@@ -274,6 +274,23 @@ class StoresTest {
     }
 
     @Test
+    fun `a second Save tap while the store write runs queues no second patch`() = runBlocking<Unit> {
+        registry.open(household)
+        seedStore("s1", "Test Market")
+        createList(registry, household, "Groceries", null, now, "l1")
+        val before = listOutbox().size
+        val vm = detailViewModel().ready(1)
+        vm.onEvent(ListDetailEvent.OpenPicker)
+
+        vm.onEvent(ListDetailEvent.SetStore("s1"))
+        vm.onEvent(ListDetailEvent.SetStore("s1"))
+        awaitUntil { vm.state.value.detail.storeName == "Test Market" && !vm.state.value.picker }
+        delay(100)
+
+        assertEquals(before + 1, listOutbox().size)
+    }
+
+    @Test
     fun `SetStore null clears the store with a null store_id`() = runBlocking<Unit> {
         registry.open(household)
         seedStore("s1", "Test Market")
