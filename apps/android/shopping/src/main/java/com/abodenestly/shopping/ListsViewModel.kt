@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.util.UUID
 
@@ -153,7 +155,17 @@ class ListsViewModel(
         scope.launch { toWrite.forEach { commit(it) } }
     }
 
+    /** Ids whose write has started, so the timer and a flush can never both queue it. */
+    private val committing = HashSet<String>()
+
     private suspend fun commit(action: PendingListAction) {
+        if (!committing.add(action.id)) return
+        // A write that has started finishes even when the view model is cleared right after a flush (back out of the app).
+        withContext(NonCancellable) { commitOnce(action) }
+        committing.remove(action.id)
+    }
+
+    private suspend fun commitOnce(action: PendingListAction) {
         val written = write {
             when (action.kind) {
                 PendingListAction.Kind.Archive -> archiveList(database, householdId, action.id, now())

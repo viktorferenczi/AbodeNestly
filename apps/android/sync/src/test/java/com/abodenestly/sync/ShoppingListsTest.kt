@@ -90,6 +90,7 @@ class ShoppingListsTest {
         val other = withTimeoutOrNull(300) { registry.observeListOverview(uuid(2)).toList() }
         // The flow never completes and never emits: the timeout wins.
         assertNull(other)
-        withTimeout(5_000) { registry.observeListOverview(household).first() }
+        // The open household still emits.
+        assertEquals(listOf("Groceries"), withTimeout(5_000) { registry.observeListOverview(household).first() }.lists.map { it.name })
     }
 }

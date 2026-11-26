@@ -1,5 +1,8 @@
 package com.abodenestly.shopping
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -40,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -86,8 +90,13 @@ internal fun ListsScreenHost(viewModel: ListsViewModel, onOpen: (String) -> Unit
     val ui by viewModel.state.collectAsState()
     var showSheet by rememberSaveable { mutableStateOf(false) }
     val open by rememberUpdatedState(onOpen)
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP, LocalLifecycleOwner.current) { viewModel.onEvent(ListsEvent.Flush) }
-    DisposableEffect(viewModel) { onDispose { viewModel.onEvent(ListsEvent.Flush) } }
+    // A configuration change (rotation, font scale) is not leaving: the same view model keeps its timers, so the undo
+    // window stays open. A real stop or leaving the overview writes what is waiting.
+    val activity = LocalContext.current.findActivity()
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP, LocalLifecycleOwner.current) {
+        if (activity?.isChangingConfigurations != true) viewModel.onEvent(ListsEvent.Flush)
+    }
+    DisposableEffect(viewModel) { onDispose { if (activity?.isChangingConfigurations != true) viewModel.onEvent(ListsEvent.Flush) } }
     // AC5: a created list opens once, and the sheet goes.
     LaunchedEffect(ui.opened) {
         val id = ui.opened ?: return@LaunchedEffect
@@ -299,4 +308,10 @@ private fun SwipeableListRow(row: ListRowModel, archived: Boolean, onOpen: (List
             }
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
