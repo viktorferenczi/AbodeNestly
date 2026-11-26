@@ -17,6 +17,8 @@ data class ListItemRecord(
     val quantity: Double? = null,
     val unit: String? = null,
     val note: String? = null,
+    /** SHOP-04: when it was checked off (UTC stamp); null while unchecked or for a row checked before the stamp existed. */
+    val checkedAt: String? = null,
 )
 
 /**
