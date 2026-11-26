@@ -863,7 +863,7 @@ Schema change: no  Contract change: no
 Unit: apps/android/shopping/src/test/java/app/abodenestly/shopping/StoresTest.kt → AC4 offline create enqueues one store upsert
 Component: apps/android/shopping/src/test/java/app/abodenestly/shopping/StoresComposeTest.kt → AC1 empty, AC2 populated; add, swipe delete, and assigning a store from the list chip covers AC3
 Integration: n/a (no API handler in this story)
-E2E: E2E-SHOP-3 apps/android/shopping/src/androidTest/java/app/abodenestly/shopping/StoresE2ETest.kt
+E2E: E2E-SHOP-3 apps/android/app/src/androidTest/java/com/abodenestly/app/StoresE2ETest.kt
 Offline test: yes, TESTING §6 — Fake ApiClient throws IOException, then kick(); StoresOfflineTest.kt
 
 ## Dependencies
