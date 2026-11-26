@@ -445,6 +445,18 @@ open class DatabaseRegistry(
     }
 
     /**
+     * What the C4 Stores screen shows (SHOP-05): the household's live stores, each with its learned-item count,
+     * re-emitted when a store or an order row changes. Follows the open database like [observeListOverview]; nothing is
+     * emitted while [id] is not the open household.
+     */
+    fun observeStores(id: UUID): Flow<List<StoreRow>> = current.flatMapLatest { open ->
+        val db = database
+        if (open != id || db == null) emptyFlow()
+        // The database may close under the collector during a switch.
+        else db.shoppingLists().observeStoreRows(id.toString()).catch { }
+    }
+
+    /**
      * What the C2 list detail shows: the list, its live items, the household's item history and the list's store name,
      * re-emitted when any of them changes. Follows the open database like [observeListOverview]; nothing is emitted
      * while [householdId] is not the open household.
@@ -460,6 +472,7 @@ open class DatabaseRegistry(
                 ListDetail(
                     list = live?.let(::toRecord),
                     storeName = live?.storeId?.let { id -> stores.firstOrNull { it.id == id }?.name },
+                    stores = stores.map { StoreRecord(it.id, it.name) },
                     items = items.map(::toItemRecord),
                     history = history.map(::toItemRecord),
                 )

@@ -376,6 +376,14 @@ interface ShoppingListDao {
     @Query("SELECT * FROM store WHERE household_id = :householdId AND deleted_at IS NULL ORDER BY name")
     fun observeStores(householdId: String): Flow<List<StoreEntity>>
 
+    /** SHOP-05: the live stores with the number of items whose aisle position was learned for each (C4). */
+    @Query(
+        "SELECT s.id AS id, s.name AS name, COUNT(o.name_key) AS learned FROM store s " +
+            "LEFT JOIN store_item_order o ON o.store_id = s.id " +
+            "WHERE s.household_id = :householdId AND s.deleted_at IS NULL GROUP BY s.id, s.name ORDER BY s.name",
+    )
+    fun observeStoreRows(householdId: String): Flow<List<StoreRow>>
+
     /** One list in any deleted state (SHOP-02): the detail screen tells a missing or deleted list from a live one. */
     @Query("SELECT * FROM shopping_list WHERE household_id = :householdId AND id = :id")
     fun observeList(householdId: String, id: String): Flow<ShoppingListEntity?>
@@ -496,6 +504,10 @@ interface SearchDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertContractor(row: ContractorEntity)
+
+    /** Test seam (SHOP-05): a learned aisle position, as a pull would bring it. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertStoreItemOrder(row: StoreItemOrderEntity)
 }
 
 /**
