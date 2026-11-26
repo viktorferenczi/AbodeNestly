@@ -18,6 +18,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -26,16 +27,12 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
 import java.util.UUID
 
-/** An item delete waiting out its undo window. The row is already hidden. */
-data class PendingItemDelete(val id: String, val name: String) {
-    val message: String get() = "Deleted $name"
-}
-
 /**
  * What the C2 list detail shows (SHOP-02 slice) and the C3 sheet (SHOP-03). [loaded] is false until the first read, so
  * "This list is gone" does not flash. [query] is the quick-add field's text. [sheet] is what the item sheet is open on.
- * [pending] are deletes inside their undo window, newest first; [settling] are deletes already written whose removal
- * the list has not re-emitted yet. Both stay hidden, so a row never flashes back. [saveFailed] keeps the sheet's message up.
+ * [pending] are deletes, check-offs and clears inside their undo window, newest first. A delete or clear hides its rows;
+ * a check-off shows its row ticked in place. [settling] are hidden rows whose removal the list has not re-emitted yet, and
+ * [settlingChecks] are checked rows the list still shows unchecked, so neither flashes back. [saveFailed] keeps the sheet's message up.
  */
 data class ListDetailUiState(
     val detail: ListDetail = ListDetail(),
@@ -46,14 +43,21 @@ data class ListDetailUiState(
     val listId: String = "",
     val sheet: SheetState? = null,
     val saveFailed: Boolean = false,
-    val pending: List<PendingItemDelete> = emptyList(),
+    val pending: List<PendingAction> = emptyList(),
     val settling: Set<String> = emptySet(),
+    val settlingChecks: Set<String> = emptySet(),
 ) {
     val isGone: Boolean get() = loaded && detail.list == null
 
     val suggestions: List<Suggestion> get() = QuickAdd.suggest(detail.history, query, listId)
 
-    private val hidden: Set<String> get() = pending.mapTo(HashSet()) { it.id } + settling
+    private val hidden: Set<String> get() = pending.flatMapTo(HashSet()) { it.hiddenIds } + settling
+
+    /** Unchecked rows shown ticked and struck through until their check-off is written and the list shows it. */
+    val pendingCheckIds: Set<String> get() = pending.filterIsInstance<PendingAction.Check>().mapTo(HashSet()) { it.id } + settlingChecks
+
+    /** DESIGN C2 `all-checked` (AC4). */
+    val allChecked: Boolean get() = CheckOff.allChecked(unchecked.size, pendingCheckIds.size, checked.size)
 
     private val visible: List<ListItemRecord>
         get() {
@@ -65,9 +69,9 @@ data class ListDetailUiState(
     val unchecked: List<ListItemRecord>
         get() = visible.filter { !it.checked }.sortedWith(compareBy<ListItemRecord>({ it.createdAt ?: "" }, { it.id }))
 
-    /** Newest first. */
+    /** Newest check-off first. */
     val checked: List<ListItemRecord>
-        get() = visible.filter { it.checked }.sortedWith(compareByDescending<ListItemRecord> { it.createdAt ?: "" }.thenBy { it.id })
+        get() = visible.filter { it.checked }.sortedWith(CheckOff.newestFirst)
 
     /** The row the sheet edits; null for `new`, and when that row is gone. */
     val editing: ListItemRecord?
@@ -98,7 +102,17 @@ sealed interface ListDetailEvent {
 
     data class Delete(val itemId: String) : ListDetailEvent
 
-    data class Undo(val itemId: String) : ListDetailEvent
+    /** Undoes the pending action with this id (a delete or check-off: its item's id; a clear: its own). */
+    data class Undo(val actionId: String) : ListDetailEvent
+
+    /** The checkbox on an unchecked row: the check-off is written when its undo window ends. */
+    data class Check(val itemId: String) : ListDetailEvent
+
+    /** The checkbox on a checked row: written at once, no toast. */
+    data class Uncheck(val itemId: String) : ListDetailEvent
+
+    /** Soft-deletes the rows that are checked now, after an undo window. */
+    data object ClearChecked : ListDetailEvent
 
     /** Leaving the screen or the app writes what is still waiting rather than dropping it. */
     data object Flush : ListDetailEvent
@@ -106,8 +120,8 @@ sealed interface ListDetailEvent {
 
 /**
  * DESIGN C2 and C3. Reads only the local database, so it works offline; an add or an edit goes through the outbox in one
- * local transaction and then [kick]s sync. A delete waits [UNDO_MILLIS] (through [delayer], so tests do not wait in real
- * time) before it is written; Undo inside the window writes nothing. Twins: iOS `ListDetailModel`, web `ListDetail.tsx`.
+ * local transaction and then [kick]s sync. A delete, a check-off and a clear wait [UNDO_MILLIS] (through [delayer], so tests
+ * do not wait in real time) before they are written; Undo inside the window writes nothing. Twins: iOS `ListDetailModel`, web `ListDetail.tsx`.
  */
 class ListDetailViewModel(
     private val householdId: UUID,
@@ -124,14 +138,19 @@ class ListDetailViewModel(
     private val mutableState = MutableStateFlow(ListDetailUiState(online = isOnline.value, listId = listId))
     val state: StateFlow<ListDetailUiState> = mutableState.asStateFlow()
 
-    /** Deletes still inside their window, by item id. A delete leaves this map when it is undone, flushed or written. */
+    /** Actions still inside their window, by action id. An action leaves this map when it is undone, flushed or written. */
     private val waiting = HashMap<String, Job>()
+
+    /** Unchecks whose write is running, so a double tap queues one mutation. */
+    private val unchecking = HashSet<String>()
+
+    private var clearSeq = 0
 
     /** A sheet save is running: a second tap on Save must not queue a second row. */
     private var savingSheet = false
 
-    /** Ids whose write has started, so the timer and a flush can never both queue it. */
-    private val committing = HashSet<String>()
+    /** Actions whose write has started, so the timer and a flush can never both queue it. */
+    private val committing = java.util.concurrent.ConcurrentHashMap.newKeySet<PendingAction>()
 
     init {
         scope.launch {
@@ -140,7 +159,13 @@ class ListDetailViewModel(
                     val present = detail.items.mapTo(HashSet()) { it.id }
                     // An edited row that is gone (deleted on another device) closes its sheet.
                     val sheet = s.sheet.takeUnless { it is SheetState.Edit && it.itemId !in present }
-                    s.copy(detail = detail, loaded = true, sheet = sheet, settling = s.settling.filterTo(HashSet()) { it in present })
+                    // A settling check is done once the list shows it checked (or the row is gone).
+                    val stillUnchecked = detail.items.filter { !it.checked }.mapTo(HashSet()) { it.id }
+                    s.copy(
+                        detail = detail, loaded = true, sheet = sheet,
+                        settling = s.settling.filterTo(HashSet()) { it in present },
+                        settlingChecks = s.settlingChecks.filterTo(HashSet()) { it in stillUnchecked },
+                    )
                 }
             }
         }
@@ -158,7 +183,10 @@ class ListDetailViewModel(
             ListDetailEvent.CloseSheet -> mutableState.update { it.copy(sheet = null, saveFailed = false) }
             is ListDetailEvent.SaveSheet -> save(event.form)
             is ListDetailEvent.Delete -> delete(event.itemId)
-            is ListDetailEvent.Undo -> undo(event.itemId)
+            is ListDetailEvent.Undo -> undo(event.actionId)
+            is ListDetailEvent.Check -> check(event.itemId)
+            is ListDetailEvent.Uncheck -> uncheck(event.itemId)
+            ListDetailEvent.ClearChecked -> clearChecked()
             ListDetailEvent.Flush -> flush()
         }
     }
@@ -209,7 +237,7 @@ class ListDetailViewModel(
     }
 
     private fun ListDetailUiState.liveItem(itemId: String): ListItemRecord? =
-        if (pending.any { it.id == itemId } || itemId in settling) null else detail.items.firstOrNull { it.id == itemId }
+        if (pending.any { itemId in it.hiddenIds } || itemId in settling) null else detail.items.firstOrNull { it.id == itemId }
 
     /**
      * Saves the open sheet. `new` adds the row with the sheet's quantity, unit and note; `edit` writes only the changed
@@ -276,36 +304,70 @@ class ListDetailViewModel(
         return true
     }
 
-    // --- Delete with undo (SHOP-03) ---
+    // --- Delete, check off and clear, each with undo (SHOP-03, SHOP-04) ---
 
     private fun delete(itemId: String) {
         val item = mutableState.value.liveItem(itemId) ?: return
-        val action = PendingItemDelete(item.id, item.name)
-        waiting.remove(itemId)?.cancel()
-        mutableState.update { s ->
-            s.copy(
-                pending = listOf(action) + s.pending.filter { it.id != itemId },
-                // Deleting from the sheet closes it.
-                sheet = if ((s.sheet as? SheetState.Edit)?.itemId == itemId) null else s.sheet,
-            )
+        // Same id as a check-off still waiting on this row, so it replaces (cancels) that check.
+        begin(PendingAction.Delete(item.id, item.name))
+        // Deleting from the sheet closes it.
+        mutableState.update { s -> s.copy(sheet = if ((s.sheet as? SheetState.Edit)?.itemId == itemId) null else s.sheet) }
+    }
+
+    /** Ticks the row in place; the write happens when the window ends (AC1, AC3). */
+    private fun check(itemId: String) {
+        val s = mutableState.value
+        val item = s.liveItem(itemId) ?: return
+        if (item.checked || itemId in s.pendingCheckIds) return
+        begin(PendingAction.Check(item.id, item.name))
+    }
+
+    /** Unchecking is its own undo: written at once, no toast. */
+    private fun uncheck(itemId: String) {
+        val s = mutableState.value
+        val item = s.liveItem(itemId) ?: return
+        if (!item.checked || !unchecking.add(itemId)) return
+        scope.launch {
+            val written = try {
+                database.patch(householdId, "list_item", itemId, CheckOff.uncheckFields(), now())
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+            unchecking.remove(itemId)
+            if (written) kick() else mutableState.update { it.copy(error = SAVE_ERROR) }
         }
+    }
+
+    /** Hides the rows that are checked now and soft-deletes them after the window (AC5). A row checked during it is not swept in. */
+    private fun clearChecked() {
+        val ids = mutableState.value.checked.map { it.id }
+        if (ids.isEmpty()) return
+        begin(PendingAction.Clear("clear-${++clearSeq}", ids))
+    }
+
+    private fun begin(action: PendingAction) {
+        waiting.remove(action.id)?.cancel()
+        mutableState.update { s -> s.copy(pending = listOf(action) + s.pending.filter { it.id != action.id }) }
         // Lazy, so the job is registered before it can run (a dispatcher that runs it at once would otherwise finish first).
         val job = scope.launch(start = CoroutineStart.LAZY) {
             delayer(UNDO_MILLIS)
             // A cancelled wait (Undo, flush) must not write, whatever the injected delayer did.
             ensureActive()
-            waiting.remove(itemId)
+            waiting.remove(action.id)
             commit(action)
         }
-        waiting[itemId] = job
+        waiting[action.id] = job
         job.start()
     }
 
-    private fun undo(itemId: String) {
+    private fun undo(actionId: String) {
         // Past the window (or flushed) the write has started: Undo has nothing left to cancel.
-        val job = waiting.remove(itemId) ?: return
+        val job = waiting.remove(actionId) ?: return
         job.cancel()
-        mutableState.update { s -> s.copy(pending = s.pending.filter { it.id != itemId }) }
+        mutableState.update { s -> s.copy(pending = s.pending.filter { it.id != actionId }) }
     }
 
     private fun flush() {
@@ -315,31 +377,55 @@ class ListDetailViewModel(
         scope.launch { toWrite.forEach { commit(it) } }
     }
 
-    private suspend fun commit(action: PendingItemDelete) {
-        if (!committing.add(action.id)) return
+    private suspend fun commit(action: PendingAction) {
+        if (!committing.add(action)) return
         // A write that has started finishes even when the view model is cleared right after a flush (back out of the app).
         withContext(NonCancellable) { commitOnce(action) }
-        committing.remove(action.id)
+        committing.remove(action)
     }
 
-    private suspend fun commitOnce(action: PendingItemDelete) {
+    private suspend fun commitOnce(action: PendingAction) {
         val written = try {
-            database.remove(householdId, "list_item", action.id, now())
-            true
+            when (action) {
+                is PendingAction.Delete -> {
+                    database.remove(householdId, "list_item", action.id, now())
+                    true
+                }
+                is PendingAction.Check -> writeCheck(action)
+                is PendingAction.Clear -> writeClear(action)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            false
+            null
         }
         mutableState.update { s ->
+            val shown = s.detail.items.associateBy { it.id }
             s.copy(
-                pending = s.pending.filter { it.id != action.id },
-                error = if (written) s.error else SAVE_ERROR,
-                // The list may already carry the delete (Room re-emits while sync is kicked): then there is nothing to
-                // wait for, and a settling entry added now would only linger until the next emission.
-                settling = if (written && s.detail.items.any { it.id == action.id }) s.settling + action.id else s.settling,
+                // Removed by equality: a delete that replaced this action under the same id keeps its toast.
+                pending = s.pending.filter { it != action },
+                error = if (written != null) s.error else SAVE_ERROR,
+                // The list may already carry the write (Room re-emits while sync is kicked): then there is nothing to
+                // wait for, and an entry added now would only linger until the next emission.
+                settling = if (written == true && action.hiddenIds.isNotEmpty()) s.settling + action.hiddenIds.filter { it in shown } else s.settling,
+                settlingChecks = if (written == true && action is PendingAction.Check && shown[action.id]?.checked == false) s.settlingChecks + action.id else s.settlingChecks,
             )
         }
-        if (written) kick()
+        if (written == true) kick()
+    }
+
+    /** One `patch` (local row and outbox). Re-reads the stored row: a row deleted meanwhile or checked on another device is left alone. */
+    private suspend fun writeCheck(action: PendingAction.Check): Boolean {
+        val row = database.observeListDetail(householdId, listId).first().items.firstOrNull { it.id == action.id }
+        if (row == null || row.checked) return false
+        val at = now()
+        database.patch(householdId, "list_item", action.id, CheckOff.checkFields(userId, at), at)
+        return true
+    }
+
+    /** One `remove` per row (the sync contract is one mutation per row). */
+    private suspend fun writeClear(action: PendingAction.Clear): Boolean {
+        for (id in action.itemIds) database.remove(householdId, "list_item", id, now())
+        return true
     }
 }
