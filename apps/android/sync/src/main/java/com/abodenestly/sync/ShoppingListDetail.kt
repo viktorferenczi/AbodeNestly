@@ -1,7 +1,7 @@
 package com.abodenestly.sync
 
 /**
- * The columns of a `list_item` row the C2 detail and its autocomplete read (SHOP-02). Local projection, not a contract
+ * The columns of a `list_item` row the C2 detail, its autocomplete and the C3 sheet read (SHOP-02, SHOP-03). Local projection, not a contract
  * entity (same as [ListRecord]). Stamps are fixed-width UTC text, so comparing the text compares the time. [nameKey] is
  * null on a row stored without one; callers then derive it from [name].
  */
@@ -13,6 +13,10 @@ data class ListItemRecord(
     val checked: Boolean,
     val deletedAt: String?,
     val createdAt: String?,
+    /** SHOP-03: all three are null until the user sets them (C3). */
+    val quantity: Double? = null,
+    val unit: String? = null,
+    val note: String? = null,
 )
 
 /**

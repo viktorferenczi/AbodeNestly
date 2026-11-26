@@ -68,7 +68,10 @@ object QuickAdd {
      * The full `list_item` row for a manual add. The server derives `name_key` itself; the local value only serves
      * matching until the next pull replaces the row, and `upsert` never queues it (nor the stamps and `sync_seq`).
      */
-    fun row(id: String, listId: String, name: String, userId: UUID?, now: Instant): JsonObject {
+    fun row(
+        id: String, listId: String, name: String, userId: UUID?, now: Instant,
+        quantity: Double? = null, unit: String? = null, note: String? = null,
+    ): JsonObject {
         val trimmed = name.trim()
         val stamp = syncStamp(now)
         return buildJsonObject {
@@ -76,9 +79,9 @@ object QuickAdd {
             put("list_id", JsonPrimitive(listId))
             put("name", JsonPrimitive(trimmed))
             put("name_key", JsonPrimitive(NameKey.make(trimmed)))
-            put("quantity", JsonNull)
-            put("unit", JsonNull)
-            put("note", JsonNull)
+            put("quantity", quantity?.let { JsonPrimitive(it) } ?: JsonNull)
+            put("unit", unit?.let { JsonPrimitive(it) } ?: JsonNull)
+            put("note", note?.let { JsonPrimitive(it) } ?: JsonNull)
             put("barcode", JsonNull)
             put("checked", JsonPrimitive(false))
             put("checked_at", JsonNull)

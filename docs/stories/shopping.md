@@ -522,7 +522,7 @@ Schema change: no  Contract change: no
 Unit: apps/android/shopping/src/test/java/app/abodenestly/shopping/ItemSheetTest.kt → AC1 a save with blanks sends nulls; AC4 offline enqueues one upsert
 Component: apps/android/shopping/src/test/java/app/abodenestly/shopping/ItemSheetComposeTest.kt → AC2 edit shows qty, unit, and note; AC3 clearing the note. States new and edit. Interactions: stepper, unit, note, delete.
 Integration: n/a (no API handler in this story)
-E2E: E2E-SHOP-1 apps/android/shopping/src/androidTest/java/app/abodenestly/shopping/ItemSheetE2ETest.kt
+E2E: E2E-SHOP-1 apps/android/app/src/androidTest/java/com/abodenestly/app/ItemSheetE2ETest.kt
 Offline test: yes, TESTING §6 — Fake ApiClient throws IOException, then kick(); ItemSheetOfflineTest.kt
 
 ## Dependencies

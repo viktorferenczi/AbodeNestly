@@ -83,6 +83,26 @@ class ShoppingListDetailTest {
     }
 
     @Test
+    fun `items and history carry quantity, unit and note`() = runBlocking<Unit> {
+        registry.open(household)
+        list("l1", "Groceries")
+        registry.withSearchDao { dao ->
+            dao.upsertListItem(ListItemEntity("i1", hid, "l1", "Milk", checked = false, quantity = 2.0, unit = "l", note = "lactose free"))
+            dao.upsertListItem(ListItemEntity("i2", hid, "l1", "Eggs", checked = false))
+        }
+        val d = detail("l1")
+        val milk = d.items.single { it.id == "i1" }
+        assertEquals(2.0, milk.quantity)
+        assertEquals("l", milk.unit)
+        assertEquals("lactose free", milk.note)
+        val eggs = d.items.single { it.id == "i2" }
+        assertNull(eggs.quantity)
+        assertNull(eggs.unit)
+        assertNull(eggs.note)
+        assertEquals("l", d.history.single { it.id == "i1" }.unit)
+    }
+
+    @Test
     fun `a deleted or unknown list has no list`() = runBlocking<Unit> {
         registry.open(household)
         list("l1", "Groceries")
