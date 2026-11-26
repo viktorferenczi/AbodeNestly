@@ -14,7 +14,7 @@ import { useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { RealtimeProvider } from '../core/realtime/RealtimeProvider.tsx';
 import { openHouseholdDb } from '../sync/db.ts';
 import { ListDetail } from './ListDetail.tsx';
-import type { RealtimeChannelLike, RealtimeClientLike } from './Realtime.ts';
+import { REALTIME_TABLES, type RealtimeChannelLike, type RealtimeClientLike } from '../sync/realtime.ts';
 
 const house = (id: string, over: Partial<Household> = {}) =>
   ({ id, name: `Home ${id}`, currency: 'EUR', module_shopping: true, module_pantry: true, module_maintenance: true, ...over }) as Household;
@@ -25,13 +25,15 @@ const item = (id: string, name: string, over: Partial<ListItem> = {}) =>
 
 class FakeRealtime implements RealtimeClientLike {
   channels: string[] = [];
+  tables: string[] = [];
   removed = 0;
   private fire: Array<() => void> = [];
   private status: Array<(s: string) => void> = [];
   channel(name: string): RealtimeChannelLike {
     this.channels.push(name);
     const chan: RealtimeChannelLike = {
-      on: (_t, _f, callback) => {
+      on: (_t, f, callback) => {
+        this.tables.push(f.table);
         this.fire.push(callback);
         return chan;
       },
@@ -113,7 +115,7 @@ describe('SHOP-09: realtime in the shell', () => {
     await seed();
     const { api, realtime } = await renderIt();
     expect(await screen.findByRole('checkbox', { name: 'Check off Milk' })).toBeTruthy();
-    await waitFor(() => expect(realtime.channels).toContain('household:h1:shopping'));
+    await waitFor(() => expect(realtime.channels).toContain('household:h1'));
     await waitFor(() => expect(api.syncPullCalls.length).toBeGreaterThan(0));
     await new Promise((r) => setTimeout(r, 50));
     const before = api.syncPullCalls.length;
@@ -141,16 +143,18 @@ describe('SHOP-09: realtime in the shell', () => {
 
   it('switching household unsubscribes and subscribes to the new one', async () => {
     const { realtime } = await renderIt({ path: '/' });
-    await waitFor(() => expect(realtime.channels).toContain('household:h1:shopping'));
+    await waitFor(() => expect(realtime.channels).toContain('household:h1'));
     fireEvent.click(await screen.findByRole('button', { name: 'go h2' }));
-    await waitFor(() => expect(realtime.channels.at(-1)).toBe('household:h2:shopping'));
-    expect(new Set(realtime.channels)).toEqual(new Set(['household:h1:shopping', 'household:h2:shopping']));
+    await waitFor(() => expect(realtime.channels.at(-1)).toBe('household:h2'));
+    expect(new Set(realtime.channels)).toEqual(new Set(['household:h1', 'household:h2']));
     expect(realtime.removed).toBeGreaterThanOrEqual(1);
   });
 
-  it('AC4: shopping off creates no channel', async () => {
+  it('AC4: shopping off subscribes to no shopping table, and the household channel stays for core tables', async () => {
     const { realtime } = await renderIt({ shopping: false });
     await screen.findByRole('button', { name: 'go h2' });
-    expect(realtime.channels).toEqual([]);
+    await waitFor(() => expect(realtime.channels).toContain('household:h1'));
+    for (const t of REALTIME_TABLES.shopping) expect(realtime.tables).not.toContain(t);
+    expect(realtime.tables).toContain('invite');
   });
 });

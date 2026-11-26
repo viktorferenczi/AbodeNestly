@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient } from '../core/api/FakeApiClient.ts';
 import { openHouseholdDb } from '../sync/db.ts';
 import { createSyncEngine } from '../sync/SyncEngine.ts';
-import { SHOPPING_REALTIME_TABLES, subscribeShoppingRealtime, type RealtimeChannelLike, type RealtimeClientLike } from './Realtime.ts';
+import { REALTIME_TABLES, realtimeTables, subscribeHouseholdRealtime, type RealtimeChannelLike, type RealtimeClientLike } from '../sync/realtime.ts';
 
 type Binding = { filter: { event: string; schema: string; table: string; filter: string }; callback: (payload?: unknown) => void };
 
@@ -36,32 +36,47 @@ class FakeRealtime implements RealtimeClientLike {
   }
 }
 
-const ON = { shopping: true };
+const ON = { shopping: true, pantry: true, maintenance: true };
+const SHOPPING_OFF = { shopping: false, pantry: true, maintenance: true };
 
-describe('SHOP-09: subscribeShoppingRealtime', () => {
+describe('SHOP-09: subscribeHouseholdRealtime', () => {
   it('AC1: an event calls onChange once with no arguments and never reads the payload', () => {
     const client = new FakeRealtime();
     const onChange = vi.fn();
-    subscribeShoppingRealtime({ client, householdId: 'h1', modules: ON, onChange });
+    subscribeHouseholdRealtime({ client, householdId: 'h1', modules: ON, onChange });
     const payload = new Proxy({}, { get: () => { throw new Error('payload was read'); }, ownKeys: () => { throw new Error('payload was read'); } });
     client.emit('list_item', payload);
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith();
   });
 
-  it('listens once per shopping table with the household filter on one channel', () => {
+  it('listens once per published table with the household filter on one channel (SPEC §6.4)', () => {
     const client = new FakeRealtime();
-    subscribeShoppingRealtime({ client, householdId: 'h1', modules: ON, onChange: vi.fn() });
-    expect(client.channels).toEqual(['household:h1:shopping']);
+    subscribeHouseholdRealtime({ client, householdId: 'h1', modules: ON, onChange: vi.fn() });
+    expect(client.channels).toEqual(['household:h1']);
     expect(client.bindings.map((b) => b.filter)).toEqual(
-      SHOPPING_REALTIME_TABLES.map((table) => ({ event: '*', schema: 'public', table, filter: 'household_id=eq.h1' })),
+      realtimeTables(ON).map((table) => ({
+        event: '*',
+        schema: 'public',
+        table,
+        filter: table === 'household' ? 'id=eq.h1' : 'household_id=eq.h1',
+      })),
     );
+    expect(client.bindings).toHaveLength(Object.values(REALTIME_TABLES).flat().length);
+  });
+
+  it('a core table such as invite kicks a pull too', () => {
+    const client = new FakeRealtime();
+    const onChange = vi.fn();
+    subscribeHouseholdRealtime({ client, householdId: 'h1', modules: SHOPPING_OFF, onChange });
+    client.emit('invite');
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it('pulls once when the channel becomes SUBSCRIBED, and ignores failures without throwing', () => {
     const client = new FakeRealtime();
     const onChange = vi.fn();
-    subscribeShoppingRealtime({ client, householdId: 'h1', modules: ON, onChange });
+    subscribeHouseholdRealtime({ client, householdId: 'h1', modules: ON, onChange });
     for (const s of ['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED']) expect(() => client.status!(s)).not.toThrow();
     expect(onChange).not.toHaveBeenCalled();
     client.status!('SUBSCRIBED');
@@ -70,17 +85,20 @@ describe('SHOP-09: subscribeShoppingRealtime', () => {
 
   it('unsubscribe removes the channel', () => {
     const client = new FakeRealtime();
-    const off = subscribeShoppingRealtime({ client, householdId: 'h1', modules: ON, onChange: vi.fn() });
+    const off = subscribeHouseholdRealtime({ client, householdId: 'h1', modules: ON, onChange: vi.fn() });
     off();
     expect(client.removed).toHaveLength(1);
   });
 
-  it('AC4: shopping off creates no channel, and its unsubscribe is a no-op', () => {
+  it('AC4: shopping off listens to no shopping table, while core and other modules stay subscribed', () => {
     const client = new FakeRealtime();
-    const off = subscribeShoppingRealtime({ client, householdId: 'h1', modules: { shopping: false }, onChange: vi.fn() });
-    off();
-    expect(client.channels).toEqual([]);
-    expect(client.removed).toEqual([]);
+    const onChange = vi.fn();
+    subscribeHouseholdRealtime({ client, householdId: 'h1', modules: SHOPPING_OFF, onChange });
+    const tables = client.bindings.map((b) => b.filter.table);
+    for (const t of REALTIME_TABLES.shopping) expect(tables).not.toContain(t);
+    expect(tables).toEqual(expect.arrayContaining([...REALTIME_TABLES.core, ...REALTIME_TABLES.pantry, ...REALTIME_TABLES.maintenance]));
+    client.emit('list_item');
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 
@@ -103,7 +121,7 @@ describe('SHOP-09: bursts of events', () => {
     const db = await openHouseholdDb('h1');
     const engine = createSyncEngine({ api, householdId: 'h1', getDb: () => db, isOnline: () => true, sleep: () => Promise.resolve() });
     const client = new FakeRealtime();
-    subscribeShoppingRealtime({ client, householdId: 'h1', modules: ON, onChange: () => void engine.kick() });
+    subscribeHouseholdRealtime({ client, householdId: 'h1', modules: ON, onChange: () => void engine.kick() });
     const first = engine.kick();
     for (let i = 0; i < 5; i++) client.emit('list_item');
     release();

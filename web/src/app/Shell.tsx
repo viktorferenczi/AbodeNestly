@@ -4,7 +4,7 @@ import { useAuth } from '../core/auth/AuthProvider.tsx';
 import { HouseholdProvider, useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { useApi } from '../core/api/ApiProvider.tsx';
 import { useRealtimeClient } from '../core/realtime/RealtimeProvider.tsx';
-import { subscribeShoppingRealtime } from '../shopping/Realtime.ts';
+import { subscribeHouseholdRealtime } from '../sync/realtime.ts';
 import { Switcher } from '../core/Switcher.tsx';
 import { createSyncEngine, NOOP_SYNC, SyncProvider } from '../sync/SyncEngine.ts';
 import { SyncStatusChip } from '../sync/SyncStatusChip.tsx';
@@ -43,7 +43,8 @@ function Bar() {
 
 // Provides the sync engine (SHOP-08) and kicks it on the SPEC §6.4 triggers available here: opening the
 // household, coming back to the tab, reconnecting, and every 5 minutes while the tab is visible. Writes kick it
-// themselves (`mutate`). The Realtime `postgres_changes` kick (SHOP-09) is the effect below; it only kicks, the pull applies data.
+// themselves (`mutate`). The Realtime `postgres_changes` kick (SHOP-09, every published household table) is the effect
+// below; it only kicks, the pull applies data.
 function HouseholdSync({ children }: { children: ReactNode }) {
   const api = useApi();
   const { db, household, modules } = useHousehold();
@@ -71,11 +72,16 @@ function HouseholdSync({ children }: { children: ReactNode }) {
       window.removeEventListener('online', onOnline);
     };
   }, [engine]);
-  const shopping = modules.shopping;
+  const { shopping, pantry, maintenance } = modules;
   useEffect(() => {
     if (!realtime || !householdId) return;
-    return subscribeShoppingRealtime({ client: realtime, householdId, modules: { shopping }, onChange: () => void engine.kick() });
-  }, [engine, realtime, householdId, shopping]);
+    return subscribeHouseholdRealtime({
+      client: realtime,
+      householdId,
+      modules: { shopping, pantry, maintenance },
+      onChange: () => void engine.kick(),
+    });
+  }, [engine, realtime, householdId, shopping, pantry, maintenance]);
   return <SyncProvider engine={engine}>{children}</SyncProvider>;
 }
 

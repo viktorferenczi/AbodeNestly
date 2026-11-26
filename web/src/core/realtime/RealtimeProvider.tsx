@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { RealtimeClientLike } from '../../shopping/Realtime.ts';
+import type { RealtimeClientLike } from '../../sync/realtime.ts';
 
 const RealtimeContext = createContext<RealtimeClientLike | null>(null);
 
