@@ -249,11 +249,10 @@ class ListDetailViewModel(
                 scope.launch {
                     val at = now()
                     val ok = stored {
-                        database.patch(householdId, "list_item", before.id, changes.fields, at)
-                        // name_key is server-owned: locally it keeps suggestions matching until the next pull.
-                        changes.nameKey?.let { key ->
-                            database.patch(householdId, "list_item", before.id, JsonObject(mapOf("name_key" to JsonPrimitive(key))), at, localOnly = true)
-                        }
+                        // One transaction: `patch` writes every key locally and queues all but the server-owned ones, so
+                        // the local name_key (keeps suggestions matching until the next pull) goes with the rename.
+                        val fields = changes.nameKey?.let { key -> JsonObject(changes.fields + ("name_key" to JsonPrimitive(key))) } ?: changes.fields
+                        database.patch(householdId, "list_item", before.id, fields, at)
                     }
                     savingSheet = false
                     if (!ok) return@launch
