@@ -145,7 +145,7 @@ class ListsTest {
     private suspend fun lists() = registry.observeListOverview(household).first().lists
 
     @Test
-    fun `AC6 createList offline writes the local row and exactly one outbox row`() = runBlocking {
+    fun `AC6 createList offline writes the local row and exactly one outbox row`() = runBlocking<Unit> {
         registry.open(household)
         createList(registry, household, "  Hardware  ", "s1", now, "l1")
         val row = lists().single()
@@ -165,7 +165,7 @@ class ListsTest {
     }
 
     @Test
-    fun `AC4 Undo inside the window writes nothing and the list is back`() = runBlocking {
+    fun `AC4 Undo inside the window writes nothing and the list is back`() = runBlocking<Unit> {
         registry.open(household)
         seed("l1", "Groceries")
         val gate = CompletableDeferred<Unit>()
@@ -188,7 +188,7 @@ class ListsTest {
     }
 
     @Test
-    fun `AC3 the swipe is written when the window ends, as one archived_at patch and one kick`() = runBlocking {
+    fun `AC3 the swipe is written when the window ends, as one archived_at patch and one kick`() = runBlocking<Unit> {
         registry.open(household)
         seed("l1", "Groceries")
         val gate = CompletableDeferred<Unit>()
@@ -218,7 +218,7 @@ class ListsTest {
     }
 
     @Test
-    fun `flush writes a waiting swipe at once and the window then writes nothing more`() = runBlocking {
+    fun `flush writes a waiting swipe at once and the window then writes nothing more`() = runBlocking<Unit> {
         registry.open(household)
         seed("l1", "Groceries")
         val gate = CompletableDeferred<Unit>()
@@ -236,7 +236,7 @@ class ListsTest {
     }
 
     @Test
-    fun `Delete on an archived list soft-deletes it after the window`() = runBlocking {
+    fun `Delete on an archived list soft-deletes it after the window`() = runBlocking<Unit> {
         registry.open(household)
         seed("l1", "Old", archivedAt = "2026-02-01T00:00:00.000Z")
         val gate = CompletableDeferred<Unit>()
@@ -252,7 +252,7 @@ class ListsTest {
     }
 
     @Test
-    fun `Restore clears archived_at at once and queues only that column`() = runBlocking {
+    fun `Restore clears archived_at at once and queues only that column`() = runBlocking<Unit> {
         registry.open(household)
         seed("l1", "Old", archivedAt = "2026-02-01T00:00:00.000Z")
         val kicks = AtomicInteger()
@@ -269,7 +269,7 @@ class ListsTest {
     }
 
     @Test
-    fun `AC5 Create writes the list, kicks and reports it to open`() = runBlocking {
+    fun `AC5 Create writes the list, kicks and reports it to open`() = runBlocking<Unit> {
         registry.open(household)
         registry.withSearchDao { it.upsertStore(StoreEntity("s1", household.toString(), "Test Market")) }
         val kicks = AtomicInteger()
@@ -288,7 +288,7 @@ class ListsTest {
     }
 
     @Test
-    fun `a blank name creates nothing`() = runBlocking {
+    fun `a blank name creates nothing`() = runBlocking<Unit> {
         registry.open(household)
         val vm = viewModel(AtomicInteger(), delayer = { })
         vm.onEvent(ListsEvent.Create("   ", null))
@@ -298,7 +298,7 @@ class ListsTest {
     }
 
     @Test
-    fun `a write that cannot be stored shows the message and opens nothing`() = runBlocking {
+    fun `a write that cannot be stored shows the message and opens nothing`() = runBlocking<Unit> {
         registry.open(household)
         // The household of this model is not the open one: the write throws, like a switch mid-write.
         val kicks = AtomicInteger()
@@ -311,7 +311,7 @@ class ListsTest {
     }
 
     @Test
-    fun `the overview counts come through the model`() = runBlocking {
+    fun `the overview counts come through the model`() = runBlocking<Unit> {
         registry.open(household)
         seed("l1", "Groceries")
         registry.withSearchDao { dao ->

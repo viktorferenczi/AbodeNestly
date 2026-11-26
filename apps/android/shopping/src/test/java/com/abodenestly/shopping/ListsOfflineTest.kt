@@ -59,7 +59,7 @@ class ListsOfflineTest {
     }
 
     @Test
-    fun `a list created offline shows at once with one outbox row, and the next sync pushes exactly it`() = runBlocking {
+    fun `a list created offline shows at once with one outbox row, and the next sync pushes exactly it`() = runBlocking<Unit> {
         registry.open(household)
         val transport = SwitchableTransport()
         val engine = LiveSyncEngine(transport, registry, isOnline = { true }, scope = scope)

@@ -37,7 +37,7 @@ class ShoppingListsTest {
         registry.upsert(household, "shopping_list", buildJsonObject { put("id", id); put("name", name) })
 
     @Test
-    fun `the overview carries the live lists, the counts without deleted items, and live stores only`() = runBlocking {
+    fun `the overview carries the live lists, the counts without deleted items, and live stores only`() = runBlocking<Unit> {
         registry.open(household)
         list("l1", "Groceries")
         registry.withSearchDao { dao ->
@@ -55,7 +55,7 @@ class ShoppingListsTest {
     }
 
     @Test
-    fun `a soft-deleted list is not in the overview, an archived one is`() = runBlocking {
+    fun `a soft-deleted list is not in the overview, an archived one is`() = runBlocking<Unit> {
         registry.open(household)
         list("l1", "Groceries")
         list("l2", "Old")
@@ -69,7 +69,7 @@ class ShoppingListsTest {
     }
 
     @Test
-    fun `the overview re-emits after an upsert`() = runBlocking {
+    fun `the overview re-emits after an upsert`() = runBlocking<Unit> {
         registry.open(household)
         list("l1", "Groceries")
         val seen = CopyOnWriteArrayList<List<String>>()
@@ -84,7 +84,7 @@ class ShoppingListsTest {
     }
 
     @Test
-    fun `nothing is emitted for a household that is not open`() = runBlocking {
+    fun `nothing is emitted for a household that is not open`() = runBlocking<Unit> {
         registry.open(household)
         list("l1", "Groceries")
         val other = withTimeoutOrNull(300) { registry.observeListOverview(uuid(2)).toList() }
