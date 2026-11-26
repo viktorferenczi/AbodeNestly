@@ -406,8 +406,8 @@ private fun Tabs(
                 TextButton(onClick = onSignOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
             }
         } else if (selected == AppTab.Shopping && members != null) {
-            // SHOP-01: the module owns its screens and its tag (`tab.shopping.content`). Module off: the tab is absent, so this never composes.
-            ShoppingTab(members, database, sync, onlineFlow, Modifier.weight(1f))
+            // SHOP-01/02: the module owns its screens and its tag (`tab.shopping.content`). Module off: the tab is absent, so this never composes.
+            ShoppingTab(members, database, sync, onlineFlow, meId, Modifier.weight(1f))
         } else {
             Box(Modifier.weight(1f).fillMaxSize().testTag("tab.${selected.key}.content"), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
