@@ -60,6 +60,7 @@ import com.abodenestly.core.switcher.SwitcherViewModel
 import com.abodenestly.core.home.HomeEvent
 import com.abodenestly.core.home.HomeModules
 import com.abodenestly.core.home.HomeScreen
+import com.abodenestly.shopping.ShoppingTab
 import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.sync.SyncEngine
 import com.abodenestly.core.sync.SyncSheet
@@ -220,7 +221,7 @@ private fun SignedInShell(
                 }
                 else -> Tabs(
                     state.destination, state.household, state.profile, state.selectedTab, state.settingsRequested, onSelectTab, onSettingsShown,
-                    api, lastHousehold, membersCache, householdCache, householdsCache, webBaseUrl, profileDeps, database, sync, meId, email, isOnline, onSignOut, onLeft, onHouseholdChanged, onProfileChanged,
+                    api, lastHousehold, membersCache, householdCache, householdsCache, webBaseUrl, profileDeps, database, sync, onlineFlow, meId, email, isOnline, onSignOut, onLeft, onHouseholdChanged, onProfileChanged,
                 )
             }
         }
@@ -291,6 +292,7 @@ private fun Tabs(
     profileDeps: ProfileDeps,
     database: DatabaseRegistry,
     sync: SyncEngine,
+    onlineFlow: StateFlow<Boolean>,
     meId: UUID?,
     email: String?,
     isOnline: Boolean,
@@ -403,11 +405,13 @@ private fun Tabs(
                 )
                 TextButton(onClick = onSignOut, modifier = Modifier.testTag("home.signout")) { Text("Sign out") }
             }
+        } else if (selected == AppTab.Shopping && members != null) {
+            // SHOP-01: the module owns its screens and its tag (`tab.shopping.content`). Module off: the tab is absent, so this never composes.
+            ShoppingTab(members, database, sync, onlineFlow, Modifier.weight(1f))
         } else {
             Box(Modifier.weight(1f).fillMaxSize().testTag("tab.${selected.key}.content"), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(selected.key.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.headlineMedium)
-                    if (BuildConfig.DEBUG && selected == AppTab.Shopping) LocalLists(database)
                     if (selected == AppTab.Home) {
                         // No household known yet (offline before any was read): nothing to show a feed for.
                         if (meId != null) TextButton(onClick = { showProfile = true }, modifier = Modifier.testTag("home.profile")) { Text("Profile") }
@@ -437,15 +441,4 @@ private fun Centered(content: @Composable () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
     ) { content() }
-}
-
-/** Debug only: the household database's placeholder lists, so E2E can see that each household has its own (CORE-07 AC4). */
-@Composable
-private fun LocalLists(database: DatabaseRegistry) {
-    val current by database.current.collectAsState()
-    var names by remember { mutableStateOf("") }
-    LaunchedEffect(current) {
-        names = if (current == null) "" else runCatching { database.lists().joinToString(", ") { it.name } }.getOrDefault("")
-    }
-    Text(names, modifier = Modifier.testTag("shopping.local-lists"))
 }
