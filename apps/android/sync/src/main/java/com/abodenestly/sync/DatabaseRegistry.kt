@@ -444,6 +444,31 @@ open class DatabaseRegistry(
         }
     }
 
+    /**
+     * What the C2 list detail shows: the list, its live items, the household's item history and the list's store name,
+     * re-emitted when any of them changes. Follows the open database like [observeListOverview]; nothing is emitted
+     * while [householdId] is not the open household.
+     */
+    fun observeListDetail(householdId: UUID, listId: String): Flow<ListDetail> = current.flatMapLatest { open ->
+        val db = database
+        if (open != householdId || db == null) emptyFlow()
+        else {
+            val hid = householdId.toString()
+            val dao = db.shoppingLists()
+            combine(dao.observeList(hid, listId), dao.observeItems(hid, listId), dao.observeHistory(hid), dao.observeStores(hid)) { list, items, history, stores ->
+                val live = list?.takeIf { it.deletedAt == null }
+                ListDetail(
+                    list = live?.let(::toRecord),
+                    storeName = live?.storeId?.let { id -> stores.firstOrNull { it.id == id }?.name },
+                    items = items.map(::toItemRecord),
+                    history = history.map(::toItemRecord),
+                )
+            }
+                // The database may close under the collector during a switch.
+                .catch { }
+        }
+    }
+
     // Test seams (CORE-07 isolation): a plain list row, no outbox.
 
     suspend fun lists(): List<ShoppingList> = withOpen { db ->
@@ -497,6 +522,11 @@ open class DatabaseRegistry(
         fun toRecord(e: ShoppingListEntity) = ListRecord(
             id = e.id, name = e.name, storeId = e.storeId, isTemplate = e.isTemplate == true,
             archivedAt = e.archivedAt, createdAt = e.createdAt,
+        )
+
+        fun toItemRecord(e: ListItemEntity) = ListItemRecord(
+            id = e.id, listId = e.listId, name = e.name, nameKey = e.nameKey, checked = e.checked == true,
+            deletedAt = e.deletedAt, createdAt = e.createdAt,
         )
 
         fun toEntity(a: Activity) = ActivityEntity(

@@ -375,6 +375,18 @@ interface ShoppingListDao {
 
     @Query("SELECT * FROM store WHERE household_id = :householdId AND deleted_at IS NULL ORDER BY name")
     fun observeStores(householdId: String): Flow<List<StoreEntity>>
+
+    /** One list in any deleted state (SHOP-02): the detail screen tells a missing or deleted list from a live one. */
+    @Query("SELECT * FROM shopping_list WHERE household_id = :householdId AND id = :id")
+    fun observeList(householdId: String, id: String): Flow<ShoppingListEntity?>
+
+    /** The live items of one list. */
+    @Query("SELECT * FROM list_item WHERE household_id = :householdId AND list_id = :listId AND deleted_at IS NULL")
+    fun observeItems(householdId: String, listId: String): Flow<List<ListItemEntity>>
+
+    /** The household's item history for autocomplete: live rows, and rows checked before they were cleared or deleted. */
+    @Query("SELECT * FROM list_item WHERE household_id = :householdId AND (deleted_at IS NULL OR checked = 1)")
+    fun observeHistory(householdId: String): Flow<List<ListItemEntity>>
 }
 
 /** One row of [ShoppingListDao.observeCounts]. */
