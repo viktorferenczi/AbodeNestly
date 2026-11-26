@@ -42,7 +42,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
-    // BackHandler (the placeholder detail's Back).
+    // BackHandler (the list detail's Back).
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)

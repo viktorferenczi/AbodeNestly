@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -28,6 +27,8 @@ fun ShoppingTab(
     database: DatabaseRegistry,
     sync: SyncEngine,
     isOnline: StateFlow<Boolean>,
+    /** The signed-in user, recorded as `created_by` on the items they add. */
+    userId: UUID?,
     modifier: Modifier = Modifier,
 ) {
     // Keyed by household: the overview follows that household's database, and a switch starts a fresh model.
@@ -41,9 +42,11 @@ fun ShoppingTab(
             ListsScreen(lists, onOpen = { openListId = it })
         } else {
             BackHandler { openListId = null }
-            val ui by lists.state.collectAsState()
-            // A list just created may not be in the overview yet; the title fills in when it is.
-            ListPlaceholderScreen(ui.overview.lists.firstOrNull { it.id == id }?.name.orEmpty(), onBack = { openListId = null })
+            // Keyed by household and list: each open list reads its own rows and keeps its own typed text.
+            val detail: ListDetailViewModel = viewModel(key = "shopping.list.$householdId.$id") {
+                ListDetailViewModel(householdId, id, userId, database, kick = { sync.kick() }, isOnline = isOnline)
+            }
+            ListDetailScreen(detail, onBack = { openListId = null })
         }
     }
 }
