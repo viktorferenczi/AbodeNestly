@@ -55,14 +55,12 @@ describe('SHOP-09: subscribeHouseholdRealtime', () => {
     subscribeHouseholdRealtime({ client, householdId: 'h1', modules: ON, onChange: vi.fn() });
     expect(client.channels).toEqual(['household:h1']);
     expect(client.bindings.map((b) => b.filter)).toEqual(
-      realtimeTables(ON).map((table) => ({
-        event: '*',
-        schema: 'public',
-        table,
-        filter: table === 'household' ? 'id=eq.h1' : 'household_id=eq.h1',
-      })),
+      realtimeTables(ON).map((table) => ({ event: '*', schema: 'public', table, filter: 'household_id=eq.h1' })),
     );
-    expect(client.bindings).toHaveLength(Object.values(REALTIME_TABLES).flat().length);
+    // Exactly the tables the migrations publish: binding an unpublished one fails the whole join.
+    expect([...realtimeTables(ON)].sort()).toEqual(
+      ['activity', 'attachment', 'invite', 'list_item', 'location', 'notification_pref', 'shopping_list', 'store', 'store_item_order'],
+    );
   });
 
   it('a core table such as invite kicks a pull too', () => {
@@ -90,13 +88,13 @@ describe('SHOP-09: subscribeHouseholdRealtime', () => {
     expect(client.removed).toHaveLength(1);
   });
 
-  it('AC4: shopping off listens to no shopping table, while core and other modules stay subscribed', () => {
+  it('AC4: shopping off listens to no shopping table, while the core tables stay subscribed', () => {
     const client = new FakeRealtime();
     const onChange = vi.fn();
     subscribeHouseholdRealtime({ client, householdId: 'h1', modules: SHOPPING_OFF, onChange });
     const tables = client.bindings.map((b) => b.filter.table);
     for (const t of REALTIME_TABLES.shopping) expect(tables).not.toContain(t);
-    expect(tables).toEqual(expect.arrayContaining([...REALTIME_TABLES.core, ...REALTIME_TABLES.pantry, ...REALTIME_TABLES.maintenance]));
+    expect(tables).toEqual([...REALTIME_TABLES.core]);
     client.emit('list_item');
     expect(onChange).not.toHaveBeenCalled();
   });

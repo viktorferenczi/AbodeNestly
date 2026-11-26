@@ -1,15 +1,17 @@
 import type { Modules } from '../core/household/HouseholdProvider.tsx';
 
 /**
- * The household-scoped tables in the `supabase_realtime` publication (docs/schema.sql), by the module that owns them.
- * `household` is keyed by its own `id`; every other table carries `household_id`.
+ * The tables the migrations have added to the `supabase_realtime` publication, by the module that owns them. Binding a
+ * table that is not published makes the whole join fail (`CHANNEL_ERROR`), so a table joins this list in the same
+ * change that publishes it (`docs/schema.sql` shows the end state, which also has household, member, item_price and
+ * the pantry and maintenance tables). Every table here carries `household_id`.
  */
-export const REALTIME_TABLES = {
-  core: ['household', 'member', 'invite', 'activity', 'attachment', 'notification_pref', 'location'],
-  shopping: ['store', 'shopping_list', 'list_item', 'store_item_order', 'item_price'],
-  pantry: ['category', 'pantry_item', 'pantry_movement', 'recipe', 'recipe_ingredient'],
-  maintenance: ['house', 'contractor', 'asset', 'maint_task', 'task_consumable', 'maint_log'],
-} as const;
+export const REALTIME_TABLES: Record<'core' | 'shopping' | 'pantry' | 'maintenance', readonly string[]> = {
+  core: ['location', 'invite', 'activity', 'attachment', 'notification_pref'],
+  shopping: ['store', 'shopping_list', 'list_item', 'store_item_order'],
+  pantry: [],
+  maintenance: [],
+};
 
 /** The tables to listen to: core always, a module's tables only while that module is on (SHOP-09 AC4, X7). */
 export function realtimeTables(modules: Modules): string[] {
@@ -56,10 +58,9 @@ export function subscribeHouseholdRealtime({
 }): () => void {
   let channel = client.channel(`household:${householdId}`);
   for (const table of realtimeTables(modules)) {
-    const column = table === 'household' ? 'id' : 'household_id';
     channel = channel.on(
       'postgres_changes',
-      { event: '*', schema: 'public', table, filter: `${column}=eq.${householdId}` },
+      { event: '*', schema: 'public', table, filter: `household_id=eq.${householdId}` },
       () => onChange(),
     );
   }
