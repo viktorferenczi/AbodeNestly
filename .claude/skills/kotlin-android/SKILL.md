@@ -24,6 +24,7 @@ apps/android/
   shared/                    Uuid, Dates, Money, NameKey, QuantityParser
 ```
 Rule: `:shopping`, `:pantry`, `:maintenance` depend on `:core`, `:sync`, `:ui`, `:shared`, `:contract` only. A Gradle check task (`checkModuleGraph`) fails the build if a module depends on another module.
+A module screen is exposed to `AppRoot` as one `<Module>Tab` composable (`ShoppingTab(householdId, database, sync, isOnline)`), which owns its sub-navigation (a saved flag and a `BackHandler`) until the NavHost lands with the tab shell (X7). Module libraries use the same `dev`/`prod` flavors as `:core` and `:sync`.
 
 ## Architecture
 - Compose + `ViewModel` + `StateFlow`. Unidirectional: `UiState` data class, `onEvent(UiEvent)` function. No Hilt; one hand-written `AppGraph` object created in `Application` and passed to view models via a `ViewModelProvider.Factory`.

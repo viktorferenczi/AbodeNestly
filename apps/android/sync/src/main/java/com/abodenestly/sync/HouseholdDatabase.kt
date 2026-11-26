@@ -361,7 +361,28 @@ interface ShoppingListDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: ShoppingListEntity)
+
+    /** The household's live lists, archived and templates included (SHOP-01; the screen splits them). */
+    @Query("SELECT * FROM shopping_list WHERE household_id = :householdId AND deleted_at IS NULL")
+    fun observeLive(householdId: String): Flow<List<ShoppingListEntity>>
+
+    /** Live items per list: how many are checked and how many there are. A list with no live items has no row. */
+    @Query(
+        "SELECT list_id, COALESCE(SUM(checked = 1), 0) AS checked, COUNT(*) AS all_count FROM list_item " +
+            "WHERE household_id = :householdId AND deleted_at IS NULL GROUP BY list_id",
+    )
+    fun observeCounts(householdId: String): Flow<List<ListCountRow>>
+
+    @Query("SELECT * FROM store WHERE household_id = :householdId AND deleted_at IS NULL ORDER BY name")
+    fun observeStores(householdId: String): Flow<List<StoreEntity>>
 }
+
+/** One row of [ShoppingListDao.observeCounts]. */
+data class ListCountRow(
+    @ColumnInfo(name = "list_id") val listId: String,
+    val checked: Int,
+    @ColumnInfo(name = "all_count") val allCount: Int,
+)
 
 @Dao
 interface ActivityDao {

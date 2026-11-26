@@ -420,7 +420,31 @@ open class DatabaseRegistry(
     /** Test seam (and the future module stories' pull): runs [block] against the search DAO of the open household. */
     suspend fun <T> withSearchDao(block: suspend (SearchDao) -> T): T = withOpen { block(it.search()) }
 
-    // Placeholder lists (replaced by SHOP-01/08).
+    // Lists overview (SHOP-01)
+
+    /**
+     * What the C1 overview shows: the household's live lists, per-list item counts and live stores, re-emitted when any of
+     * them changes. Follows the open database like [activityFeed]; nothing is emitted while [id] is not the open household.
+     */
+    fun observeListOverview(id: UUID): Flow<ListOverview> = current.flatMapLatest { open ->
+        val db = database
+        if (open != id || db == null) emptyFlow()
+        else {
+            val hid = id.toString()
+            val dao = db.shoppingLists()
+            combine(dao.observeLive(hid), dao.observeCounts(hid), dao.observeStores(hid)) { lists, counts, stores ->
+                ListOverview(
+                    lists = lists.map(::toRecord),
+                    counts = counts.associate { it.listId to ItemCount(it.checked, it.allCount) },
+                    stores = stores.map { StoreRecord(it.id, it.name) },
+                )
+            }
+                // The database may close under the collector during a switch.
+                .catch { }
+        }
+    }
+
+    // Test seams (CORE-07 isolation): a plain list row, no outbox.
 
     suspend fun lists(): List<ShoppingList> = withOpen { db ->
         db.shoppingLists().all().mapNotNull { row ->
@@ -469,6 +493,11 @@ open class DatabaseRegistry(
 
         /** Normalises any ISO 8601 text the server sends (`…123456+00:00`) to [STAMP]'s fixed width; text that does not parse is kept. */
         fun normalizeStamp(text: String): String = runCatching { stamp(OffsetDateTime.parse(text)) }.getOrDefault(text)
+
+        fun toRecord(e: ShoppingListEntity) = ListRecord(
+            id = e.id, name = e.name, storeId = e.storeId, isTemplate = e.isTemplate == true,
+            archivedAt = e.archivedAt, createdAt = e.createdAt,
+        )
 
         fun toEntity(a: Activity) = ActivityEntity(
             id = a.id.toString(), householdId = a.householdId.toString(), actorId = a.actorId?.toString(),
