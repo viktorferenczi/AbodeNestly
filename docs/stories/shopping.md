@@ -331,7 +331,7 @@ Schema change: no  Contract change: no
 Unit: apps/android/shopping/src/test/java/app/abodenestly/shopping/QuickAddTest.kt → AC1 and AC2 suggestions match name_key and the inserted name is the display name
 Component: apps/android/shopping/src/test/java/app/abodenestly/shopping/QuickAddComposeTest.kt → AC3 add with no suggestion, AC4 offline; submitting the text field. States empty, populated, offline.
 Integration: n/a (no API handler in this story)
-E2E: E2E-SHOP-1 apps/android/shopping/src/androidTest/java/app/abodenestly/shopping/QuickAddE2ETest.kt
+E2E: E2E-SHOP-1 apps/android/app/src/androidTest/java/com/abodenestly/app/QuickAddE2ETest.kt
 Offline test: yes, TESTING §6 — Fake ApiClient throws IOException, then kick(); QuickAddOfflineTest.kt
 
 ## Dependencies

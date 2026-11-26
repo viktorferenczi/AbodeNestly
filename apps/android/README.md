@@ -47,6 +47,8 @@ Checked by hand only, never in e2e (TESTING §5).
 | Module graph, lint, unit and Compose component tests (JVM, Robolectric) | `./gradlew checkModuleGraph lintDevDebug testDevDebugUnitTest` |
 | E2E (instrumented, needs `supabase start` and the API on :3000: `pnpm --filter @abodenestly/api dev`) | `./gradlew :core:pixel6Api34DevDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.serviceRoleKey=<key> -Pandroid.testInstrumentationRunnerArguments.anonKey=<key>` |
 
+`:app` has its own instrumented journeys, run with `:app:pixel6Api34DevDebugAndroidTest` (same arguments) or `:app:connectedDevDebugAndroidTest`: E2E-SHOP-1 `QuickAddE2ETest` (a seeded list and a checked "Milk": type "mi", tap the suggestion, add "Lightbulbs", both rows reach the server) runs the real `ShoppingTab` on a real `DatabaseRegistry` and `LiveSyncEngine` against the API. It signs in through the magic link without the sign-in screen, and carries a copy of `:core`'s `E2E` helper because androidTest sources are not shared between modules.
+
 Use `:core:connectedDevDebugAndroidTest` instead to run on an already-running emulator. Without both keys the e2e skips.
 
 JUnit 5 runs the pure logic tests; the Robolectric/Compose tests are JUnit 4 and run on the same platform through the
