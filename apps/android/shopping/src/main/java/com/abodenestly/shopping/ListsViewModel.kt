@@ -175,7 +175,9 @@ class ListsViewModel(
         mutableState.update { s ->
             s.copy(
                 pending = s.pending.filter { it.id != action.id },
-                settling = if (written) s.settling + (action.id to action.kind) else s.settling,
+                // The overview may already carry the write (Room re-emits while sync is kicked): then there is
+                // nothing to wait for, and a settling entry added now would hide the row until the next emission.
+                settling = if (written && !settled(s.overview, action.id, action.kind)) s.settling + (action.id to action.kind) else s.settling,
             )
         }
     }
