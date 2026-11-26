@@ -672,7 +672,7 @@ Schema change: no  Contract change: no
 Unit: apps/android/shopping/src/test/java/app/abodenestly/shopping/CheckOffTest.kt → AC2 undo writes nothing to the outbox; AC3 after 5 s one upsert has checked true; AC5 clear sets deleted_at
 Component: apps/android/shopping/src/test/java/app/abodenestly/shopping/CheckOffComposeTest.kt → AC1 populated checkbox, AC4 all-checked, AC6 offline; checkbox tap, undo, clear checked
 Integration: n/a (no API handler in this story)
-E2E: E2E-SHOP-1 apps/android/shopping/src/androidTest/java/app/abodenestly/shopping/CheckOffE2ETest.kt
+E2E: E2E-SHOP-1 apps/android/app/src/androidTest/java/com/abodenestly/app/CheckOffE2ETest.kt
 Offline test: yes, TESTING §6 — Fake ApiClient throws IOException, then kick(); CheckOffOfflineTest.kt
 
 ## Dependencies

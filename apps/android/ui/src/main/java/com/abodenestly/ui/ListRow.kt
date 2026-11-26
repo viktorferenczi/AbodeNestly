@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -24,7 +25,8 @@ import androidx.compose.ui.unit.dp
  * DESIGN A6 ListRow: [title], an optional [subtitle] slot under it (a chip, a note) and a [trailing] slot (a count, a
  * chevron). At least 48 dp tall. Tapping calls [onClick]; a long press calls [onLongClick] (a menu, so every swipe has
  * a non-gesture twin). The row is one accessibility node: callers put the spoken label and custom actions on [modifier].
- * Swipe and the leading control belong to the caller.
+ * [struck] strikes the title through and dims it (a check-off waiting out its undo window). Swipe and the leading
+ * control belong to the caller.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -35,6 +37,7 @@ fun ListRow(
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
+    struck: Boolean = false,
 ) {
     val tokens = LocalTokens.current
     val tap = if (onClick != null || onLongClick != null) {
@@ -53,7 +56,14 @@ fun ListRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = tokens.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (struck) tokens.text2 else tokens.text,
+                textDecoration = if (struck) TextDecoration.LineThrough else null,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
             subtitle?.invoke()
         }
         trailing?.invoke()

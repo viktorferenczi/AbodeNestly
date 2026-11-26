@@ -83,6 +83,19 @@ class ShoppingListDetailTest {
     }
 
     @Test
+    fun `items carry checkedAt, null while unchecked`() = runBlocking<Unit> {
+        registry.open(household)
+        list("l1", "Groceries")
+        registry.withSearchDao { dao ->
+            dao.upsertListItem(ListItemEntity("i1", hid, "l1", "Milk", checked = true, checkedAt = "2026-11-26T08:00:00.000Z"))
+            dao.upsertListItem(ListItemEntity("i2", hid, "l1", "Eggs", checked = false))
+        }
+        val d = detail("l1")
+        assertEquals("2026-11-26T08:00:00.000Z", d.items.single { it.id == "i1" }.checkedAt)
+        assertNull(d.items.single { it.id == "i2" }.checkedAt)
+    }
+
+    @Test
     fun `items and history carry quantity, unit and note`() = runBlocking<Unit> {
         registry.open(household)
         list("l1", "Groceries")
