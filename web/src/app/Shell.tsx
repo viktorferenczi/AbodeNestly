@@ -3,6 +3,8 @@ import { Link, Outlet } from 'react-router';
 import { useAuth } from '../core/auth/AuthProvider.tsx';
 import { HouseholdProvider, useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { useApi } from '../core/api/ApiProvider.tsx';
+import { useRealtimeClient } from '../core/realtime/RealtimeProvider.tsx';
+import { subscribeShoppingRealtime } from '../shopping/Realtime.ts';
 import { Switcher } from '../core/Switcher.tsx';
 import { createSyncEngine, NOOP_SYNC, SyncProvider } from '../sync/SyncEngine.ts';
 import { SyncStatusChip } from '../sync/SyncStatusChip.tsx';
@@ -41,10 +43,11 @@ function Bar() {
 
 // Provides the sync engine (SHOP-08) and kicks it on the SPEC §6.4 triggers available here: opening the
 // household, coming back to the tab, reconnecting, and every 5 minutes while the tab is visible. Writes kick it
-// themselves (`mutate`). The Realtime `postgres_changes` kick arrives with SHOP-09.
+// themselves (`mutate`). The Realtime `postgres_changes` kick (SHOP-09) is the effect below; it only kicks, the pull applies data.
 function HouseholdSync({ children }: { children: ReactNode }) {
   const api = useApi();
-  const { db, household } = useHousehold();
+  const { db, household, modules } = useHousehold();
+  const realtime = useRealtimeClient();
   const householdId = household?.id;
   const engine = useMemo(
     () =>
@@ -68,6 +71,11 @@ function HouseholdSync({ children }: { children: ReactNode }) {
       window.removeEventListener('online', onOnline);
     };
   }, [engine]);
+  const shopping = modules.shopping;
+  useEffect(() => {
+    if (!realtime || !householdId) return;
+    return subscribeShoppingRealtime({ client: realtime, householdId, modules: { shopping }, onChange: () => void engine.kick() });
+  }, [engine, realtime, householdId, shopping]);
   return <SyncProvider engine={engine}>{children}</SyncProvider>;
 }
 
