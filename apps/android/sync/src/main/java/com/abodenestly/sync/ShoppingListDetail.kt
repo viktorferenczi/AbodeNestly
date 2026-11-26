@@ -30,6 +30,8 @@ data class ListDetail(
     val list: ListRecord? = null,
     /** The list's store when it points to a live store. */
     val storeName: String? = null,
+    /** SHOP-05: the household's live stores, for the picker, so it needs no second observation. */
+    val stores: List<StoreRecord> = emptyList(),
     val items: List<ListItemRecord> = emptyList(),
     val history: List<ListItemRecord> = emptyList(),
 )

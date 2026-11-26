@@ -18,7 +18,7 @@ import java.util.UUID
 
 /**
  * The Shopping tab: the module's one entry point, mounted by the app shell only while the Shopping module is on. It owns
- * its sub-navigation until the NavHost lands with the tab shell (X7): an open list is a saved flag with a back handler,
+ * its sub-navigation until the NavHost lands with the tab shell (X7): an open list and the Stores screen are saved flags with back handlers,
  * like Members and Settings. Reads and writes go to the local database, so everything works offline.
  */
 @Composable
@@ -36,17 +36,25 @@ fun ShoppingTab(
         ListsViewModel(householdId, database, kick = { sync.kick() }, isOnline = isOnline)
     }
     var openListId by rememberSaveable(householdId) { mutableStateOf<String?>(null) }
+    // Stores sits above Lists and the open list (SHOP-05): back returns to where it was opened.
+    var storesOpen by rememberSaveable(householdId) { mutableStateOf(false) }
     Box(modifier.fillMaxSize().testTag("tab.shopping.content")) {
         val id = openListId
-        if (id == null) {
-            ListsScreen(lists, onOpen = { openListId = it })
+        if (storesOpen) {
+            BackHandler { storesOpen = false }
+            val stores: StoresViewModel = viewModel(key = "shopping.stores.$householdId") {
+                StoresViewModel(householdId, database, kick = { sync.kick() }, isOnline = isOnline)
+            }
+            StoresScreen(stores, onBack = { storesOpen = false })
+        } else if (id == null) {
+            ListsScreen(lists, onOpen = { openListId = it }, onOpenStores = { storesOpen = true })
         } else {
             BackHandler { openListId = null }
             // Keyed by household and list: each open list reads its own rows and keeps its own typed text.
             val detail: ListDetailViewModel = viewModel(key = "shopping.list.$householdId.$id") {
                 ListDetailViewModel(householdId, id, userId, database, kick = { sync.kick() }, isOnline = isOnline)
             }
-            ListDetailScreen(detail, onBack = { openListId = null })
+            ListDetailScreen(detail, onBack = { openListId = null }, onManageStores = { storesOpen = true })
         }
     }
 }
