@@ -72,6 +72,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
+    // 5-minute foreground ticker (SPEC §6.4) follows the process lifecycle.
+    implementation(libs.androidx.lifecycle.process)
+    implementation(project(":sync"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)

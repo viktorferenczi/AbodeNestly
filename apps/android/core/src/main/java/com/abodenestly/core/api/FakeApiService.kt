@@ -1,10 +1,13 @@
 package com.abodenestly.core.api
 
-import com.abodenestly.contract.models.Activity
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
+import com.abodenestly.sync.SyncPullPage
+import com.abodenestly.sync.SyncPushBody
+import com.abodenestly.sync.SyncPushResult
+import com.abodenestly.sync.SyncResult
+import com.abodenestly.sync.SyncTransport
 import kotlinx.coroutines.CompletableDeferred
-import java.time.OffsetDateTime
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
@@ -13,7 +16,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Hand-written fake for component and unit tests (TESTING §2: no mocking libraries).
  * Lives in the main source set, like [com.abodenestly.core.auth.FakeAuthService].
  */
-class FakeApiService : ApiService {
+class FakeApiService : ApiService, SyncTransport {
     sealed interface Call {
         data class CreateHousehold(val name: String) : Call
         data class AcceptInvite(val code: String) : Call
@@ -25,7 +28,9 @@ class FakeApiService : ApiService {
         data class MakeOwner(val householdId: UUID, val userId: UUID) : Call
         data class FetchHousehold(val householdId: UUID, val userId: UUID) : Call
         data class FetchMyHouseholds(val userId: UUID) : Call
-        data class FetchActivity(val householdId: UUID, val since: OffsetDateTime, val limit: Int) : Call
+        data class Push(val body: SyncPushBody) : Call
+        data class Pull(val householdId: String, val since: Long, val limit: Int) : Call
+        data object RefreshSession : Call
         data class UpdateModules(val householdId: UUID, val shopping: Boolean?, val pantry: Boolean?, val maintenance: Boolean?) : Call
         data class UpdateHousehold(val householdId: UUID, val name: String?, val currency: String?) : Call
         data class SignAttachment(val householdId: UUID, val entity: String, val entityId: UUID, val filename: String, val mime: String, val size: Int) : Call
@@ -49,7 +54,12 @@ class FakeApiService : ApiService {
     @Volatile var makeOwnerResult: ApiResult<Unit> = ApiResult.Success(Unit)
     @Volatile var fetchHouseholdResult: ApiResult<HouseholdWithRole?> = ApiResult.Failure(ApiFailure.Unknown)
     @Volatile var myHouseholdsResult: ApiResult<List<HouseholdWithRole>> = ApiResult.Failure(ApiFailure.Unknown)
-    @Volatile var activityResult: ApiResult<List<Activity>> = ApiResult.Success(emptyList())
+    /** Queued /sync results, consumed in order before falling back to the `*Result` defaults (an empty, finished page). */
+    val pushResults = ConcurrentLinkedQueue<SyncResult<SyncPushResult>>()
+    val pullResults = ConcurrentLinkedQueue<SyncResult<SyncPullPage>>()
+    /** `null` applies every mutation. */
+    @Volatile var pushResult: SyncResult<SyncPushResult>? = null
+    @Volatile var pullResult: SyncResult<SyncPullPage> = SyncResult.Success(SyncPullPage(cursor = 0, hasMore = false))
     @Volatile var updateModulesResult: ApiResult<Household> = ApiResult.Failure(ApiFailure.Unknown)
     @Volatile var updateHouseholdResult: ApiResult<Household> = ApiResult.Failure(ApiFailure.Unknown)
     @Volatile var signResult: ApiResult<SignedUpload> = ApiResult.Success(SignedUpload(UUID.randomUUID(), "https://upload.test/object", "households/h/pantry_item/e/a.jpg"))
@@ -127,11 +137,22 @@ class FakeApiService : ApiService {
         return result
     }
 
-    override suspend fun fetchActivity(householdId: UUID, since: OffsetDateTime, limit: Int): ApiResult<List<Activity>> {
-        recorded += Call.FetchActivity(householdId, since, limit)
-        val result = activityResult
+    // SyncTransport
+
+    override suspend fun push(body: SyncPushBody): SyncResult<SyncPushResult> {
+        recorded += Call.Push(body)
         gate?.await()
-        return result
+        return pushResults.poll() ?: pushResult ?: SyncResult.Success(SyncPushResult(applied = body.mutations.map { it.id }))
+    }
+
+    override suspend fun pull(householdId: String, since: Long, limit: Int): SyncResult<SyncPullPage> {
+        recorded += Call.Pull(householdId, since, limit)
+        gate?.await()
+        return pullResults.poll() ?: pullResult
+    }
+
+    override suspend fun refreshSession() {
+        recorded += Call.RefreshSession
     }
 
     override suspend fun fetchMyHouseholds(userId: UUID): ApiResult<List<HouseholdWithRole>> {

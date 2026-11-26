@@ -1,13 +1,11 @@
 package com.abodenestly.core.api
 
-import com.abodenestly.contract.models.Activity
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
 import com.abodenestly.contract.models.Member
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import java.time.OffsetDateTime
 import java.util.UUID
 
 /** Why an API call failed, as the Welcome screen needs to tell the person (mirrors iOS `ApiFailure`). */
@@ -82,9 +80,6 @@ interface ApiService {
 
     /** Promotes a member through PostgREST (`PATCH member`). A row RLS hides counts as a failure. */
     suspend fun makeOwner(householdId: UUID, userId: UUID): ApiResult<Unit>
-
-    /** CORE-08 interim pull (until SHOP-08's `/sync`): activity rows created at or after [since], newest first, at most [limit]. Rows with `deleted_at` set are included so a client learns of them (SPEC §6.3). Read under RLS, no API route. */
-    suspend fun fetchActivity(householdId: UUID, since: OffsetDateTime, limit: Int): ApiResult<List<Activity>>
 
     /** The household and the viewer's role, or `null` when they are no longer an active member (or it was deleted). PostgREST read under RLS. */
     suspend fun fetchHousehold(householdId: UUID, userId: UUID): ApiResult<HouseholdWithRole?>

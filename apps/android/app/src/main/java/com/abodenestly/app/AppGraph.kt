@@ -1,6 +1,9 @@
 package com.abodenestly.app
 
 import android.content.Context
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.abodenestly.core.api.ApiService
@@ -24,11 +27,14 @@ import com.abodenestly.core.settings.DataStoreHouseholdCache
 import com.abodenestly.core.settings.HouseholdCache
 import com.abodenestly.core.switcher.DataStoreHouseholdsCache
 import com.abodenestly.core.switcher.HouseholdsCache
-import com.abodenestly.core.home.ActivityPull
 import com.abodenestly.core.search.DataStoreRecentSearchStore
 import com.abodenestly.core.search.RecentSearchStore
 import com.abodenestly.sync.DatabaseRegistry
+import com.abodenestly.sync.BackgroundSyncScheduler
+import com.abodenestly.sync.LiveSyncEngine
 import com.abodenestly.sync.SyncEngine
+import com.abodenestly.sync.SyncScheduler
+import com.abodenestly.sync.hasPushablePending
 import com.abodenestly.core.signin.SignInViewModel
 import com.abodenestly.core.welcome.WelcomeViewModel
 import com.abodenestly.core.welcome.land
@@ -36,7 +42,9 @@ import com.abodenestly.shared.AppConfig
 import com.abodenestly.ui.NetworkMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import java.io.File
@@ -51,7 +59,8 @@ class AppGraph(context: Context) {
         authScheme = BuildConfig.AUTH_URL_SCHEME,
     )
     val auth: AuthService = SupabaseAuthService(config)
-    val api: ApiService = HttpApiService(config, auth)
+    private val http = HttpApiService(config, auth)
+    val api: ApiService = http
     val network: NetworkMonitor = NetworkMonitor.observing(context)
     val lastHousehold: LastHouseholdStore =
         DataStoreLastHouseholdStore.create(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
@@ -78,8 +87,9 @@ class AppGraph(context: Context) {
         profileOutbox, HttpProfileRemote(config, auth), profileCache,
         currentUser = { auth.currentSession()?.userId }, scope = appScope,
     )
-    /** Interim `ActivityPull` until SHOP-08 brings the full push/pull loop behind the same seam. */
-    val sync: SyncEngine = ActivityPull(api, database, isOnline = { network.isOnline.value }, scope = appScope)
+    /** SHOP-08: push the outbox, then pull, for the open household (SPEC §6.4). Realtime joins in SHOP-09. */
+    val sync: SyncEngine = LiveSyncEngine(http, database, isOnline = { network.isOnline.value }, scope = appScope)
+    private val background: BackgroundSyncScheduler = SyncScheduler(context)
     val profileDeps = ProfileDeps(
         profileCache, profileOutbox, profileSync, HttpAvatarLoader(config, auth), avatarDir = File(context.filesDir, "avatars"),
     )
@@ -91,6 +101,29 @@ class AppGraph(context: Context) {
         // CORE-08: the same connectivity trigger, plus entering or switching a household (its database just opened).
         appScope.launch { network.isOnline.filter { it }.collect { sync.kick() } }
         appScope.launch { database.current.filter { it != null }.collect { sync.kick() } }
+        // SHOP-08: every 5 minutes while foregrounded, and one background pass when leaving with writes still queued.
+        background.schedulePeriodic()
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            private var ticker: Job? = null
+
+            override fun onStart(owner: LifecycleOwner) {
+                sync.kick()
+                ticker = appScope.launch { while (true) { delay(FOREGROUND_TICK_MS); sync.kick() } }
+            }
+
+            override fun onStop(owner: LifecycleOwner) {
+                ticker?.cancel()
+                ticker = null
+                appScope.launch {
+                    val household = database.current.value ?: return@launch
+                    if (database.hasPushablePending(household)) background.scheduleOnce()
+                }
+            }
+        })
+    }
+
+    private companion object {
+        const val FOREGROUND_TICK_MS = 5 * 60 * 1000L
     }
 
     val viewModelFactory = object : ViewModelProvider.Factory {

@@ -33,13 +33,23 @@ data class OutboxEntity(
     @ColumnInfo(name = "client_ts") val clientTs: String,
 )
 
-/** Placeholder until SHOP-01/08 replace it with the real list table (same as iOS and web). */
+/**
+ * The server's `shopping_list` columns (SHOP-08 widened the CORE-era placeholder, like iOS v6 and web). Everything
+ * past `deleted_at` is nullable: rows written before a pull carry no server stamps yet.
+ */
 @Entity(tableName = "shopping_list")
 data class ShoppingListEntity(
     @PrimaryKey val id: String,
     @ColumnInfo(name = "household_id") val householdId: String,
     val name: String,
     @ColumnInfo(name = "deleted_at") val deletedAt: String? = null,
+    @ColumnInfo(name = "store_id") val storeId: String? = null,
+    @ColumnInfo(name = "is_template") val isTemplate: Boolean? = null,
+    @ColumnInfo(name = "share_token") val shareToken: String? = null,
+    @ColumnInfo(name = "archived_at") val archivedAt: String? = null,
+    @ColumnInfo(name = "created_at") val createdAt: String? = null,
+    @ColumnInfo(name = "updated_at") val updatedAt: String? = null,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Long? = null,
 )
 
 /**
@@ -65,7 +75,8 @@ data class ActivityEntity(
 
 /**
  * CORE-09: the minimal local copies the household search reads (id, household, name, tombstone). The module stories
- * (SHOP-*, PANT-*, MAINT-*) widen them to the full server columns. Web twin: Dexie tables of the same names.
+ * (SHOP-*, PANT-*, MAINT-*) widen them to the full server columns; SHOP-08 did `list_item`, `store` and `location`.
+ * Web twin: Dexie tables of the same names.
  */
 @Entity(tableName = "list_item", indices = [Index(value = ["household_id"])])
 data class ListItemEntity(
@@ -74,6 +85,22 @@ data class ListItemEntity(
     @ColumnInfo(name = "list_id") val listId: String,
     val name: String,
     @ColumnInfo(name = "deleted_at") val deletedAt: String? = null,
+    @ColumnInfo(name = "name_key") val nameKey: String? = null,
+    val quantity: Double? = null,
+    val unit: String? = null,
+    val note: String? = null,
+    val barcode: String? = null,
+    val checked: Boolean? = null,
+    @ColumnInfo(name = "checked_at") val checkedAt: String? = null,
+    @ColumnInfo(name = "checked_by") val checkedBy: String? = null,
+    @ColumnInfo(name = "manual_position") val manualPosition: Int? = null,
+    val source: String? = null,
+    @ColumnInfo(name = "pantry_item_id") val pantryItemId: String? = null,
+    @ColumnInfo(name = "maint_task_id") val maintTaskId: String? = null,
+    @ColumnInfo(name = "created_by") val createdBy: String? = null,
+    @ColumnInfo(name = "created_at") val createdAt: String? = null,
+    @ColumnInfo(name = "updated_at") val updatedAt: String? = null,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Long? = null,
 )
 
 @Entity(tableName = "pantry_item", indices = [Index(value = ["household_id"])])
@@ -114,6 +141,9 @@ data class StoreEntity(
     @ColumnInfo(name = "household_id") val householdId: String,
     val name: String,
     @ColumnInfo(name = "deleted_at") val deletedAt: String? = null,
+    @ColumnInfo(name = "created_at") val createdAt: String? = null,
+    @ColumnInfo(name = "updated_at") val updatedAt: String? = null,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Long? = null,
 )
 
 @Entity(tableName = "location", indices = [Index(value = ["household_id"])])
@@ -122,6 +152,10 @@ data class LocationEntity(
     @ColumnInfo(name = "household_id") val householdId: String,
     val name: String,
     @ColumnInfo(name = "deleted_at") val deletedAt: String? = null,
+    val kind: String? = null,
+    @ColumnInfo(name = "created_at") val createdAt: String? = null,
+    @ColumnInfo(name = "updated_at") val updatedAt: String? = null,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Long? = null,
 )
 
 @Entity(tableName = "contractor", indices = [Index(value = ["household_id"])])
@@ -186,6 +220,79 @@ data class AttachmentOutboxEntity(
     @ColumnInfo(name = "created_at") val createdAt: String,
 )
 
+/**
+ * A change the server turned down (SPEC §6.3), kept so the sync sheet can offer Retry and Discard. `seq` is the old
+ * `outbox.seq`, so Retry puts the row back at its place in the queue. Local-only: never pulled, never pushed.
+ */
+@Entity(tableName = "outbox_failed")
+data class OutboxFailedEntity(
+    @PrimaryKey val seq: Long,
+    val id: String,
+    @ColumnInfo(name = "table_name") val tableName: String,
+    val op: String,
+    @ColumnInfo(name = "row_id") val rowId: String,
+    val data: String,
+    @ColumnInfo(name = "client_ts") val clientTs: String,
+    val reason: String,
+    val detail: String?,
+    @ColumnInfo(name = "failed_at") val failedAt: String,
+)
+
+/** Pull-only copies of the core tables (SPEC §6.3), same columns as the server. Screens still read their DataStore caches. */
+@Entity(tableName = "household")
+data class HouseholdEntity(
+    @PrimaryKey val id: String,
+    val name: String? = null,
+    @ColumnInfo(name = "created_by") val createdBy: String? = null,
+    @ColumnInfo(name = "module_shopping") val moduleShopping: Boolean? = null,
+    @ColumnInfo(name = "module_pantry") val modulePantry: Boolean? = null,
+    @ColumnInfo(name = "module_maintenance") val moduleMaintenance: Boolean? = null,
+    val currency: String? = null,
+    @ColumnInfo(name = "created_at") val createdAt: String? = null,
+    @ColumnInfo(name = "updated_at") val updatedAt: String? = null,
+    @ColumnInfo(name = "deleted_at") val deletedAt: String? = null,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Long? = null,
+)
+
+@Entity(tableName = "member", primaryKeys = ["household_id", "user_id"])
+data class MemberEntity(
+    @ColumnInfo(name = "household_id") val householdId: String,
+    @ColumnInfo(name = "user_id") val userId: String,
+    val role: String? = null,
+    @ColumnInfo(name = "joined_at") val joinedAt: String? = null,
+    @ColumnInfo(name = "left_at") val leftAt: String? = null,
+    @ColumnInfo(name = "updated_at") val updatedAt: String? = null,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Long? = null,
+)
+
+@Entity(tableName = "invite", indices = [Index(value = ["household_id"])])
+data class InviteEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "household_id") val householdId: String,
+    val code: String? = null,
+    val role: String? = null,
+    @ColumnInfo(name = "created_by") val createdBy: String? = null,
+    @ColumnInfo(name = "expires_at") val expiresAt: String? = null,
+    @ColumnInfo(name = "max_uses") val maxUses: Int? = null,
+    val uses: Int? = null,
+    @ColumnInfo(name = "created_at") val createdAt: String? = null,
+    @ColumnInfo(name = "updated_at") val updatedAt: String? = null,
+    @ColumnInfo(name = "deleted_at") val deletedAt: String? = null,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Long? = null,
+)
+
+/** The learned aisle order of one store (SHOP-06 reads it offline). */
+@Entity(tableName = "store_item_order", primaryKeys = ["store_id", "name_key"], indices = [Index(value = ["household_id"])])
+data class StoreItemOrderEntity(
+    @ColumnInfo(name = "store_id") val storeId: String,
+    @ColumnInfo(name = "name_key") val nameKey: String,
+    @ColumnInfo(name = "household_id") val householdId: String,
+    @ColumnInfo(name = "mean_position") val meanPosition: Double? = null,
+    val samples: Int? = null,
+    @ColumnInfo(name = "updated_at") val updatedAt: String? = null,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Long? = null,
+)
+
 @Dao
 interface MetaDao {
     @Query("SELECT value FROM meta WHERE `key` = :key")
@@ -208,6 +315,43 @@ interface OutboxDao {
 
     @Query("SELECT * FROM outbox ORDER BY seq")
     suspend fun all(): List<OutboxEntity>
+
+    @Query("SELECT * FROM outbox_failed ORDER BY seq")
+    suspend fun failed(): List<OutboxFailedEntity>
+
+    /** The next batch for /sync: only the tables the server accepts; held-back rows stay queued. */
+    @Query("SELECT * FROM outbox WHERE table_name IN (:tables) ORDER BY seq LIMIT :limit")
+    suspend fun pushable(tables: List<String>, limit: Int): List<OutboxEntity>
+
+    @Query("SELECT * FROM outbox WHERE id = :id")
+    suspend fun byId(id: String): OutboxEntity?
+
+    @Query("DELETE FROM outbox WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
+
+    @Query("SELECT COUNT(*) FROM outbox WHERE table_name = :table AND row_id = :rowId")
+    suspend fun countTargeting(table: String, rowId: String): Int
+
+    @Query("SELECT COUNT(*) FROM outbox WHERE table_name IN (:tables)")
+    fun observePending(tables: List<String>): Flow<Int>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFailed(row: OutboxFailedEntity)
+
+    @Query("SELECT * FROM outbox_failed WHERE seq = :seq")
+    suspend fun failedBySeq(seq: Long): OutboxFailedEntity?
+
+    @Query("DELETE FROM outbox_failed WHERE seq = :seq")
+    suspend fun deleteFailed(seq: Long)
+
+    @Query("SELECT COUNT(*) FROM outbox_failed WHERE table_name = :table AND row_id = :rowId")
+    suspend fun countFailedTargeting(table: String, rowId: String): Int
+
+    @Query("SELECT COUNT(*) FROM outbox_failed")
+    fun observeFailedCount(): Flow<Int>
+
+    @Query("SELECT * FROM outbox_failed ORDER BY seq")
+    fun observeFailed(): Flow<List<OutboxFailedEntity>>
 }
 
 @Dao
@@ -444,13 +588,67 @@ val MIGRATION_4_5_SQL = listOf(
     "CREATE INDEX IF NOT EXISTS `index_notification_pref_household_id` ON `notification_pref` (`household_id`)",
 )
 
+/**
+ * v6 (SHOP-08): widens `shopping_list`, `list_item`, `store` and `location` to the server columns, adds the pull-only
+ * core tables and `outbox_failed`, and resets the pull cursor. Rule (same as web and iOS): a migration that adds a
+ * pulled table must reset the cursor, or the rows already behind it are never pulled.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_5_6_SQL.forEach(db::execSQL)
+    }
+}
+
+// Same statements Room exports in schemas/…/6.json.
+val MIGRATION_5_6_SQL = listOf(
+    "ALTER TABLE `shopping_list` ADD COLUMN `store_id` TEXT",
+    "ALTER TABLE `shopping_list` ADD COLUMN `is_template` INTEGER",
+    "ALTER TABLE `shopping_list` ADD COLUMN `share_token` TEXT",
+    "ALTER TABLE `shopping_list` ADD COLUMN `archived_at` TEXT",
+    "ALTER TABLE `shopping_list` ADD COLUMN `created_at` TEXT",
+    "ALTER TABLE `shopping_list` ADD COLUMN `updated_at` TEXT",
+    "ALTER TABLE `shopping_list` ADD COLUMN `sync_seq` INTEGER",
+    "ALTER TABLE `list_item` ADD COLUMN `name_key` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `quantity` REAL",
+    "ALTER TABLE `list_item` ADD COLUMN `unit` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `note` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `barcode` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `checked` INTEGER",
+    "ALTER TABLE `list_item` ADD COLUMN `checked_at` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `checked_by` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `manual_position` INTEGER",
+    "ALTER TABLE `list_item` ADD COLUMN `source` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `pantry_item_id` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `maint_task_id` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `created_by` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `created_at` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `updated_at` TEXT",
+    "ALTER TABLE `list_item` ADD COLUMN `sync_seq` INTEGER",
+    "ALTER TABLE `store` ADD COLUMN `created_at` TEXT",
+    "ALTER TABLE `store` ADD COLUMN `updated_at` TEXT",
+    "ALTER TABLE `store` ADD COLUMN `sync_seq` INTEGER",
+    "ALTER TABLE `location` ADD COLUMN `kind` TEXT",
+    "ALTER TABLE `location` ADD COLUMN `created_at` TEXT",
+    "ALTER TABLE `location` ADD COLUMN `updated_at` TEXT",
+    "ALTER TABLE `location` ADD COLUMN `sync_seq` INTEGER",
+    "CREATE TABLE IF NOT EXISTS `outbox_failed` (`seq` INTEGER NOT NULL, `id` TEXT NOT NULL, `table_name` TEXT NOT NULL, `op` TEXT NOT NULL, `row_id` TEXT NOT NULL, `data` TEXT NOT NULL, `client_ts` TEXT NOT NULL, `reason` TEXT NOT NULL, `detail` TEXT, `failed_at` TEXT NOT NULL, PRIMARY KEY(`seq`))",
+    "CREATE TABLE IF NOT EXISTS `household` (`id` TEXT NOT NULL, `name` TEXT, `created_by` TEXT, `module_shopping` INTEGER, `module_pantry` INTEGER, `module_maintenance` INTEGER, `currency` TEXT, `created_at` TEXT, `updated_at` TEXT, `deleted_at` TEXT, `sync_seq` INTEGER, PRIMARY KEY(`id`))",
+    "CREATE TABLE IF NOT EXISTS `member` (`household_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `role` TEXT, `joined_at` TEXT, `left_at` TEXT, `updated_at` TEXT, `sync_seq` INTEGER, PRIMARY KEY(`household_id`, `user_id`))",
+    "CREATE TABLE IF NOT EXISTS `invite` (`id` TEXT NOT NULL, `household_id` TEXT NOT NULL, `code` TEXT, `role` TEXT, `created_by` TEXT, `expires_at` TEXT, `max_uses` INTEGER, `uses` INTEGER, `created_at` TEXT, `updated_at` TEXT, `deleted_at` TEXT, `sync_seq` INTEGER, PRIMARY KEY(`id`))",
+    "CREATE INDEX IF NOT EXISTS `index_invite_household_id` ON `invite` (`household_id`)",
+    "CREATE TABLE IF NOT EXISTS `store_item_order` (`store_id` TEXT NOT NULL, `name_key` TEXT NOT NULL, `household_id` TEXT NOT NULL, `mean_position` REAL, `samples` INTEGER, `updated_at` TEXT, `sync_seq` INTEGER, PRIMARY KEY(`store_id`, `name_key`))",
+    "CREATE INDEX IF NOT EXISTS `index_store_item_order_household_id` ON `store_item_order` (`household_id`)",
+    "UPDATE `meta` SET `value` = '0' WHERE `key` = 'cursor'",
+)
+
 /** One Room database per household (SPEC §6.1): own rows, own outbox, own pull cursor. */
 @Database(
     entities = [MetaEntity::class, OutboxEntity::class, ShoppingListEntity::class, ActivityEntity::class,
         ListItemEntity::class, PantryItemEntity::class, RecipeEntity::class, AssetEntity::class, MaintTaskEntity::class, StoreEntity::class, LocationEntity::class, ContractorEntity::class,
         AttachmentEntity::class, AttachmentOutboxEntity::class, NotificationPrefEntity::class,
+        OutboxFailedEntity::class, HouseholdEntity::class, MemberEntity::class, InviteEntity::class, StoreItemOrderEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class HouseholdDatabase : RoomDatabase() {

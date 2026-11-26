@@ -113,7 +113,7 @@ open class DatabaseRegistry(
     open suspend fun open(id: UUID, isCurrent: () -> Boolean = { true }): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
             if (mutableCurrent.value == id && database != null) return@withLock isCurrent()
-            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(*MIGRATIONS).build()
             try {
                 db.meta().putIfAbsent(MetaEntity(CURSOR, "0"))
                 val seed = seedLists[id]
@@ -160,7 +160,7 @@ open class DatabaseRegistry(
             val open = database
             if (open != null && mutableCurrent.value == id) return@withLock open.outbox().count()
             if (!context.applicationContext.getDatabasePath(fileName(id)).exists()) return@withLock 0
-            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+            val db = Room.databaseBuilder(context.applicationContext, HouseholdDatabase::class.java, fileName(id)).addMigrations(*MIGRATIONS).build()
             try {
                 db.outbox().count()
             } finally {
@@ -194,6 +194,28 @@ open class DatabaseRegistry(
         else db.activity().observeFeed(id.toString(), FEED_ROWS)
             .map { rows -> rows.mapNotNull(::toActivity) }
             // The database may close under the collector during a switch.
+            .catch { }
+    }
+
+    // Sync status (SHOP-08)
+
+    /**
+     * What the chip and sheet count: queued writes of the tables the server accepts plus failed ones. Held-back core
+     * tables (`notification_pref`) are not counted, like iOS `observeSyncCounts`. Follows the open database like [activityFeed].
+     */
+    fun observeSyncCounts(id: UUID): Flow<SyncCounts> = current.flatMapLatest { open ->
+        val db = database
+        if (open != id || db == null) emptyFlow()
+        else combine(db.outbox().observePending(PUSHABLE_TABLES.toList()), db.outbox().observeFailedCount()) { pending, failed -> SyncCounts(pending, failed) }
+            .catch { }
+    }
+
+    /** The changes the server turned down, oldest first. Follows the open database like [activityFeed]. */
+    fun observeFailed(id: UUID): Flow<List<FailedChange>> = current.flatMapLatest { open ->
+        val db = database
+        if (open != id || db == null) emptyFlow()
+        else db.outbox().observeFailed()
+            .map { rows -> rows.map { FailedChange(it.seq, it.tableName, it.op, it.rowId, it.reason, it.detail) } }
             .catch { }
     }
 
@@ -423,19 +445,20 @@ open class DatabaseRegistry(
     }
 
     /** Like [withOpen], but only when [id] is the open household; another household's rows are not this file's. */
-    private suspend fun <T> withOpenFor(id: UUID, block: suspend (HouseholdDatabase) -> T): T = withContext(Dispatchers.IO) {
+    internal suspend fun <T> withOpenFor(id: UUID, block: suspend (HouseholdDatabase) -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock {
             if (mutableCurrent.value != id) throw DatabaseNotOpenException()
             block(database ?: throw DatabaseNotOpenException())
         }
     }
 
-    private suspend fun <T> withOpen(block: suspend (HouseholdDatabase) -> T): T = withContext(Dispatchers.IO) {
+    internal suspend fun <T> withOpen(block: suspend (HouseholdDatabase) -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock { block(database ?: throw DatabaseNotOpenException()) }
     }
 
-    private companion object {
+    internal companion object {
         const val CURSOR = "cursor"
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
         const val FEED_ROWS = 100
         const val RESTORE_DATA = """{"deleted_at":null}"""
 
@@ -443,6 +466,9 @@ open class DatabaseRegistry(
         val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
 
         fun stamp(at: OffsetDateTime): String = STAMP.format(at)
+
+        /** Normalises any ISO 8601 text the server sends (`…123456+00:00`) to [STAMP]'s fixed width; text that does not parse is kept. */
+        fun normalizeStamp(text: String): String = runCatching { stamp(OffsetDateTime.parse(text)) }.getOrDefault(text)
 
         fun toEntity(a: Activity) = ActivityEntity(
             id = a.id.toString(), householdId = a.householdId.toString(), actorId = a.actorId?.toString(),

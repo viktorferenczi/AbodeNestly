@@ -18,12 +18,17 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import com.abodenestly.core.Fixtures.id
 import com.abodenestly.core.api.ApiService
-import com.abodenestly.core.home.ActivityPull
 import com.abodenestly.core.search.InMemoryRecentSearchStore
 import com.abodenestly.core.search.SearchContent
 import com.abodenestly.core.search.SearchTarget
 import com.abodenestly.core.search.SearchViewModel
 import com.abodenestly.sync.DatabaseRegistry
+import com.abodenestly.sync.LiveSyncEngine
+import com.abodenestly.sync.SyncPullPage
+import com.abodenestly.sync.SyncPushBody
+import com.abodenestly.sync.SyncPushResult
+import com.abodenestly.sync.SyncResult
+import com.abodenestly.sync.SyncTransport
 import com.abodenestly.sync.ListItemEntity
 import com.abodenestly.sync.PantryItemEntity
 import com.abodenestly.sync.SearchModule
@@ -67,6 +72,11 @@ class SearchComposeTest {
 
     /** Every method throws [IOException]; a search that touched the network would fail loudly or show up in [apiCalls]. */
     private val apiCalls = AtomicInteger()
+    private val offlineTransport = object : SyncTransport {
+        override suspend fun push(body: SyncPushBody): SyncResult<SyncPushResult> { apiCalls.incrementAndGet(); throw IOException("offline") }
+        override suspend fun pull(householdId: String, since: Long, limit: Int): SyncResult<SyncPullPage> { apiCalls.incrementAndGet(); throw IOException("offline") }
+        override suspend fun refreshSession() { apiCalls.incrementAndGet() }
+    }
     private val offlineApi: ApiService = Proxy.newProxyInstance(ApiService::class.java.classLoader, arrayOf(ApiService::class.java)) { _, _, _ ->
         apiCalls.incrementAndGet()
         throw IOException("offline")
@@ -179,7 +189,7 @@ class SearchComposeTest {
     fun `CORE-09 AC5 offline the results come from the local database and no request is made`() {
         val offline = NetworkMonitor(online = false)
         // The app kicks a pull on foreground; offline it must not reach the (always throwing) API, and Search never does.
-        ActivityPull(offlineApi, registry, isOnline = { offline.isOnline.value }, scope = CoroutineScope(Dispatchers.Unconfined)).kick()
+        LiveSyncEngine(offlineTransport, registry, isOnline = { offline.isOnline.value }, scope = CoroutineScope(Dispatchers.Unconfined)).kick()
         show()
         type("milk")
         debounce()
