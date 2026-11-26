@@ -327,11 +327,13 @@ class SyncEngineTest {
         transport.pullGate = CompletableDeferred()
         val first = async(Dispatchers.Default) { engine.run() }
         awaitUntil { transport.pulls.size == 1 }
-        engine.run()
-        engine.run()
+        engine.kick()
+        engine.kick()
         assertEquals(1, transport.pulls.size)
         transport.pullGate!!.complete(Unit)
         first.await()
+        awaitUntil { transport.pulls.size == 2 }
+        kotlinx.coroutines.delay(200) // a third pass would show up here
         assertEquals(2, transport.pulls.size)
         assertEquals(SyncPhase.Idle, engine.phase.value)
     }
