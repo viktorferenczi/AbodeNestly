@@ -81,12 +81,18 @@ internal typealias NewListSheetSlot = @Composable (
  * (AC5). Leaving the screen or the app writes the swipes still inside their undo window.
  */
 @Composable
-fun ListsScreen(viewModel: ListsViewModel, onOpen: (listId: String) -> Unit, modifier: Modifier = Modifier) {
-    ListsScreenHost(viewModel, onOpen, modifier) { stores, failed, onSave, onClose -> NewListSheet(stores, failed, onSave, onClose) }
+fun ListsScreen(viewModel: ListsViewModel, onOpen: (listId: String) -> Unit, modifier: Modifier = Modifier, onOpenStores: () -> Unit = {}) {
+    ListsScreenHost(viewModel, onOpen, modifier, onOpenStores) { stores, failed, onSave, onClose -> NewListSheet(stores, failed, onSave, onClose) }
 }
 
 @Composable
-internal fun ListsScreenHost(viewModel: ListsViewModel, onOpen: (String) -> Unit, modifier: Modifier = Modifier, sheet: NewListSheetSlot) {
+internal fun ListsScreenHost(
+    viewModel: ListsViewModel,
+    onOpen: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onOpenStores: () -> Unit = {},
+    sheet: NewListSheetSlot,
+) {
     val ui by viewModel.state.collectAsState()
     var showSheet by rememberSaveable { mutableStateOf(false) }
     val open by rememberUpdatedState(onOpen)
@@ -104,7 +110,7 @@ internal fun ListsScreenHost(viewModel: ListsViewModel, onOpen: (String) -> Unit
         viewModel.onEvent(ListsEvent.OpenedHandled)
         open(id)
     }
-    ListsContent(ui, viewModel::onEvent, onOpen = { open(it.id) }, onNewList = { showSheet = true }, modifier = modifier)
+    ListsContent(ui, viewModel::onEvent, onOpen = { open(it.id) }, onNewList = { showSheet = true }, onOpenStores = onOpenStores, modifier = modifier)
     if (showSheet) sheet(ui.stores, ui.createFailed, { name, storeId -> viewModel.onEvent(ListsEvent.Create(name, storeId)) }, { showSheet = false })
 }
 
@@ -116,6 +122,7 @@ internal fun ListsContent(
     onOpen: (ListRowModel) -> Unit,
     onNewList: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenStores: () -> Unit = {},
 ) {
     val tokens = LocalTokens.current
     val sections = ui.sections
@@ -128,6 +135,11 @@ internal fun ListsContent(
                     "Shopping", style = MaterialTheme.typography.headlineSmall, color = tokens.text,
                     modifier = Modifier.weight(1f).testTag("lists.heading").semantics { heading() },
                 )
+                // A text button: the store icon is in material-icons-extended, which the app does not depend on.
+                TextButton(
+                    onClick = onOpenStores,
+                    modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("lists.stores").semantics { contentDescription = "Stores" },
+                ) { Text("Stores", color = tokens.accent) }
                 IconButton(onClick = onNewList, modifier = Modifier.testTag("lists.new")) {
                     Icon(Icons.Filled.Add, contentDescription = "New list", tint = tokens.accent)
                 }

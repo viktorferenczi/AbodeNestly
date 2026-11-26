@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 
 /** DESIGN A6 EmptyState: illustration-free, one sentence of purpose ([message]) and one primary button. */
 @Composable
-fun EmptyState(message: String, actionTitle: String, onAction: () -> Unit, modifier: Modifier = Modifier, hint: String? = null) {
+fun EmptyState(message: String, actionTitle: String, onAction: () -> Unit, modifier: Modifier = Modifier, hint: String? = null, actionTag: String = "empty-state.action") {
     val tokens = LocalTokens.current
     Column(
         modifier.fillMaxWidth().padding(Tokens.ScreenPadding),
@@ -35,7 +35,7 @@ fun EmptyState(message: String, actionTitle: String, onAction: () -> Unit, modif
         Button(
             onClick = onAction,
             colors = ButtonDefaults.buttonColors(containerColor = tokens.accent, contentColor = tokens.surface),
-            modifier = Modifier.defaultMinSize(minHeight = Tokens.MinTouchTarget).testTag("empty-state.action"),
+            modifier = Modifier.defaultMinSize(minHeight = Tokens.MinTouchTarget).testTag(actionTag),
         ) { Text(actionTitle) }
     }
 }

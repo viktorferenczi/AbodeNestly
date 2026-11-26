@@ -1,0 +1,127 @@
+package com.abodenestly.shopping
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.rememberUpdatedState
+import com.abodenestly.sync.StoreRecord
+import com.abodenestly.ui.LocalTokens
+import com.abodenestly.ui.Tokens
+import kotlinx.coroutines.launch
+
+/** DESIGN C4 sheet in a [ModalBottomSheet]: one Name field. Dismissing it (swipe, scrim, Back) is Cancel. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun StoreSheet(stores: List<StoreRecord>, onSave: suspend (String) -> Boolean, onClose: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onClose, sheetState = sheetState, containerColor = LocalTokens.current.bg) {
+        StoreSheetContent(stores, onSave, onClose)
+    }
+}
+
+/**
+ * The sheet's body: Name (focused on open), inline problem (an empty field is not nagged about until something was
+ * typed), Cancel and Save. Save is off while the name is not valid and while a save is in flight; [onSave] answers whether
+ * the store was stored, and the sheet stays open with a message when it was not. Tested directly so Robolectric never drives the popup.
+ */
+@Composable
+internal fun StoreSheetContent(stores: List<StoreRecord>, onSave: suspend (String) -> Boolean, onClose: () -> Unit) {
+    val tokens = LocalTokens.current
+    var name by rememberSaveable { mutableStateOf("") }
+    var saving by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val save by rememberUpdatedState(onSave)
+    val problem = Stores.validate(name, stores)
+    val shown = problem.takeUnless { it == StoreNameProblem.Empty && name.isEmpty() }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    fun submit() {
+        if (problem != null || saving) return
+        saving = true
+        failed = false
+        scope.launch {
+            val saved = save(name)
+            saving = false
+            failed = !saved
+        }
+    }
+
+    Column(
+        Modifier.fillMaxWidth().imePadding().padding(horizontal = Tokens.ScreenPadding).padding(bottom = Tokens.ScreenPadding).testTag("storesheet"),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            "New store", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = tokens.text,
+            modifier = Modifier.semantics { heading() },
+        )
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Name") },
+            singleLine = true,
+            isError = shown != null,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { submit() }),
+            modifier = Modifier.fillMaxWidth().heightIn(min = Tokens.MinTouchTarget).focusRequester(focus).testTag("storesheet.name"),
+        )
+        shown?.let {
+            Text(
+                it.message, color = tokens.danger, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.testTag("storesheet.problem").semantics { liveRegion = LiveRegionMode.Assertive },
+            )
+        }
+        if (failed) {
+            Text(
+                "Could not save the store. Try again.", color = tokens.danger, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.testTag("storesheet.error").semantics { liveRegion = LiveRegionMode.Assertive },
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(
+                onClick = onClose,
+                modifier = Modifier.weight(1f).heightIn(min = Tokens.MinTouchTarget).testTag("storesheet.cancel"),
+            ) { Text("Cancel", color = tokens.accent) }
+            Button(
+                onClick = { submit() },
+                enabled = problem == null && !saving,
+                colors = ButtonDefaults.buttonColors(containerColor = tokens.accent, contentColor = tokens.surface),
+                modifier = Modifier.weight(1f).heightIn(min = Tokens.MinTouchTarget).testTag("storesheet.save"),
+            ) { Text("Save") }
+        }
+    }
+}
