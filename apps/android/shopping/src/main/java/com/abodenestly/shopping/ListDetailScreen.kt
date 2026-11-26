@@ -13,6 +13,16 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,9 +42,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -53,8 +65,8 @@ import com.abodenestly.ui.Tokens
 import com.abodenestly.ui.UndoToast
 
 /**
- * DESIGN C2 list detail and its C3 item sheet: the items, the quick-add bar with autocomplete, and Back to the overview.
- * Leaving the screen or the app writes the deletes still inside their undo window.
+ * DESIGN C2 list detail and its C3 item sheet: the items with their checkboxes, the quick-add bar with autocomplete, and
+ * Back to the overview. Leaving the screen or the app writes the deletes, check-offs and clears still inside their undo window.
  */
 @Composable
 fun ListDetailScreen(viewModel: ListDetailViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
@@ -102,6 +114,7 @@ internal fun ListDetailContent(ui: ListDetailUiState, onEvent: (ListDetailEvent)
     val tokens = LocalTokens.current
     val focus = remember { FocusRequester() }
     var checkedOpen by rememberSaveable { mutableStateOf(false) }
+    var actionsOpen by remember { mutableStateOf(false) }
     val unchecked = ui.unchecked
     val checked = ui.checked
     val isEmpty = ui.loaded && !ui.isGone && unchecked.isEmpty() && checked.isEmpty()
@@ -115,10 +128,27 @@ internal fun ListDetailContent(ui: ListDetailUiState, onEvent: (ListDetailEvent)
                 Text("Back", color = tokens.accent)
             }
             ui.detail.list?.let { list ->
-                Text(
-                    list.name, style = MaterialTheme.typography.headlineSmall, color = tokens.text,
-                    modifier = Modifier.testTag("list.title").semantics { heading() },
-                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        list.name, style = MaterialTheme.typography.headlineSmall, color = tokens.text,
+                        modifier = Modifier.weight(1f).testTag("list.title").semantics { heading() },
+                    )
+                    // Only Clear checked lives here until Share, Template and Archive land, so only when something is checked.
+                    if (checked.isNotEmpty()) {
+                        Box {
+                            IconButton(onClick = { actionsOpen = true }, modifier = Modifier.testTag("list.actions")) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "List actions", tint = tokens.accent)
+                            }
+                            DropdownMenu(expanded = actionsOpen, onDismissRequest = { actionsOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Clear checked") },
+                                    onClick = { actionsOpen = false; onEvent(ListDetailEvent.ClearChecked) },
+                                    modifier = Modifier.testTag("list.actions.clearChecked"),
+                                )
+                            }
+                        }
+                    }
+                }
                 // Display only until SHOP-05-android adds the picker.
                 ui.detail.storeName?.let { ListRowChip(it, Modifier.padding(top = 4.dp).testTag("list.store")) }
             }
@@ -145,8 +175,34 @@ internal fun ListDetailContent(ui: ListDetailUiState, onEvent: (ListDetailEvent)
                 Text("Add your first item", style = MaterialTheme.typography.bodyLarge, color = tokens.text2, modifier = Modifier.testTag("list.empty"))
             }
             else -> LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("list.items")) {
+                if (ui.allChecked) {
+                    item(key = "h.allDone") {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = Tokens.ScreenPadding, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                "All done", style = MaterialTheme.typography.titleMedium, color = tokens.text2,
+                                modifier = Modifier.testTag("list.allDone").semantics { heading() },
+                            )
+                            Button(
+                                onClick = { onEvent(ListDetailEvent.ClearChecked) },
+                                colors = ButtonDefaults.buttonColors(containerColor = tokens.accent, contentColor = tokens.surface),
+                                modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("list.clearChecked"),
+                            ) { Text("Clear checked") }
+                        }
+                    }
+                }
                 items(unchecked, key = { it.id }) { item ->
-                    ItemRow(item, "list.row.${item.name}", Modifier, onOpen = { onEvent(ListDetailEvent.OpenEdit(item.id)) })
+                    // A pending check shows ticked and struck through in place; its box takes the check back.
+                    val pendingCheck = item.id in ui.pendingCheckIds
+                    ItemRow(
+                        item, "list.row.${item.name}",
+                        if (pendingCheck) Modifier.semantics { stateDescription = "Checked" } else Modifier,
+                        ticked = pendingCheck, struck = pendingCheck,
+                        onToggle = { onEvent(if (pendingCheck) ListDetailEvent.Undo(item.id) else ListDetailEvent.Check(item.id)) },
+                        onOpen = { onEvent(ListDetailEvent.OpenEdit(item.id)) },
+                    )
                 }
                 if (checked.isNotEmpty()) {
                     item(key = "h.checked") {
@@ -165,10 +221,11 @@ internal fun ListDetailContent(ui: ListDetailUiState, onEvent: (ListDetailEvent)
                     }
                     if (checkedOpen) {
                         items(checked, key = { it.id }) { item ->
-                            // No checkbox until SHOP-04-android; a tap opens the sheet like on any row.
                             ItemRow(
                                 item, "list.checked.row.${item.name}",
                                 Modifier.alpha(0.6f).semantics { stateDescription = "Checked" },
+                                ticked = true, struck = false,
+                                onToggle = { onEvent(ListDetailEvent.Uncheck(item.id)) },
                                 onOpen = { onEvent(ListDetailEvent.OpenEdit(item.id)) },
                             )
                         }
@@ -205,28 +262,47 @@ internal fun ListDetailContent(ui: ListDetailUiState, onEvent: (ListDetailEvent)
 }
 
 /**
- * One item row (DESIGN C2): the name, its note under it and "2 l" at the end, one TalkBack node ("Milk, 2 l, lactose
- * free"). A tap opens the C3 sheet. [tag] is the row's test tag; the note and the quantity add `.note` and `.qty`.
+ * One item row (DESIGN C2): a checkbox, then the name, its note under it and "2 l" at the end, one TalkBack node
+ * ("Milk, 2 l, lactose free") with a "Check off" custom action. The box toggles through [onToggle] ([ticked] is how it
+ * looks); a tap on the rest of the row opens the C3 sheet. [tag] is the row's test tag; the box, the note and the
+ * quantity add `.check`, `.note` and `.qty`.
  */
 @Composable
-private fun ItemRow(item: ListItemRecord, tag: String, modifier: Modifier, onOpen: () -> Unit) {
+private fun ItemRow(
+    item: ListItemRecord, tag: String, modifier: Modifier,
+    ticked: Boolean, struck: Boolean, onToggle: () -> Unit, onOpen: () -> Unit,
+) {
     val tokens = LocalTokens.current
     val qty = ItemSheetLogic.formatQty(item.quantity, item.unit)
     val note = item.note?.takeIf { it.isNotBlank() }
     val spoken = listOfNotNull(item.name, qty.ifEmpty { null }, note).joinToString(", ")
-    ListRow(
-        title = item.name,
-        subtitle = note?.let { text ->
-            @Composable {
-                Text(text, style = MaterialTheme.typography.bodyMedium, color = tokens.text2, maxLines = 2, modifier = Modifier.testTag("$tag.note"))
-            }
-        },
-        trailing = qty.ifEmpty { null }?.let { text ->
-            @Composable { Text(text, style = MaterialTheme.typography.bodyMedium, color = tokens.text2, modifier = Modifier.testTag("$tag.qty")) }
-        },
-        onClick = onOpen,
-        modifier = modifier.testTag(tag).semantics { if (qty.isNotEmpty() || note != null) contentDescription = spoken },
-    )
+    val toggleLabel = if (ticked) "Uncheck ${item.name}" else "Check off ${item.name}"
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // Beside the row body, not inside it: the body keeps opening C3. The box is at least 48 dp (Material's touch target).
+        Checkbox(
+            checked = ticked,
+            onCheckedChange = { onToggle() },
+            colors = CheckboxDefaults.colors(checkedColor = tokens.accent),
+            modifier = Modifier.padding(start = 4.dp).testTag("$tag.check").semantics { contentDescription = toggleLabel },
+        )
+        ListRow(
+            title = item.name,
+            subtitle = note?.let { text ->
+                @Composable {
+                    Text(text, style = MaterialTheme.typography.bodyMedium, color = tokens.text2, maxLines = 2, modifier = Modifier.testTag("$tag.note"))
+                }
+            },
+            trailing = qty.ifEmpty { null }?.let { text ->
+                @Composable { Text(text, style = MaterialTheme.typography.bodyMedium, color = tokens.text2, modifier = Modifier.testTag("$tag.qty")) }
+            },
+            onClick = onOpen,
+            struck = struck,
+            modifier = Modifier.weight(1f).then(modifier).testTag(tag).semantics {
+                if (qty.isNotEmpty() || note != null) contentDescription = spoken
+                customActions = listOf(CustomAccessibilityAction(if (ticked) "Uncheck" else "Check off") { onToggle(); true })
+            },
+        )
+    }
 }
 
 /** The field keeps focus after each add. A bar that is not attached yet (first frame) has nothing to focus. */
