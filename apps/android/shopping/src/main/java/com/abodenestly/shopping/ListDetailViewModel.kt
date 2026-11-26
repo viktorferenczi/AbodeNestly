@@ -53,6 +53,9 @@ data class ListDetailUiState(
 
     private val hidden: Set<String> get() = pending.flatMapTo(HashSet()) { it.hiddenIds } + settling
 
+    /** Rows are hidden by a delete or clear still in its undo window (or not yet re-emitted): they are not gone yet. */
+    val hidingRows: Boolean get() = hidden.isNotEmpty()
+
     /** Unchecked rows shown ticked and struck through until their check-off is written and the list shows it. */
     val pendingCheckIds: Set<String> get() = pending.filterIsInstance<PendingAction.Check>().mapTo(HashSet()) { it.id } + settlingChecks
 

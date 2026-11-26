@@ -117,7 +117,8 @@ internal fun ListDetailContent(ui: ListDetailUiState, onEvent: (ListDetailEvent)
     var actionsOpen by remember { mutableStateOf(false) }
     val unchecked = ui.unchecked
     val checked = ui.checked
-    val isEmpty = ui.loaded && !ui.isGone && unchecked.isEmpty() && checked.isEmpty()
+    // A pending delete or clear only hides its rows, so the list is not empty until the window ends (as on web and iOS).
+    val isEmpty = ui.loaded && !ui.isGone && !ui.hidingRows && unchecked.isEmpty() && checked.isEmpty()
     // `empty` opens with the bar focused (DESIGN C2).
     LaunchedEffect(isEmpty) {
         if (isEmpty) focus.tryFocus()

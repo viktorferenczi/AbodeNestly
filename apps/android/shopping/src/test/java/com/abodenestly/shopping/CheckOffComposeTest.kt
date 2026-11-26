@@ -153,6 +153,8 @@ class CheckOffComposeTest {
 
         await("undo-toast")
         rule.onNodeWithText("Cleared 1 item").assertIsDisplayed()
+        // The rows are only hidden during the window: no empty state, and quick add is not focused.
+        rule.onNodeWithTag("list.empty").assertDoesNotExist()
         assertEquals(0, itemOutbox().size)
     }
 
@@ -177,6 +179,8 @@ class CheckOffComposeTest {
 
         await("undo-toast")
         rule.onNodeWithText("Cleared 1 item").assertIsDisplayed()
+        // The rows are only hidden during the window: no empty state, and quick add is not focused.
+        rule.onNodeWithTag("list.empty").assertDoesNotExist()
     }
 
     @Test
