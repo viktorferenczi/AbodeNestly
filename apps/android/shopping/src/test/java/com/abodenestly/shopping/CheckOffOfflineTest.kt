@@ -82,8 +82,8 @@ class CheckOffOfflineTest {
         awaitUntil { vm.state.value.unchecked.map { it.name } == listOf("Milk") }
 
         vm.onEvent(ListDetailEvent.Check("i1"))
-        // Inside the window nothing is queued.
-        assertEquals(0, registry.outboxForTesting().size)
+        // Inside the window no item mutation is queued (the seeded list's own upsert is still waiting).
+        assertEquals(0, registry.outboxForTesting().count { it.tableName == "list_item" })
         gate.complete(Unit)
 
         awaitUntil { vm.state.value.checked.map { it.name } == listOf("Milk") }
