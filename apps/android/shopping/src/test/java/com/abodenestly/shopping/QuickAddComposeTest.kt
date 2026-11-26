@@ -1,6 +1,9 @@
 package com.abodenestly.shopping
 
 import android.content.Context
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -127,6 +130,7 @@ class QuickAddComposeTest {
         rule.onNodeWithTag("list.checked").performClick()
         await("list.checked.row.Butter")
         rule.onNodeWithTag("list.checked.row.Butter").assertIsDisplayed()
+        rule.onNodeWithTag("list.checked.row.Butter").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Checked"))
     }
 
     @Test
@@ -206,15 +210,16 @@ class QuickAddComposeTest {
 
     @Test
     fun `a write that cannot be stored shows the message under the title`() {
-        // Another household's model: its database is not open, so the write throws.
         runBlocking { registry.open(household) }
         seedList()
         vm = ListDetailViewModel(
-            uuid(2), "l1", uuid(7), registry, kick = { kicks.incrementAndGet() }, isOnline = online,
+            household, "l1", uuid(7), registry, kick = { kicks.incrementAndGet() }, isOnline = online,
             now = { now }, newId = { "n" }, scope = scope,
         )
         rule.setContent { AbodeTheme { ListDetailScreen(vm, onBack = {}) } }
         await("quickadd.field")
+        // The database closes under the open screen (a switch away), so the write throws.
+        runBlocking { registry.close() }
         rule.onNodeWithTag("quickadd.field").performTextInput("Soap")
         rule.onNodeWithTag("quickadd.add").performClick()
         await("list.error")

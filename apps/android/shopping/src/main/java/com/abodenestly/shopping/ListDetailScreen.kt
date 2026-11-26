@@ -120,13 +120,18 @@ internal fun ListDetailContent(ui: ListDetailUiState, onEvent: (ListDetailEvent)
                     if (checkedOpen) {
                         items(checked, key = { it.id }) { item ->
                             // Read only until SHOP-04-android adds the checkbox.
-                            ListRow(title = item.name, modifier = Modifier.alpha(0.6f).testTag("list.checked.row.${item.name}"))
+                            ListRow(
+                                title = item.name,
+                                modifier = Modifier.alpha(0.6f).testTag("list.checked.row.${item.name}")
+                                    .semantics { stateDescription = "Checked" },
+                            )
                         }
                     }
                 }
             }
         }
-        if (!ui.isGone) {
+        // Not before the first read (the list may be missing) and not for a gone list: a submit would queue a row for it.
+        if (ui.loaded && !ui.isGone) {
             val suggestions = ui.suggestions
             val submit: () -> Unit = {
                 onEvent(ListDetailEvent.Submit)

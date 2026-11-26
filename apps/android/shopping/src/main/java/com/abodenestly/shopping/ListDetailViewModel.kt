@@ -91,9 +91,12 @@ class ListDetailViewModel(
 
     /**
      * Adds [name] as typed. The row exists locally and in the outbox before the field clears (AC4); a write that cannot
-     * be stored keeps the text and shows [SAVE_ERROR]. Nothing waits on a later emission: the list updates when Room re-emits.
+     * be stored keeps the text and shows [SAVE_ERROR]. A no-op until the first read has shown the list, and when it is
+     * gone, so a submit never queues a `list_item` for a missing list. Nothing waits on a later emission: the list updates when Room re-emits.
      */
     private fun add(name: String) {
+        val current = mutableState.value
+        if (!current.loaded || current.detail.list == null) return
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         val typed = mutableState.value.query

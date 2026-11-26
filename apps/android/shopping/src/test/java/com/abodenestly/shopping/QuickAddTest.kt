@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -266,8 +267,11 @@ class QuickAddTest {
     @Test
     fun `a write that cannot be stored shows the error and keeps the text`() = runBlocking<Unit> {
         registry.open(household)
-        // Another household's model: its database is not open, so the write throws.
-        val vm = model(household = uuid(2))
+        createList(registry, household, "Groceries", null, now, "l1")
+        val vm = model()
+        awaitUntil { vm.state.value.loaded }
+        // The database closes under the model (a switch away), so the write throws.
+        registry.close()
         vm.onEvent(ListDetailEvent.QueryChanged("Lightbulbs"))
         vm.onEvent(ListDetailEvent.Submit)
         awaitUntil { vm.state.value.error != null }
@@ -276,6 +280,30 @@ class QuickAddTest {
         assertEquals(0, kicks.get())
         vm.onEvent(ListDetailEvent.ErrorShown)
         assertNull(vm.state.value.error)
+    }
+
+    @Test
+    fun `an add before the first read or for a missing list is a no-op`() = runBlocking<Unit> {
+        registry.open(household)
+        // Before the first read: the model is built and submitted at once, nothing has loaded yet.
+        val early = ListDetailViewModel(
+            household, "l1", uuid(7), registry, kick = { kicks.incrementAndGet() }, isOnline = MutableStateFlow(true),
+            now = { now }, newId = { "early" }, scope = scope,
+        )
+        early.onEvent(ListDetailEvent.QueryChanged("Soap"))
+        early.onEvent(ListDetailEvent.Submit)
+        // A list that does not exist: loaded, but gone.
+        val gone = model()
+        awaitUntil { gone.state.value.loaded }
+        assertTrue(gone.state.value.isGone)
+        gone.onEvent(ListDetailEvent.QueryChanged("Soap"))
+        gone.onEvent(ListDetailEvent.Submit)
+        gone.onEvent(ListDetailEvent.Pick(Suggestion("soap", "Soap")))
+        delay(300)
+        assertEquals(0, registry.outboxForTesting().size)
+        assertEquals(0, kicks.get())
+        assertEquals("Soap", gone.state.value.query)
+        assertTrue(gone.state.value.detail.items.isEmpty())
     }
 
     @Test
