@@ -144,7 +144,7 @@ internal fun ListsContent(
             }
             if (ui.loaded) {
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("lists.list"), contentPadding = PaddingValues(bottom = 96.dp)) {
-                    if (sections.noActive) {
+                    if (sections.isEmpty) {
                         item(key = "empty") {
                             EmptyState(
                                 "Make your first list", "New list", onNewList, Modifier.testTag("lists.empty"),
@@ -171,7 +171,7 @@ internal fun ListsContent(
             }
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-            if (ui.loaded && !sections.noActive) {
+            if (ui.loaded && !sections.isEmpty) {
                 Box(Modifier.fillMaxWidth().padding(end = Tokens.ScreenPadding, bottom = 8.dp), contentAlignment = Alignment.CenterEnd) {
                     ExtendedFloatingActionButton(
                         onClick = onNewList, containerColor = tokens.accent, contentColor = tokens.surface,

@@ -108,7 +108,16 @@ class ListsTest {
         val overview = ListOverview(lists = listOf(rec("a", "Alpha"), rec("b", "Beta", archivedAt = "2026-02-01T00:00:00.000Z")))
         val sections = ListsSections.make(overview, hidden = setOf("a", "b"))
         assertTrue(sections.lists.isEmpty() && sections.archived.isEmpty())
-        assertTrue(sections.noActive)
+        assertTrue(sections.isEmpty)
+    }
+
+    @Test
+    fun `an archived-only household is not empty`() {
+        val overview = ListOverview(lists = listOf(rec("b", "Beta", archivedAt = "2026-02-01T00:00:00.000Z")))
+        val sections = ListsSections.make(overview)
+        assertTrue(sections.lists.isEmpty() && sections.templates.isEmpty())
+        assertEquals(listOf("Beta"), names(sections.archived))
+        assertFalse(sections.isEmpty)
     }
 
     @Test

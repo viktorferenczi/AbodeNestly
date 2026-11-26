@@ -35,8 +35,11 @@ data class ListsSections(
     val templates: List<ListRowModel> = emptyList(),
     val archived: List<ListRowModel> = emptyList(),
 ) {
-    /** DESIGN C1 `empty`: nothing active. Archived lists may still show below the empty state. */
-    val noActive: Boolean get() = lists.isEmpty() && templates.isEmpty()
+    /**
+     * DESIGN C1 `empty`: the household has no list at all, archived ones included (iOS `ListSections.isEmpty`, web
+     * `empty`). An archived-only household stays populated: the Lists header, the Archived section and the FAB.
+     */
+    val isEmpty: Boolean get() = lists.isEmpty() && templates.isEmpty() && archived.isEmpty()
 
     companion object {
         /**
