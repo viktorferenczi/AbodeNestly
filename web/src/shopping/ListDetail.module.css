@@ -127,3 +127,22 @@
   color: var(--color-text-2);
   border: 1px dashed var(--color-line);
 }
+
+.caption {
+  margin: 0;
+  color: var(--color-text-2);
+  font-size: var(--font-caption);
+}
+
+.notice {
+  position: fixed;
+  right: var(--space-4);
+  bottom: calc(var(--touch-min) + var(--space-4));
+  left: var(--space-4);
+  z-index: 20;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-text);
+  color: var(--color-bg);
+}
