@@ -39,7 +39,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -313,15 +312,15 @@ private fun FoundCard(phase: ScannerPhase.Found, ui: ScannerUiState, images: Pro
 @Composable
 private fun ProductImage(url: String?, name: String, images: ProductImageLoader) {
     val safe = Barcode.imageUrl(url) ?: return
-    val bitmap by produceState<Bitmap?>(null, safe) {
-        val loaded = try {
+    var bitmap by remember(safe) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(safe) {
+        bitmap = try {
             images.load(safe)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             null
         }
-        value = loaded
     }
     bitmap?.let {
         Image(
