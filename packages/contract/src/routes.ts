@@ -262,6 +262,13 @@ export const routes: Route[] = [
     },
   },
   {
+    method: 'get',
+    path: '/products/{barcode}',
+    summary: 'Barcode lookup (cache → Open Food Facts)',
+    public: false,
+    response: { status: 200, schemaName: 'Product' },
+  },
+  {
     method: 'delete',
     path: '/households/{id}/members/{user_id}',
     summary: 'Remove a member or leave',
@@ -360,6 +367,18 @@ export const componentSchemas: Record<string, JsonSchema> = {
       sync_seq: { type: 'integer' },
     },
     required: ['household_id', 'user_id', 'role', 'joined_at', 'left_at', 'updated_at', 'sync_seq'],
+  },
+  Product: {
+    type: 'object',
+    properties: {
+      barcode: { type: 'string' },
+      name: { type: 'string' },
+      brand: { type: ['string', 'null'] },
+      category: { type: ['string', 'null'] },
+      image_url: { type: ['string', 'null'] },
+      default_unit: { type: ['string', 'null'] },
+    },
+    required: ['barcode', 'name', 'brand', 'category', 'image_url', 'default_unit'],
   },
   Attachment: {
     type: 'object',
