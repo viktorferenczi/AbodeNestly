@@ -314,13 +314,14 @@ private fun FoundCard(phase: ScannerPhase.Found, ui: ScannerUiState, images: Pro
 private fun ProductImage(url: String?, name: String, images: ProductImageLoader) {
     val safe = Barcode.imageUrl(url) ?: return
     val bitmap by produceState<Bitmap?>(null, safe) {
-        value = try {
+        val loaded = try {
             images.load(safe)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             null
         }
+        value = loaded
     }
     bitmap?.let {
         Image(
