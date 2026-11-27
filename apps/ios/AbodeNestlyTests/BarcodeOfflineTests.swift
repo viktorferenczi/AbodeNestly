@@ -110,4 +110,28 @@ struct BarcodeOfflineTests {
     func unreadableBody() {
         #expect(HttpApiService.productResult(status: 200, code: nil, data: Data("nope".utf8)) == .failed)
     }
+
+    @Test("SHOP-10: a 502 while online queues the lookup before the add's kick, so that kick's drain renames the item")
+    func queuedBeforeKick() async throws {
+        let h = try await DetailHarness()
+        let suite = "abodenestly.tests.\(UUID().uuidString)"
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        let store = BarcodeStore(suite: suite)
+        let seenAtKick = OSAllocatedUnfairLock<[Int]>(initialState: [])
+        let model = ListDetailModel(
+            householdId: h.household, listId: h.list, userId: h.user, database: h.db,
+            kick: { seenAtKick.withLock { $0.append(store.pending().count) } }
+        )
+        let follower = Task { await model.start() }
+        defer { follower.cancel() }
+        let scanner = model.makeScanner(
+            device: FakeScannerDevice(), lookup: { _ in .offline }, isOnline: { true }, store: store
+        )
+
+        scanner.code = code
+        await scanner.submitCode()
+        #expect(scanner.state == .queued(code))
+        // The add's own kick already sees the queued lookup, so the drain that follows that sync run can resolve it.
+        #expect(seenAtKick.withLock { $0 } == [1])
+    }
 }

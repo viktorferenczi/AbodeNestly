@@ -52,7 +52,7 @@ public final class BarcodeScannerModel {
     @ObservationIgnored private let householdId: UUID
     @ObservationIgnored private let lookup: @Sendable (String) async -> ProductLookupResult
     @ObservationIgnored private let isOnline: @MainActor () -> Bool
-    @ObservationIgnored private let add: @MainActor (_ name: String, _ barcode: String?) async -> UUID?
+    @ObservationIgnored private let add: @MainActor (_ name: String, _ barcode: String?, _ beforeKick: @MainActor (UUID) -> Void) async -> UUID?
     @ObservationIgnored private let store: BarcodeStore
     /// A code has been taken from the camera (or typed); no second one is handled until Scan again.
     @ObservationIgnored private var handled = false
@@ -64,7 +64,7 @@ public final class BarcodeScannerModel {
     public init(
         device: any ScannerDevice, householdId: UUID, lookup: @escaping @Sendable (String) async -> ProductLookupResult,
         isOnline: @escaping @MainActor () -> Bool, store: BarcodeStore = BarcodeStore(),
-        add: @escaping @MainActor (_ name: String, _ barcode: String?) async -> UUID?
+        add: @escaping @MainActor (_ name: String, _ barcode: String?, _ beforeKick: @MainActor (UUID) -> Void) async -> UUID?
     ) {
         self.device = device
         self.householdId = householdId
@@ -156,8 +156,10 @@ public final class BarcodeScannerModel {
             state = .failed(raw)
         case .offline:
             // The code becomes the name, with no barcode (the list_item foreign key needs a product row), and the lookup waits.
-            if let id = await add(raw, nil) {
-                store.appendPending(PendingLookup(householdId: householdId, itemId: id, code: raw))
+            // The lookup is queued before the add's kick, so the drain after that sync run already sees it.
+            let householdId = householdId
+            let store = store
+            if await add(raw, nil, { id in store.appendPending(PendingLookup(householdId: householdId, itemId: id, code: raw)) }) != nil {
                 state = .queued(raw)
             } else {
                 addFailed = true
@@ -203,7 +205,7 @@ public final class BarcodeScannerModel {
         guard case .found(let product) = state, !adding else { return false }
         adding = true
         defer { adding = false }
-        guard await add(product.name, product.barcode) != nil else {
+        guard await add(product.name, product.barcode, { _ in }) != nil else {
             addFailed = true
             return false
         }
@@ -221,7 +223,7 @@ public final class BarcodeScannerModel {
         guard !typed.isEmpty, !adding else { return false }
         adding = true
         defer { adding = false }
-        guard await add(typed, nil) != nil else {
+        guard await add(typed, nil, { _ in }) != nil else {
             addFailed = true
             return false
         }

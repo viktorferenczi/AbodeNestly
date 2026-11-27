@@ -116,7 +116,7 @@ public final class ListDetailModel {
 
     /// SHOP-10: adds a scanned or looked-up item and returns its id (`nil` when it could not be stored). Unlike `create`
     /// it leaves what is typed in the quick-add field alone. `barcode` only for a product a lookup found.
-    public func addScanned(name: String, barcode: String?) async -> UUID? {
+    public func addScanned(name: String, barcode: String?, beforeKick: @MainActor (UUID) -> Void = { _ in }) async -> UUID? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let id = makeId()
@@ -131,6 +131,7 @@ public final class ListDetailModel {
             writeFailed = true
             return nil
         }
+        beforeKick(id)
         await kick()
         return id
     }
@@ -142,7 +143,7 @@ public final class ListDetailModel {
     ) -> BarcodeScannerModel {
         BarcodeScannerModel(
             device: device, householdId: householdId, lookup: lookup, isOnline: isOnline, store: store,
-            add: { [weak self] name, barcode in await self?.addScanned(name: name, barcode: barcode) }
+            add: { [weak self] name, barcode, beforeKick in await self?.addScanned(name: name, barcode: barcode, beforeKick: beforeKick) }
         )
     }
 
