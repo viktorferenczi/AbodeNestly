@@ -10,6 +10,7 @@ import householdInvites from '../households/[id]/invites.ts';
 import householdMember from '../households/[id]/members/[user_id].ts';
 import acceptInvite from '../invites/[code]/accept.ts';
 import listShare from '../lists/[id]/share.ts';
+import product from '../products/[barcode].ts';
 import sharedList from '../shared/[token].ts';
 import sync from '../sync.ts';
 
@@ -29,6 +30,7 @@ const patterns: Array<[RegExp, Handler]> = [
   [/^\/households\/[^/]+\/members\/[^/]+$/, householdMember],
   [/^\/invites\/[^/]+\/accept$/, acceptInvite],
   [/^\/lists\/[^/]+\/share$/, listShare],
+  [/^\/products\/[^/]+$/, product],
   [/^\/shared\/[^/]+$/, sharedList],
 ];
 

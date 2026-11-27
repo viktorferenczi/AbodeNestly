@@ -150,6 +150,17 @@ export type SignAttachmentResponse = {
   storage_path: string;
 };
 
+// ---------- products (SHOP-10) ----------
+/** `GET /products/{barcode}` response (SPEC §8). `source` and `fetched_at` stay server-side. */
+export interface Product {
+  barcode: string;
+  name: string;
+  brand: string | null;
+  category: string | null;
+  image_url: string | null;
+  default_unit: string | null;
+}
+
 // ---------- share links (SHOP-13) ----------
 /** `POST /lists/{id}/share` response: the public URL of the read-only view. */
 export type ShareLinkResponse = { url: string };

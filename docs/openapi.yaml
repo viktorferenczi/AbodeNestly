@@ -209,6 +209,23 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/SharedListResponse"
+  "/products/{barcode}":
+    get:
+      summary: "Barcode lookup (cache → Open Food Facts)"
+      parameters:
+        -
+          name: barcode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Product"
   "/households/{id}/members/{user_id}":
     delete:
       summary: "Remove a member or leave"
@@ -448,6 +465,36 @@ components:
         - left_at
         - updated_at
         - sync_seq
+    Product:
+      type: object
+      properties:
+        barcode:
+          type: string
+        name:
+          type: string
+        brand:
+          type:
+            - string
+            - "null"
+        category:
+          type:
+            - string
+            - "null"
+        image_url:
+          type:
+            - string
+            - "null"
+        default_unit:
+          type:
+            - string
+            - "null"
+      required:
+        - barcode
+        - name
+        - brand
+        - category
+        - image_url
+        - default_unit
     Attachment:
       type: object
       properties:
