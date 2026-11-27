@@ -31,6 +31,8 @@ android {
 kotlin { jvmToolchain(17) }
 
 dependencies {
+    // ApiService / ProductLookupResult for the scanner's lookup (a feature module may depend on :core).
+    implementation(project(":core"))
     implementation(project(":sync"))
     implementation(project(":ui"))
     implementation(project(":shared"))
@@ -46,6 +48,14 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    // The product picture on the scanner's result card (the same OkHttp the API client uses; no image library).
+    implementation(libs.okhttp)
+    // SHOP-10 barcode scanner: CameraX preview + analysis feeding ML Kit's bundled barcode model. Both are allowed by the kotlin-android skill.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.barcode.scanning)
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotlinx.coroutines.test)

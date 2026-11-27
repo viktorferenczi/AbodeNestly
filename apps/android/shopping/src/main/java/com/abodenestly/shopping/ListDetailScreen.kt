@@ -38,6 +38,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -73,8 +74,15 @@ import com.abodenestly.ui.UndoToast
  * Back to the overview. Leaving the screen or the app writes the deletes, check-offs and clears still inside their undo window.
  */
 @Composable
-fun ListDetailScreen(viewModel: ListDetailViewModel, onBack: () -> Unit, modifier: Modifier = Modifier, onManageStores: () -> Unit = {}) {
-    ListDetailScreenHost(viewModel, onBack, modifier, onManageStores) { isNew, initial, history, failed, onSave, onDelete, onClose ->
+fun ListDetailScreen(
+    viewModel: ListDetailViewModel,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onManageStores: () -> Unit = {},
+    /** SHOP-10: the barcode scanner's camera, lookup and storage; `null` hides the bar's scan button. */
+    scanner: ScannerSetup? = null,
+) {
+    ListDetailScreenHost(viewModel, onBack, modifier, onManageStores, scanner) { isNew, initial, history, failed, onSave, onDelete, onClose ->
         ItemSheet(isNew, initial, history, failed, onSave, onDelete, onClose)
     }
 }
@@ -85,6 +93,7 @@ internal fun ListDetailScreenHost(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onManageStores: () -> Unit = {},
+    scanner: ScannerSetup? = null,
     picker: StorePickerSlot = { stores, current, failed, onCreate, onSave, onManage, onClose ->
         StorePickerSheet(stores, current, failed, onCreate, onSave, onManage, onClose)
     },
@@ -98,7 +107,15 @@ internal fun ListDetailScreenHost(
         if (activity?.isChangingConfigurations != true) viewModel.onEvent(ListDetailEvent.Flush)
     }
     DisposableEffect(viewModel) { onDispose { if (activity?.isChangingConfigurations != true) viewModel.onEvent(ListDetailEvent.Flush) } }
-    ListDetailContent(ui, viewModel::onEvent, onBack, modifier)
+    // SHOP-10: the scanner is a full-screen modal over the list; what is typed in the bar is left alone.
+    var scanning by rememberSaveable { mutableStateOf(false) }
+    ListDetailContent(ui, viewModel::onEvent, onBack, modifier, onScan = if (scanner != null) ({ scanning = true }) else null)
+    if (scanning && scanner != null) {
+        val device = scanner.device()
+        val scannerScope = rememberCoroutineScope()
+        val model = remember { viewModel.makeScanner(device, scanner.lookup, scanner.store, scannerScope) }
+        BarcodeScannerDialog(model, device, scanner.images, onClose = { scanning = false })
+    }
     if (ui.picker && ui.detail.list != null) {
         picker(
             ui.detail.stores,
@@ -137,7 +154,13 @@ internal fun ListDetailScreenHost(
 
 /** DESIGN C2 states `empty`, `populated`, `offline`, plus "This list is gone". Pure of the view model, so tests drive it with plain state. */
 @Composable
-internal fun ListDetailContent(ui: ListDetailUiState, onEvent: (ListDetailEvent) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ListDetailContent(
+    ui: ListDetailUiState,
+    onEvent: (ListDetailEvent) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onScan: (() -> Unit)? = null,
+) {
     val tokens = LocalTokens.current
     val focus = remember { FocusRequester() }
     var checkedOpen by rememberSaveable { mutableStateOf(false) }
@@ -282,6 +305,7 @@ internal fun ListDetailContent(ui: ListDetailUiState, onEvent: (ListDetailEvent)
                 onSubmit = submit,
                 focusRequester = focus,
                 onDetails = { onEvent(ListDetailEvent.OpenNew(it)) },
+                onScan = onScan,
                 modifier = Modifier.imePadding(),
             )
         }

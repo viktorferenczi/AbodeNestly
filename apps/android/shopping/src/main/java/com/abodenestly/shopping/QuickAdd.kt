@@ -71,6 +71,8 @@ object QuickAdd {
     fun row(
         id: String, listId: String, name: String, userId: UUID?, now: Instant,
         quantity: Double? = null, unit: String? = null, note: String? = null,
+        /** SHOP-10: only for a product a lookup found; `list_item.barcode` is a foreign key to `product`. */
+        barcode: String? = null,
     ): JsonObject {
         val trimmed = name.trim()
         val stamp = syncStamp(now)
@@ -82,7 +84,7 @@ object QuickAdd {
             put("quantity", quantity?.let { JsonPrimitive(it) } ?: JsonNull)
             put("unit", unit?.let { JsonPrimitive(it) } ?: JsonNull)
             put("note", note?.let { JsonPrimitive(it) } ?: JsonNull)
-            put("barcode", JsonNull)
+            put("barcode", barcode?.let { JsonPrimitive(it) } ?: JsonNull)
             put("checked", JsonPrimitive(false))
             put("checked_at", JsonNull)
             put("checked_by", JsonNull)

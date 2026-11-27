@@ -3,6 +3,7 @@ package com.abodenestly.core.api
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
 import com.abodenestly.contract.models.Member
+import com.abodenestly.contract.models.Product
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -49,6 +50,20 @@ data class MemberRow(val member: Member, val profile: MemberProfile?) {
 /** A household with the viewer's role in it: the `member?select=role,household:household!inner(*)` read, and the Settings cache entry. */
 @Serializable
 data class HouseholdWithRole(val household: Household, val role: Member.Role)
+
+/** What `GET /products/{barcode}` came to (SHOP-10). Twins: iOS `ProductLookupResult`, web `LookupResult`. */
+sealed interface ProductLookupResult {
+    data class Found(val product: Product) : ProductLookupResult
+
+    /** 404, and 400 (an invalid code reads the same way: the API does not know it). */
+    data object NotFound : ProductLookupResult
+
+    /** Only what can pass by itself: no network (an `IOException`), or a 502 while Open Food Facts is down. The lookup is queued. */
+    data object Offline : ProductLookupResult
+
+    /** Anything else (401, 500, an unreadable body). Nothing is written and nothing is queued. */
+    data object Failed : ProductLookupResult
+}
 
 sealed interface ApiResult<out T> {
     data class Success<T>(val value: T) : ApiResult<T>
@@ -98,4 +113,7 @@ interface ApiService {
 
     /** PUTs the bytes to a signed [url] (no bearer: the URL carries the token). `Network` when it cannot be reached. */
     suspend fun uploadToSignedUrl(url: String, bytes: ByteArray, mime: String): ApiResult<Unit>
+
+    /** `GET /products/{barcode}` (SHOP-10). Never throws: a missing network is [ProductLookupResult.Offline]. */
+    suspend fun product(barcode: String): ProductLookupResult
 }

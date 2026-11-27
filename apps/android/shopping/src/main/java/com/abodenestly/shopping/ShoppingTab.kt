@@ -30,6 +30,8 @@ fun ShoppingTab(
     /** The signed-in user, recorded as `created_by` on the items they add. */
     userId: UUID?,
     modifier: Modifier = Modifier,
+    /** SHOP-10: the barcode scanner (lookup, camera, storage); `null` hides the quick-add bar's scan button. */
+    scanner: ScannerSetup? = null,
 ) {
     // Keyed by household: the overview follows that household's database, and a switch starts a fresh model.
     val lists: ListsViewModel = viewModel(key = "shopping.lists.$householdId") {
@@ -54,7 +56,7 @@ fun ShoppingTab(
             val detail: ListDetailViewModel = viewModel(key = "shopping.list.$householdId.$id") {
                 ListDetailViewModel(householdId, id, userId, database, kick = { sync.kick() }, isOnline = isOnline)
             }
-            ListDetailScreen(detail, onBack = { openListId = null }, onManageStores = { storesOpen = true })
+            ListDetailScreen(detail, onBack = { openListId = null }, onManageStores = { storesOpen = true }, scanner = scanner)
         }
     }
 }

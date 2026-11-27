@@ -60,7 +60,9 @@ import com.abodenestly.core.switcher.SwitcherViewModel
 import com.abodenestly.core.home.HomeEvent
 import com.abodenestly.core.home.HomeModules
 import com.abodenestly.core.home.HomeScreen
+import com.abodenestly.shopping.BarcodeDrainEffect
 import com.abodenestly.shopping.ShoppingTab
+import com.abodenestly.shopping.rememberScannerSetup
 import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.sync.RealtimeSubscribing
 import com.abodenestly.sync.SyncEngine
@@ -178,9 +180,15 @@ private fun SignedInShell(
     val canSearch = canSwitch && searchHouseholdId != null && searchModules != null && !showWelcome
     // SHOP-09: the household's Realtime subscription, for as long as the shell and the foreground last. Its flags come from the
     // landing read or the cached households list, like search's; a change kicks the same sync engine as every other trigger.
+    val shellModules = state.household?.let(HomeModules::of) ?: cachedModules
     HouseholdRealtimeEffect(
-        realtime, if (canSwitch) searchHouseholdId else null, state.household?.let(HomeModules::of) ?: cachedModules, foreground,
+        realtime, if (canSwitch) searchHouseholdId else null, shellModules, foreground,
         kick = { sync.kick() },
+    )
+    // SHOP-10: barcode lookups queued offline resolve on household open, on reconnect and after each sync run, only while Shopping is on.
+    BarcodeDrainEffect(
+        householdId = if (canSwitch && shellModules?.shopping == true) searchHouseholdId else null,
+        database = database, sync = sync, isOnline = onlineFlow, lookup = api::product,
     )
     // SHOP-08: the sync chip sits in the TopBar on every signed-in screen and opens the sync sheet (DESIGN B12).
     var showSync by remember { mutableStateOf(false) }
@@ -420,7 +428,7 @@ private fun Tabs(
             }
         } else if (selected == AppTab.Shopping && members != null) {
             // SHOP-01/02: the module owns its screens and its tag (`tab.shopping.content`). Module off: the tab is absent, so this never composes.
-            ShoppingTab(members, database, sync, onlineFlow, meId, Modifier.weight(1f))
+            ShoppingTab(members, database, sync, onlineFlow, meId, Modifier.weight(1f), scanner = rememberScannerSetup(api::product))
         } else {
             Box(Modifier.weight(1f).fillMaxSize().testTag("tab.${selected.key}.content"), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {

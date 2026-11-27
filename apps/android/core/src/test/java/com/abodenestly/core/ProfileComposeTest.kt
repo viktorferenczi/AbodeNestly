@@ -105,7 +105,8 @@ class ProfileComposeTest {
     }
 
     /** Background work (IO hops, the sync thread) posts back to the main looper, so idle it on every poll. */
-    private fun until(condition: () -> Boolean) = rule.waitUntil(5_000) { rule.waitForIdle(); condition() }
+    // 15 s, not 5: the CI android job runs these beside other modules' lint and tests, which can starve the clock.
+    private fun until(condition: () -> Boolean) = rule.waitUntil(15_000) { rule.waitForIdle(); condition() }
 
     private fun exists(tag: String) = rule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
 
@@ -138,6 +139,8 @@ class ProfileComposeTest {
         rule.onNodeWithTag("profile.avatar").performClick()
         until { exists("profile.uploading") }
         rule.onNodeWithTag("profile.avatar").assertIsNotEnabled()
+        // The busy state is set before the upload coroutine reaches the fake, so wait for the call to be recorded.
+        until { remote.calls.isNotEmpty() }
         assertTrue(remote.calls.first() is Call.Upload)
 
         remote.release()
