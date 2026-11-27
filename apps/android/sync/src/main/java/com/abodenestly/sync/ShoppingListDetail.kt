@@ -1,5 +1,7 @@
 package com.abodenestly.sync
 
+import java.util.UUID
+
 /**
  * The columns of a `list_item` row the C2 detail, its autocomplete and the C3 sheet read (SHOP-02, SHOP-03). Local projection, not a contract
  * entity (same as [ListRecord]). Stamps are fixed-width UTC text, so comparing the text compares the time. [nameKey] is
@@ -35,3 +37,10 @@ data class ListDetail(
     val items: List<ListItemRecord> = emptyList(),
     val history: List<ListItemRecord> = emptyList(),
 )
+
+/** What a rename must check before it overwrites a row: whether it still exists and what it is called now. */
+data class ListItemIdentity(val name: String, val deletedAt: String?)
+
+/** The stored `list_item` row's identity, or null when there is none. Throws [DatabaseNotOpenException] when [householdId] is not the open household. */
+suspend fun DatabaseRegistry.listItemIdentity(householdId: UUID, id: String): ListItemIdentity? =
+    withOpenFor(householdId) { db -> db.search().listItem(householdId.toString(), id)?.let { ListItemIdentity(it.name, it.deletedAt) } }

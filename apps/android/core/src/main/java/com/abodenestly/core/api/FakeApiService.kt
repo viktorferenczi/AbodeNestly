@@ -35,6 +35,7 @@ class FakeApiService : ApiService, SyncTransport {
         data class UpdateHousehold(val householdId: UUID, val name: String?, val currency: String?) : Call
         data class SignAttachment(val householdId: UUID, val entity: String, val entityId: UUID, val filename: String, val mime: String, val size: Int) : Call
         data class Upload(val url: String, val byteCount: Int, val mime: String) : Call
+        data class Product(val barcode: String) : Call
     }
 
     private val recorded = CopyOnWriteArrayList<Call>()
@@ -66,6 +67,10 @@ class FakeApiService : ApiService, SyncTransport {
     /** Queued results for `signAttachment`, consumed in order before falling back to [signResult]. */
     val signResults = ConcurrentLinkedQueue<ApiResult<SignedUpload>>()
     @Volatile var uploadResult: ApiResult<Unit> = ApiResult.Success(Unit)
+    /** Every `product` lookup answers this once [productResults] is drained. The API does not know the code by default. */
+    @Volatile var productResult: ProductLookupResult = ProductLookupResult.NotFound
+    /** Queued results for `product`, consumed in order before falling back to [productResult]. */
+    val productResults = ConcurrentLinkedQueue<ProductLookupResult>()
 
     val calls: List<Call> get() = recorded.toList()
 
@@ -188,5 +193,11 @@ class FakeApiService : ApiService, SyncTransport {
         recorded += Call.Upload(url, bytes.size, mime)
         gate?.await()
         return uploadResult
+    }
+
+    override suspend fun product(barcode: String): ProductLookupResult {
+        recorded += Call.Product(barcode)
+        gate?.await()
+        return productResults.poll() ?: productResult
     }
 }

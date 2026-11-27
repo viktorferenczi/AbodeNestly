@@ -481,6 +481,10 @@ interface SearchDao {
     @Query("SELECT * FROM contractor WHERE household_id = :householdId AND deleted_at IS NULL")
     fun contractors(householdId: String): Flow<List<ContractorEntity>>
 
+    /** One row by id, deleted or not (SHOP-10's queued lookups check the name before renaming). */
+    @Query("SELECT * FROM list_item WHERE household_id = :householdId AND id = :id")
+    suspend fun listItem(householdId: String, id: String): ListItemEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertListItem(row: ListItemEntity)
 

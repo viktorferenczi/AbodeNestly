@@ -13,6 +13,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,7 +36,8 @@ import androidx.compose.ui.unit.dp
  * autocomplete [suggestions] stacked above it (each a pair of `name_key` and the label it shows). Presentational: the
  * caller owns the text and the matching. Tapping a suggestion calls [onPick]; Done on the keyboard and the Add button
  * both call [onSubmit], so they add exactly the typed text. [onDetails], when given, adds a Details button that hands the typed
- * text to the caller (the C3 sheet for a new item). No mic or barcode button until SHOP-14 and SHOP-10.
+ * text to the caller (the C3 sheet for a new item). [onScan], when given, adds the "Scan barcode" button (SHOP-10, opens C7).
+ * No mic button until SHOP-14.
  */
 @Composable
 fun QuickAddBar(
@@ -47,6 +50,7 @@ fun QuickAddBar(
     placeholder: String = "Add item",
     focusRequester: FocusRequester? = null,
     onDetails: ((String) -> Unit)? = null,
+    onScan: (() -> Unit)? = null,
 ) {
     val tokens = LocalTokens.current
     Column(modifier.fillMaxWidth().background(tokens.surface)) {
@@ -82,6 +86,11 @@ fun QuickAddBar(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { onSubmit() }),
             )
+            if (onScan != null) {
+                IconButton(onClick = onScan, modifier = Modifier.defaultMinSize(minWidth = Tokens.MinTouchTarget, minHeight = Tokens.MinTouchTarget).testTag("quickadd.scan")) {
+                    Icon(BarcodeIcon, contentDescription = "Scan barcode", tint = tokens.accent)
+                }
+            }
             if (onDetails != null) {
                 TextButton(
                     onClick = { onDetails(text) },

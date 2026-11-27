@@ -305,6 +305,52 @@ class ListDetailViewModel(
         }
     }
 
+    // --- Barcode scan (SHOP-10) ---
+
+    /**
+     * Adds a scanned or looked-up item and returns its id (null when it could not be stored or the list is not shown).
+     * Unlike [add] it leaves what is typed in the quick-add field alone. [barcode] only for a product a lookup found.
+     * [beforeKick] runs after the row is stored and before sync is kicked, so a lookup queued there is seen by the drain
+     * that follows that sync run.
+     */
+    suspend fun addScanned(name: String, barcode: String?, beforeKick: (String) -> Unit = {}): String? {
+        val current = mutableState.value
+        if (!current.loaded || current.detail.list == null) return null
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return null
+        val id = newId()
+        val at = now()
+        // Closing the scanner mid-add must not leave a stored row without its queued lookup, so the whole write finishes.
+        return withContext(NonCancellable) {
+            try {
+                addItem(database, householdId, QuickAdd.row(id, listId, trimmed, userId, at, barcode = barcode), at)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@withContext null
+            }
+            beforeKick(id)
+            kick()
+            id
+        }
+    }
+
+    /** The scanner for this list (DESIGN C7): its adds go through [addScanned]; offline is read from this screen's connectivity. */
+    fun makeScanner(
+        device: ScannerDevice,
+        lookup: suspend (String) -> com.abodenestly.core.api.ProductLookupResult,
+        store: BarcodeStore,
+        scannerScope: CoroutineScope,
+    ): BarcodeScannerModel = BarcodeScannerModel(
+        householdId = householdId.toString(),
+        device = device,
+        lookup = lookup,
+        isOnline = { mutableState.value.online },
+        store = store,
+        add = { name, barcode, beforeKick -> addScanned(name, barcode, beforeKick) },
+        scope = scannerScope,
+    )
+
     // --- Item sheet (SHOP-03) ---
 
     private fun openNew(prefill: String) {

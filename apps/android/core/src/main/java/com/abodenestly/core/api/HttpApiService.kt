@@ -4,6 +4,7 @@ import com.abodenestly.contract.infrastructure.Serializer
 import com.abodenestly.contract.models.Household
 import com.abodenestly.contract.models.Invite
 import com.abodenestly.contract.models.Member
+import com.abodenestly.contract.models.Product
 import com.abodenestly.core.auth.AuthService
 import com.abodenestly.shared.AppConfig
 import com.abodenestly.sync.SyncFailure
@@ -233,6 +234,18 @@ class HttpApiService(
         if (ok) ApiResult.Success(Unit) else ApiResult.Failure(ApiFailure.Unknown)
     }
 
+    override suspend fun product(barcode: String): ProductLookupResult = try {
+        // The code is typed text, so addPathSegment percent-encodes anything that could change the route.
+        val reply = perform(url { addPathSegment("products"); addPathSegment(barcode) }, "GET", emptyMap())
+        productResult(reply.status, errorCode(reply.body), reply.body)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: IOException) {
+        ProductLookupResult.Offline
+    } catch (e: Exception) {
+        ProductLookupResult.Failed
+    }
+
     // MARK: /sync (SHOP-08)
 
     override suspend fun push(body: SyncPushBody): SyncResult<SyncPushResult> = syncGuarded {
@@ -375,7 +388,23 @@ class HttpApiService(
         private const val TIMEOUT_SECONDS = 15L
         private val JSON = "application/json".toMediaType()
         private val lenient = Json { ignoreUnknownKeys = true }
+        // A product without a brand or image may omit those keys; `explicitNulls = false` reads them as null.
+        private val productJson = Json { ignoreUnknownKeys = true; explicitNulls = false }
         private val sparse = Json { explicitNulls = false }
+
+        /** The API's own error code wins; with no parseable body the status decides. Only a 502 can pass by itself. */
+        internal fun productResult(status: Int, code: String?, body: String): ProductLookupResult {
+            if (status == 200) {
+                return runCatching { productJson.decodeFromString(Product.serializer(), body) }
+                    .fold({ ProductLookupResult.Found(it) }, { ProductLookupResult.Failed })
+            }
+            return when {
+                code == "not_found" || status == 404 -> ProductLookupResult.NotFound
+                code == "invalid_barcode" || status == 400 -> ProductLookupResult.NotFound
+                code == "upstream_unavailable" || status == 502 -> ProductLookupResult.Offline
+                else -> ProductLookupResult.Failed
+            }
+        }
 
         private fun sqlState(body: String): String? =
             runCatching { lenient.decodeFromString(PostgrestError.serializer(), body).code }.getOrNull()
