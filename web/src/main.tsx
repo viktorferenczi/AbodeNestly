@@ -7,6 +7,7 @@ import { ApiProvider } from './core/api/ApiProvider.tsx';
 import { createSupabaseAuthClient } from './core/auth/authClient.ts';
 import { AuthProvider } from './core/auth/AuthProvider.tsx';
 import { supabase } from './core/auth/supabase.ts';
+import { RealtimeProvider } from './core/realtime/RealtimeProvider.tsx';
 import './ui/tokens.css';
 
 const client = createSupabaseAuthClient(supabase);
@@ -17,7 +18,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider client={client}>
       <ApiProvider client={api}>
-        <RouterProvider router={router} />
+        <RealtimeProvider client={supabase}>
+          <RouterProvider router={router} />
+        </RealtimeProvider>
       </ApiProvider>
     </AuthProvider>
   </StrictMode>,
