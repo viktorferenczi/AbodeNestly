@@ -1,6 +1,7 @@
 import type {
   Household,
   Invite,
+  Product,
   Role,
   SignAttachmentRequest,
   SignAttachmentResponse,
@@ -47,6 +48,8 @@ export class FakeApiClient implements ApiClient {
     ok: true,
     value: { attachment_id: 'a1', upload_url: 'https://upload.test/a1', storage_path: 'h1/pantry_item/e1/a1.jpg' },
   };
+  getProductCalls: string[] = [];
+  getProductResult: ApiResult<Product> | ((barcode: string) => ApiResult<Product>) = { ok: false, error: { code: 'not_found' } };
   /** When true, calls return a promise that only settles via `resolvePending`. */
   pending = false;
   private waiting: Array<() => void> = [];
@@ -138,6 +141,11 @@ export class FakeApiClient implements ApiClient {
   signAttachment(req: SignAttachmentRequest) {
     this.signAttachmentCalls.push(req);
     return this.respond(() => this.signAttachmentResult);
+  }
+
+  getProduct(barcode: string) {
+    this.getProductCalls.push(barcode);
+    return this.respond(() => (typeof this.getProductResult === 'function' ? this.getProductResult(barcode) : this.getProductResult));
   }
 
   resolvePending() {

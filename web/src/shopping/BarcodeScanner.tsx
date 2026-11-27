@@ -1,0 +1,360 @@
+import type { Product } from '@abodenestly/contract';
+import { useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes } from 'react';
+import { useApi } from '../core/api/ApiProvider.tsx';
+import type { HouseholdDb } from '../sync/db.ts';
+import type { MutateDeps } from '../sync/outbox.ts';
+import { Sheet } from '../ui/Sheet.tsx';
+import { addNamed, addOffline, addProduct, cachedName, CODE_ERROR, isValidCode, lookup } from './Barcode.ts';
+import styles from './BarcodeScanner.module.css';
+import { browserScannerDevice, type ScannerDevice, type ScanSession } from './ScannerDevice.ts';
+
+type Phase =
+  | { kind: 'scanning' }
+  | { kind: 'looking'; code: string }
+  | { kind: 'found'; product: Product }
+  | { kind: 'not-found'; code: string }
+  | { kind: 'queued'; code: string }
+  | { kind: 'lookup-failed'; code: string }
+  | { kind: 'permission-denied' }
+  | { kind: 'camera-unavailable' }
+  | { kind: 'unsupported' };
+
+type Props = {
+  db: HouseholdDb;
+  deps: Partial<MutateDeps>;
+  householdId: string;
+  listId: string;
+  userId: string | null;
+  onClose: () => void;
+  /** Tests pass a fake; the app uses the browser camera. */
+  device?: ScannerDevice;
+};
+
+// Focuses itself on mount. The effect belongs to a descendant of Sheet, so it runs before Sheet's own mount effect
+// (which focuses the panel); the microtask then lands after both and the field keeps focus.
+function FocusedInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  const el = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    queueMicrotask(() => el.current?.focus());
+  }, []);
+  return <input ref={el} {...props} />;
+}
+
+// DESIGN C7: states scanning, found, not-found, permission-denied and offline (here `queued`), plus `unsupported`
+// for browsers without BarcodeDetector (same layout as permission-denied, manual entry only).
+export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose, device = browserScannerDevice }: Props) {
+  const api = useApi();
+  const [phase, setPhase] = useState<Phase>(() => (device.supported() ? { kind: 'scanning' } : { kind: 'unsupported' }));
+  const [session, setSession] = useState<ScanSession | null>(null);
+  const [torchOn, setTorchOn] = useState(false);
+  const [manual, setManual] = useState(false);
+  const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState(false);
+  const [name, setName] = useState('');
+  const [failed, setFailed] = useState(false);
+  const video = useRef<HTMLVideoElement>(null);
+  const handled = useRef(false);
+  // True from the start of a lookup to its end; a second Retry tap must not start another.
+  const looking = useRef(false);
+  // The code whose name field is on screen: the cache prefills it only when a new code appears, never over typed text.
+  const nameCode = useRef<string | null>(null);
+  const prefill = (raw: string) => {
+    if (nameCode.current === raw) return;
+    nameCode.current = raw;
+    setName(cachedName(raw) ?? '');
+  };
+  const input = { householdId, listId, userId };
+  const scanning = phase.kind === 'scanning';
+
+  const handle = async (raw: string) => {
+    if (handled.current || looking.current) return;
+    handled.current = true;
+    looking.current = true;
+    setPhase({ kind: 'looking', code: raw });
+    setFailed(false);
+    try {
+      const result = await lookup(api, raw, navigator.onLine);
+      if (result.kind === 'found') setPhase({ kind: 'found', product: result.product });
+      else if (result.kind === 'error') {
+        prefill(raw);
+        setPhase({ kind: 'lookup-failed', code: raw });
+      } else if (result.kind === 'not-found') {
+        prefill(raw);
+        setPhase({ kind: 'not-found', code: raw });
+      } else {
+        await addOffline(db, deps, input, raw);
+        setPhase({ kind: 'queued', code: raw });
+      }
+    } catch {
+      setFailed(true);
+      handled.current = false;
+      setPhase({ kind: 'scanning' });
+    } finally {
+      looking.current = false;
+    }
+  };
+
+  // The camera runs only while scanning; leaving the state (a code was read, Close) stops it.
+  useEffect(() => {
+    if (!scanning || !device.supported()) return;
+    let cancelled = false;
+    let started: ScanSession | null = null;
+    handled.current = false;
+    setTorchOn(false);
+    device
+      .start(video.current!, (raw) => {
+        // Unreadable or partial reads are ignored; the next frame tries again.
+        if (!cancelled && isValidCode(raw)) void handle(raw);
+      })
+      .then((s) => {
+        if (cancelled) return s.stop();
+        started = s;
+        setSession(s);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const n = e instanceof Error ? e.name : '';
+        if (n === 'NotAllowedError' || n === 'SecurityError') setPhase({ kind: 'permission-denied' });
+        else if (n === 'NotSupportedError') setPhase({ kind: 'unsupported' });
+        else setPhase({ kind: 'camera-unavailable' }); // NotFound, NotReadable, Overconstrained and the like
+      });
+    return () => {
+      cancelled = true;
+      started?.stop();
+      setSession(null);
+    };
+    // handle closes over props that do not change while the scanner is open.
+  }, [scanning, device]);
+
+  const toggleTorch = async () => {
+    const next = !torchOn;
+    try {
+      await session?.setTorch(next);
+      setTorchOn(next);
+    } catch {
+      setTorchOn(false);
+    }
+  };
+
+  const submitCode = (e: FormEvent) => {
+    e.preventDefault();
+    const trimmed = code.trim();
+    if (!isValidCode(trimmed)) return setCodeError(true);
+    setCodeError(false);
+    void handle(trimmed);
+  };
+
+  const run = async (write: () => Promise<unknown>, then: () => void) => {
+    try {
+      await write();
+      then();
+    } catch {
+      setFailed(true);
+    }
+  };
+
+  const scanAgain = () => {
+    nameCode.current = null;
+    handled.current = false;
+    setFailed(false);
+    setCode('');
+    setPhase({ kind: device.supported() ? 'scanning' : 'unsupported' });
+  };
+
+  const manualForm = (
+    <form onSubmit={submitCode} className={styles.manual}>
+      <label className={styles.label}>
+        Barcode
+        <FocusedInput
+          className={styles.field}
+          inputMode="numeric"
+          autoComplete="off"
+          // The field is the whole point of the unsupported and permission-denied layouts, and appears on request while scanning.
+          value={code}
+          aria-invalid={codeError}
+          aria-describedby={codeError ? 'barcode-error' : undefined}
+          onChange={(e) => {
+            setCode(e.target.value);
+            setCodeError(false);
+          }}
+        />
+      </label>
+      {codeError ? (
+        <p id="barcode-error" role="alert" className={styles.error}>
+          {CODE_ERROR}
+        </p>
+      ) : null}
+      <button type="submit" className={styles.primary}>
+        Look up
+      </button>
+    </form>
+  );
+
+  let body;
+  switch (phase.kind) {
+    case 'scanning':
+      body = (
+        <>
+          <div className={styles.preview}>
+            <video ref={video} className={styles.video} muted playsInline data-testid="scanner-video" />
+            <div className={styles.guide} data-testid="guide-box" aria-hidden="true" />
+          </div>
+          <p className={styles.hint}>Point the camera at a barcode</p>
+          <div className={styles.actions}>
+            {session?.torch ? (
+              <button type="button" className={styles.secondary} aria-pressed={torchOn} onClick={() => void toggleTorch()}>
+                Torch
+              </button>
+            ) : null}
+            {!manual ? (
+              <button type="button" className={styles.secondary} onClick={() => setManual(true)}>
+                Enter code manually
+              </button>
+            ) : null}
+          </div>
+          {manual ? manualForm : null}
+        </>
+      );
+      break;
+    case 'looking':
+      body = (
+        <p role="status" className={styles.hint}>
+          Looking up {phase.code}…
+        </p>
+      );
+      break;
+    case 'found':
+      body = (
+        <div className={styles.card}>
+          {phase.product.image_url ? <img className={styles.image} src={phase.product.image_url} alt={phase.product.name} /> : null}
+          <h3 className={styles.name}>{phase.product.name}</h3>
+          {phase.product.brand ? <p className={styles.brand}>{phase.product.brand}</p> : null}
+          <div className={styles.actions}>
+            <button type="button" className={styles.secondary} onClick={scanAgain}>
+              Scan again
+            </button>
+            <button type="button" className={styles.primary} onClick={() => void run(() => addProduct(db, deps, input, (phase as { product: Product }).product), onClose)}>
+              Add
+            </button>
+          </div>
+        </div>
+      );
+      break;
+    case 'not-found': {
+      const notFoundCode = phase.code;
+      const typed = name.trim();
+      body = (
+        <form
+          className={styles.card}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (typed) void run(() => addNamed(db, deps, input, notFoundCode, typed), onClose);
+          }}
+        >
+          <h3 className={styles.name}>We don't know this product</h3>
+          <p className={styles.brand}>{notFoundCode}</p>
+          <label className={styles.label}>
+            Name
+            <FocusedInput className={styles.field} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <div className={styles.actions}>
+            <button type="button" className={styles.secondary} onClick={scanAgain}>
+              Scan again
+            </button>
+            <button type="submit" className={styles.primary} disabled={!typed}>
+              Add
+            </button>
+          </div>
+        </form>
+      );
+      break;
+    }
+    case 'queued':
+      body = (
+        <div className={styles.card}>
+          <p role="status">Added {phase.code}. We'll look it up when you're back online</p>
+          <div className={styles.actions}>
+            <button type="button" className={styles.secondary} onClick={scanAgain}>
+              Scan another
+            </button>
+            <button type="button" className={styles.primary} onClick={onClose}>
+              Done
+            </button>
+          </div>
+        </div>
+      );
+      break;
+    case 'lookup-failed': {
+      const failedCode = phase.code;
+      const typed = name.trim();
+      body = (
+        <form
+          className={styles.card}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (typed) void run(() => addNamed(db, deps, input, failedCode, typed), onClose);
+          }}
+        >
+          <h3 className={styles.name}>Couldn't look that up. Try again.</h3>
+          <p className={styles.brand}>{failedCode}</p>
+          <label className={styles.label}>
+            Name
+            <FocusedInput className={styles.field} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={() => {
+                if (looking.current) return; // clearing the guard mid-lookup would allow a second item
+                handled.current = false;
+                void handle(failedCode);
+              }}
+            >
+              Retry
+            </button>
+            <button type="submit" className={styles.primary} disabled={!typed}>
+              Add
+            </button>
+          </div>
+        </form>
+      );
+      break;
+    }
+    case 'permission-denied':
+    case 'camera-unavailable':
+    case 'unsupported':
+      body = (
+        <>
+          <h3 className={styles.name}>
+            {phase.kind === 'permission-denied'
+              ? 'Camera access is off'
+              : phase.kind === 'camera-unavailable'
+                ? "Can't use the camera"
+                : "Scanning isn't available in this browser"}
+          </h3>
+          <p className={styles.hint}>
+            {phase.kind === 'permission-denied'
+              ? "Allow the camera for this site in your browser's settings, then open the scanner again. You can still enter the code."
+              : phase.kind === 'camera-unavailable'
+                ? "Another app may be using it, or there's no camera. You can still enter the code."
+                : 'You can still enter the code printed under the barcode.'}
+          </p>
+          {manualForm}
+        </>
+      );
+  }
+
+  return (
+    <Sheet title="Scan barcode" onClose={onClose} fullScreen>
+      <div className={styles.body}>
+        {failed ? (
+          <p role="alert" className={styles.error}>
+            Couldn't add that item. Try again.
+          </p>
+        ) : null}
+        {body}
+      </div>
+    </Sheet>
+  );
+}

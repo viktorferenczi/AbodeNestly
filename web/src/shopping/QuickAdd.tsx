@@ -4,6 +4,7 @@ import { useAuth } from '../core/auth/AuthProvider.tsx';
 import { useSync } from '../sync/SyncEngine.ts';
 import type { HouseholdDb } from '../sync/db.ts';
 import { QuickAddBar } from '../ui/QuickAddBar.tsx';
+import { BarcodeScanner } from './BarcodeScanner.tsx';
 import { addItem, historyOf, suggest } from './QuickAdd.ts';
 import { createItem, unitSuggestions } from './ItemSheet.ts';
 import { ItemSheet } from './ItemSheet.tsx';
@@ -22,6 +23,7 @@ export function QuickAdd({ db, householdId, listId, items, autoFocus }: Props) {
   const [failed, setFailed] = useState(false);
   // The Details button opens the item sheet prefilled with the typed text (SHOP-03).
   const [details, setDetails] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   const history = useMemo(() => historyOf(items), [items]);
   const suggestions = useMemo(() => suggest(history, value, { listId }), [history, value, listId]);
@@ -46,7 +48,8 @@ export function QuickAdd({ db, householdId, listId, items, autoFocus }: Props) {
           Couldn't add that item. Try again.
         </p>
       ) : null}
-      <QuickAddBar value={value} onChange={setValue} suggestions={suggestions} onPick={(l) => void add(l)} onSubmit={(t) => void add(t)} autoFocus={autoFocus} onDetails={setDetails} />
+      <QuickAddBar value={value} onChange={setValue} suggestions={suggestions} onPick={(l) => void add(l)} onSubmit={(t) => void add(t)} autoFocus={autoFocus} onDetails={setDetails} onScan={() => setScanning(true)} />
+      {scanning ? <BarcodeScanner db={db} deps={deps} householdId={householdId} listId={listId} userId={session?.user.id ?? null} onClose={() => setScanning(false)} /> : null}
       {details !== null ? (
         <ItemSheet
           mode="new"
