@@ -93,22 +93,34 @@ export async function readCachedProduct(client: Queryable, barcode: string): Pro
 }
 
 // One of the SPEC §11 exceptions: `product` has no write policy, so the cache fill cannot run as the
-// user. It gets a small pool private to this module (connecting as the pool's owner role) and this
-// one statement is all it runs. Never exported as a general bypass.
+// user; it runs as `service_role`, the role §11 reserves for product cache writes. A small pool private
+// to this module; one transaction (the pooler is in transaction mode, so `set local` must share it)
+// switches role and runs this one upsert. Never exported as a general bypass.
 let writePool: pg.Pool | undefined;
 
 export async function writeCachedProduct(product: CachedProduct): Promise<void> {
   writePool ??= new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
-  // Upsert so two lookups racing on the same barcode both succeed.
-  await writePool.query(
-    `insert into product (barcode, name, brand, category, image_url, default_unit, source)
-     values ($1, $2, $3, $4, $5, $6, $7)
-     on conflict (barcode) do update set
-       name = excluded.name, brand = excluded.brand, category = excluded.category,
-       image_url = excluded.image_url, default_unit = excluded.default_unit,
-       source = excluded.source, fetched_at = now()`,
-    [product.barcode, product.name, product.brand, product.category, product.image_url, product.default_unit, product.source],
-  );
+  const client = await writePool.connect();
+  try {
+    await client.query('begin');
+    await client.query('set local role service_role');
+    // Upsert so two lookups racing on the same barcode both succeed.
+    await client.query(
+      `insert into product (barcode, name, brand, category, image_url, default_unit, source)
+       values ($1, $2, $3, $4, $5, $6, $7)
+       on conflict (barcode) do update set
+         name = excluded.name, brand = excluded.brand, category = excluded.category,
+         image_url = excluded.image_url, default_unit = excluded.default_unit,
+         source = excluded.source, fetched_at = now()`,
+      [product.barcode, product.name, product.brand, product.category, product.image_url, product.default_unit, product.source],
+    );
+    await client.query('commit');
+  } catch (e) {
+    await client.query('rollback').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 export type ProductDeps = {
