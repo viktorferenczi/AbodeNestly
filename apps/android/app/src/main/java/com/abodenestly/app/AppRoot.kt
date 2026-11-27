@@ -62,7 +62,9 @@ import com.abodenestly.core.home.HomeModules
 import com.abodenestly.core.home.HomeScreen
 import com.abodenestly.shopping.ShoppingTab
 import com.abodenestly.sync.DatabaseRegistry
+import com.abodenestly.sync.RealtimeSubscribing
 import com.abodenestly.sync.SyncEngine
+import com.abodenestly.core.sync.HouseholdRealtimeEffect
 import com.abodenestly.core.sync.SyncSheet
 import com.abodenestly.core.sync.SyncSheetState
 import com.abodenestly.core.sync.SyncSheetViewModel
@@ -102,16 +104,19 @@ fun AppRoot(
     householdsCache: HouseholdsCache,
     sync: SyncEngine,
     recentSearches: RecentSearchStore,
+    realtime: RealtimeSubscribing,
+    foreground: StateFlow<Boolean>,
 ) {
     val state by session.state.collectAsState()
     val online by network.isOnline.collectAsState()
+    val inForeground by foreground.collectAsState()
     // Edge-to-edge is on (targetSdk 35): the background runs under the system bars, the content stays clear of them.
     Box(Modifier.fillMaxSize().background(LocalTokens.current.bg).safeDrawingPadding()) {
         when (state.status) {
             SessionStatus.Loading -> Box(Modifier.fillMaxSize().testTag("session.loading"))
             SessionStatus.SignedOut -> SignInScreen(signIn, isOnline = online)
             SessionStatus.SignedIn -> SignedInShell(
-                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, householdsCache, sync, recentSearches, network.isOnline,
+                state, welcome, api, lastHousehold, membersCache, householdCache, webBaseUrl, profileDeps, database, householdsCache, sync, recentSearches, network.isOnline, realtime, inForeground,
                 onSwitch = session::switchTo, onSelectTab = session::selectTab, onSettingsShown = session::settingsShown,
                 meId = session.userId, email = session.email, isOnline = online, onRetry = session::retry, onSignOut = session::signOut,
                 onLeft = session::leftHousehold, onHouseholdChanged = session::updateHousehold,
@@ -136,6 +141,8 @@ private fun SignedInShell(
     sync: SyncEngine,
     recentSearches: RecentSearchStore,
     onlineFlow: StateFlow<Boolean>,
+    realtime: RealtimeSubscribing,
+    foreground: Boolean,
     onSwitch: suspend (UUID, Boolean) -> Unit,
     onSelectTab: (AppTab) -> Unit,
     onSettingsShown: () -> Unit,
@@ -169,6 +176,12 @@ private fun SignedInShell(
     }
     val searchModules = (state.household?.let(HomeModules::of) ?: cachedModules)?.searchModules()
     val canSearch = canSwitch && searchHouseholdId != null && searchModules != null && !showWelcome
+    // SHOP-09: the household's Realtime subscription, for as long as the shell and the foreground last. Its flags come from the
+    // landing read or the cached households list, like search's; a change kicks the same sync engine as every other trigger.
+    HouseholdRealtimeEffect(
+        realtime, if (canSwitch) searchHouseholdId else null, state.household?.let(HomeModules::of) ?: cachedModules, foreground,
+        kick = { sync.kick() },
+    )
     // SHOP-08: the sync chip sits in the TopBar on every signed-in screen and opens the sync sheet (DESIGN B12).
     var showSync by remember { mutableStateOf(false) }
     val syncSheet = rememberSyncSheet(searchHouseholdId, database, sync, onlineFlow)

@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * The push/pull loop (SPEC §6.4); port of iOS `LiveSyncEngine`. One pass pushes the outbox of the open household in
  * insertion order, then pulls until `has_more` is false. Passes never overlap: a kick that arrives mid-pass makes
  * exactly one more pass, which reads whichever household is open by then. Offline it does nothing but report
- * [SyncPhase.Offline], so the queue and the cached rows stay (SPEC §6.5). Realtime kicks arrive with SHOP-09.
+ * [SyncPhase.Offline], so the queue and the cached rows stay (SPEC §6.5). A Realtime event (SHOP-09) is one more kick.
  */
 class LiveSyncEngine(
     private val transport: SyncTransport,

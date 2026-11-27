@@ -23,6 +23,7 @@ import com.abodenestly.core.members.MembersCache
 import com.abodenestly.core.auth.ProfileCache
 import com.abodenestly.core.auth.SessionViewModel
 import com.abodenestly.core.auth.SupabaseAuthService
+import com.abodenestly.sync.RealtimeSubscribing
 import com.abodenestly.core.settings.DataStoreHouseholdCache
 import com.abodenestly.core.settings.HouseholdCache
 import com.abodenestly.core.switcher.DataStoreHouseholdsCache
@@ -45,6 +46,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import java.io.File
@@ -58,7 +62,10 @@ class AppGraph(context: Context) {
         supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
         authScheme = BuildConfig.AUTH_URL_SCHEME,
     )
-    val auth: AuthService = SupabaseAuthService(config)
+    private val supabaseAuth = SupabaseAuthService(config)
+    val auth: AuthService = supabaseAuth
+    /** SHOP-09: household changes from Supabase Realtime, on the client Auth already built. `AppRoot` keeps the subscription. */
+    val realtime: RealtimeSubscribing = supabaseAuth.realtimeService()
     private val http = HttpApiService(config, auth)
     val api: ApiService = http
     val network: NetworkMonitor = NetworkMonitor.observing(context)
@@ -87,12 +94,17 @@ class AppGraph(context: Context) {
         profileOutbox, HttpProfileRemote(config, auth), profileCache,
         currentUser = { auth.currentSession()?.userId }, scope = appScope,
     )
-    /** SHOP-08: push the outbox, then pull, for the open household (SPEC §6.4). Realtime joins in SHOP-09. */
+    /** SHOP-08: push the outbox, then pull, for the open household (SPEC §6.4). SHOP-09: a Realtime event kicks it too. */
     val sync: SyncEngine = LiveSyncEngine(http, database, isOnline = { network.isOnline.value }, scope = appScope)
     private val background: BackgroundSyncScheduler = SyncScheduler(context)
     val profileDeps = ProfileDeps(
         profileCache, profileOutbox, profileSync, HttpAvatarLoader(config, auth), avatarDir = File(context.filesDir, "avatars"),
     )
+
+    private val mutableForeground = MutableStateFlow(false)
+
+    /** True between the process's START and STOP; Realtime is dropped while it is false (SHOP-09). */
+    val foreground: StateFlow<Boolean> = mutableForeground.asStateFlow()
 
     init {
         // Triggers (CORE-06): connectivity returning, and a session appearing (a queue left by an earlier run).
@@ -107,11 +119,13 @@ class AppGraph(context: Context) {
             private var ticker: Job? = null
 
             override fun onStart(owner: LifecycleOwner) {
+                mutableForeground.value = true
                 sync.kick()
                 ticker = appScope.launch { while (true) { delay(FOREGROUND_TICK_MS); sync.kick() } }
             }
 
             override fun onStop(owner: LifecycleOwner) {
+                mutableForeground.value = false
                 ticker?.cancel()
                 ticker = null
                 appScope.launch {

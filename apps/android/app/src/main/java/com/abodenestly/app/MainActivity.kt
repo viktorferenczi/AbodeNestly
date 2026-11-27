@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             AbodeTheme { AppRoot(
-                    session, signIn, welcome, graph.network, graph.api, graph.lastHousehold, graph.membersCache, graph.householdCache, graph.config.webBaseUrl, graph.profileDeps, graph.database, graph.householdsCache, graph.sync, graph.recentSearches,
+                    session, signIn, welcome, graph.network, graph.api, graph.lastHousehold, graph.membersCache, graph.householdCache, graph.config.webBaseUrl, graph.profileDeps, graph.database, graph.householdsCache, graph.sync, graph.recentSearches, graph.realtime, graph.foreground,
                 ) }
         }
         lifecycleScope.launch {
