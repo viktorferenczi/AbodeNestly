@@ -58,6 +58,13 @@ private struct RootContent: View {
     }
 }
 
+/// What the Realtime subscription depends on; a change restarts it.
+private struct RealtimeKey: Equatable {
+    let householdId: UUID?
+    let modules: HomeModules?
+    let awake: Bool
+}
+
 private struct SignedInView: View {
     let session: SessionModel
     let environment: AppEnvironment
@@ -173,6 +180,12 @@ private struct SignedInView: View {
         }
         .onChange(of: session.currentHouseholdId, initial: true) { _, _ in kickSync() }
         .task(id: session.currentHouseholdId) { await syncStatus.run(householdId: session.currentHouseholdId) }
+        // SHOP-09: Realtime changes kick the sync engine. Restarts (and so unsubscribes first) when the household or its
+        // modules change, and is dropped while the app is in the background.
+        .task(id: RealtimeKey(householdId: session.currentHouseholdId, modules: searchModules, awake: scenePhase != .background)) {
+            guard scenePhase != .background, let householdId = session.currentHouseholdId, let modules = searchModules else { return }
+            await HouseholdRealtime.run(realtime: environment.realtime, householdId: householdId, modules: modules, sync: environment.sync)
+        }
         // SPEC §6.4: every 5 minutes while the app is in the foreground. The task restarts with the scene phase.
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }

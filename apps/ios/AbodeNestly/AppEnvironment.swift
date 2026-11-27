@@ -18,6 +18,8 @@ struct AppEnvironment: Sendable {
     let sync: any SyncEngine
     /// Schedules the iOS background refresh that drains the outbox while the app is not running.
     let backgroundSync: any BackgroundSyncScheduler
+    /// Household change events (SHOP-09): each one kicks `sync`. Previews and tests pass `NoRealtime` or `FakeRealtime`.
+    let realtime: any RealtimeSubscribing
 
     @MainActor
     static func live() -> AppEnvironment {
@@ -70,7 +72,8 @@ struct AppEnvironment: Sendable {
                 // After each run, ask for the next background refresh (the system decides the real time).
                 onRunFinished: { scheduler.scheduleNext() }
             ),
-            backgroundSync: scheduler
+            backgroundSync: scheduler,
+            realtime: SupabaseRealtimeService(config: config, auth: auth)
         )
     }
 }
