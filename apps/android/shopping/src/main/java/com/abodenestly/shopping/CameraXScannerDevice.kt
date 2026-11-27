@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.Preview as CameraPreview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -86,7 +87,6 @@ class CameraXScannerDevice(context: Context) : ScannerDevice {
         camera?.cameraControl?.enableTorch(on)
     }
 
-    @OptIn(ExperimentalGetImage::class)
     override suspend fun start(owner: LifecycleOwner, onCode: (String) -> Unit) {
         // The preview is composed in the same frame the model asks to start; wait a moment for its view.
         val view = withTimeoutOrNull(PREVIEW_WAIT_MS) { previewView.filterNotNull().first() }
@@ -116,7 +116,7 @@ class CameraXScannerDevice(context: Context) : ScannerDevice {
             .build()
         val mainExecutor = ContextCompat.getMainExecutor(appContext)
         analysis.setAnalyzer(pool) { proxy ->
-            val media = proxy.image
+            val media = proxy.mediaImage()
             if (media == null) {
                 proxy.close()
                 return@setAnalyzer
@@ -211,3 +211,8 @@ fun rememberCameraXScannerDevice(): ScannerDevice {
     SideEffect { device.launchPermission = { launcher.launch(Manifest.permission.CAMERA) } }
     return device
 }
+
+// ExperimentalGetImage is an androidx opt-in marker, so lint only accepts androidx.annotation.OptIn
+// (not kotlin.OptIn), and only on the declaration that reads `image`.
+@androidx.annotation.OptIn(ExperimentalGetImage::class)
+private fun ImageProxy.mediaImage(): android.media.Image? = image
