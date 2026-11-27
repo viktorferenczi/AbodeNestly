@@ -55,7 +55,7 @@ export function listSections(lists: ShoppingList[], items: ListItem[], stores: S
 export async function createList(
   db: HouseholdDb,
   deps: Partial<MutateDeps>,
-  input: { householdId: string; name: string; storeId: string | null },
+  input: { householdId: string; name: string; storeId: string | null; isTemplate?: boolean },
 ): Promise<string> {
   const id = (deps.uuid ?? (() => crypto.randomUUID()))();
   const now = (deps.now ?? (() => new Date().toISOString()))();
@@ -65,7 +65,7 @@ export async function createList(
     household_id: input.householdId,
     name: input.name.trim(),
     store_id: input.storeId,
-    is_template: false,
+    is_template: input.isTemplate ?? false,
     share_token: null,
     archived_at: null,
     deleted_at: null,

@@ -17,6 +17,8 @@ import { StorePickerSheet } from './StorePickerSheet.tsx';
 import { createStore, setListStore } from './Stores.ts';
 import { drainLookups } from './Barcode.ts';
 import { QuickAdd } from './QuickAdd.tsx';
+import { AddAllSheet } from './AddAllSheet.tsx';
+import { addAllToList, targetLists } from './Templates.ts';
 import styles from './ListDetail.module.css';
 
 // DESIGN C2: name, store chip, item rows with a checkbox (qty, unit, note; tap opens the item sheet), a Checked section, Clear checked and the quick add bar.
@@ -60,6 +62,11 @@ export function ListDetail() {
   const clearSeq = useRef(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [addingAll, setAddingAll] = useState(false);
+  // SHOP-11: a plain message after Add all (no Undo); it clears itself.
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(noticeTimer.current), []);
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const queue = useMemo(() => (db ? createCheckOffQueue({ db, deps, userId, onChange: rerender }) : null), [db, deps, userId]);
 
@@ -89,12 +96,13 @@ export function ListDetail() {
 
   const data = useLiveQuery(async () => {
     if (!db || !householdId) return null;
-    const [list, items, stores] = await Promise.all([
+    const [list, items, stores, lists] = await Promise.all([
       db.shopping_list.get(listId),
       db.list_item.where('household_id').equals(householdId).toArray(),
       db.store.where('household_id').equals(householdId).toArray(),
+      db.shopping_list.where('household_id').equals(householdId).toArray(),
     ]);
-    return { list, items, stores };
+    return { list, items, stores, lists };
   }, [db, householdId, listId]);
 
   const view = useMemo(() => {
@@ -134,6 +142,8 @@ export function ListDetail() {
       </div>
     );
   }
+
+  const isTemplate = data.list.is_template;
 
   const row = (i: ListItem, muted: boolean) => {
     const waiting = pendingChecks.has(i.id);
@@ -221,11 +231,14 @@ export function ListDetail() {
       <div className={styles.content}>
         {back}
         <div className={styles.head}>
-          <h2 className={styles.heading}>{data.list.name}</h2>
+          <div>
+            <h2 className={styles.heading}>{data.list.name}</h2>
+            {isTemplate ? <p className={styles.caption}>Template</p> : null}
+          </div>
           <button type="button" className={view.storeName ? styles.chip : `${styles.chip} ${styles.chipEmpty}`} aria-label={view.storeName ? `Store: ${view.storeName}` : undefined} onClick={() => setPicking(true)}>
             {view.storeName ?? 'Add store'}
           </button>
-          {view.checked.length > 0 ? (
+          {view.checked.length > 0 || isTemplate ? (
             <div
               className={styles.menuWrap}
               onKeyDown={(e) => {
@@ -240,9 +253,24 @@ export function ListDetail() {
               </button>
               {menuOpen ? (
                 <div className={styles.menu} role="menu">
-                  <button type="button" role="menuitem" className={styles.menuItem} onClick={clearAll}>
-                    Clear checked
-                  </button>
+                  {isTemplate ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={styles.menuItem}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setAddingAll(true);
+                      }}
+                    >
+                      Add all to list
+                    </button>
+                  ) : null}
+                  {view.checked.length > 0 ? (
+                    <button type="button" role="menuitem" className={styles.menuItem} onClick={clearAll}>
+                      Clear checked
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -290,6 +318,24 @@ export function ListDetail() {
           onSave={(storeId) => setListStore(db, deps, listId, storeId)}
           onCreate={(name) => createStore(db, deps, { householdId, name })}
         />
+      ) : null}
+      {addingAll ? (
+        <AddAllSheet
+          lists={targetLists(data.lists).filter((l) => l.household_id === householdId)}
+          onClose={() => setAddingAll(false)}
+          onPick={async (target) => {
+            const n = await addAllToList(db, deps, { householdId, templateId: listId, targetListId: target.id, userId });
+            setAddingAll(false);
+            setNotice(n === 0 ? 'Nothing to add: this template is empty' : `Added ${n} ${n === 1 ? 'item' : 'items'} to ${target.name}`);
+            clearTimeout(noticeTimer.current);
+            noticeTimer.current = setTimeout(() => setNotice(null), UNDO_MS);
+          }}
+        />
+      ) : null}
+      {notice ? (
+        <p role="status" aria-live="polite" className={styles.notice}>
+          {notice}
+        </p>
       ) : null}
       {toasts.map((t, index) => (
         <UndoToast key={t.key} index={index} message={t.message} onUndo={t.undo} />

@@ -119,3 +119,17 @@
   min-height: var(--touch-min);
   color: var(--color-accent);
 }
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-min);
+  font-size: var(--font-secondary);
+}
+
+.switchRow input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-shopping);
+}

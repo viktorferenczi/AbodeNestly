@@ -3,10 +3,11 @@ import type { Store } from '@abodenestly/contract';
 import { Sheet } from '../ui/Sheet.tsx';
 import styles from './Lists.module.css';
 
-// DESIGN C1 sheet: name and store. The Template switch waits for SHOP-11.
-export function NewListSheet({ stores, onSave, onClose }: { stores: Store[]; onSave: (name: string, storeId: string | null) => Promise<void>; onClose: () => void }) {
+// DESIGN C1 sheet: name, store and the Template switch (SHOP-11).
+export function NewListSheet({ stores, onSave, onClose }: { stores: Store[]; onSave: (name: string, storeId: string | null, isTemplate: boolean) => Promise<void>; onClose: () => void }) {
   const [name, setName] = useState('');
   const [storeId, setStoreId] = useState('');
+  const [isTemplate, setIsTemplate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const valid = name.trim().length > 0;
@@ -17,7 +18,7 @@ export function NewListSheet({ stores, onSave, onClose }: { stores: Store[]; onS
     setBusy(true);
     setFailed(false);
     try {
-      await onSave(name.trim(), storeId || null);
+      await onSave(name.trim(), storeId || null, isTemplate);
     } catch {
       setFailed(true);
     } finally {
@@ -54,6 +55,10 @@ export function NewListSheet({ stores, onSave, onClose }: { stores: Store[]; onS
             </select>
           </label>
         ) : null}
+        <label className={styles.switchRow}>
+          <input type="checkbox" role="switch" checked={isTemplate} onChange={(e) => setIsTemplate(e.target.checked)} />
+          Template
+        </label>
       </form>
     </Sheet>
   );

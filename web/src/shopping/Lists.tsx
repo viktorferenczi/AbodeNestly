@@ -177,8 +177,8 @@ export function Lists() {
         <NewListSheet
           stores={stores}
           onClose={() => setSheet(false)}
-          onSave={async (name, storeId) => {
-            const id = await createList(db, deps, { householdId, name, storeId });
+          onSave={async (name, storeId, isTemplate) => {
+            const id = await createList(db, deps, { householdId, name, storeId, isTemplate });
             setSheet(false);
             open(id);
           }}
