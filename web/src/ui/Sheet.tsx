@@ -8,13 +8,15 @@ type SheetProps = {
   children: ReactNode;
   /** The primary action, pinned at the bottom (DESIGN A6). */
   footer?: ReactNode;
+  /** Fills the screen (DESIGN C7 is a full-screen modal). */
+  fullScreen?: boolean;
 };
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 // Not <dialog>.showModal(): jsdom lacks it, and component tests must run there. Instead it is portalled
 // to <body> and every other body child is made inert while it is open.
-export function Sheet({ title, onClose, children, footer }: SheetProps) {
+export function Sheet({ title, onClose, children, footer, fullScreen }: SheetProps) {
   const titleId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -61,7 +63,7 @@ export function Sheet({ title, onClose, children, footer }: SheetProps) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={styles.sheet}
+        className={fullScreen ? `${styles.sheet} ${styles.full}` : styles.sheet}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
       >

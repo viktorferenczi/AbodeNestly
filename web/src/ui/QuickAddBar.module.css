@@ -78,3 +78,16 @@
   font: inherit;
   cursor: pointer;
 }
+
+.scan {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}

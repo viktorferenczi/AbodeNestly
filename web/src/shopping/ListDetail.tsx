@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ListItem } from '@abodenestly/contract';
 import { Link, useParams } from 'react-router';
+import { useApi } from '../core/api/ApiProvider.tsx';
 import { useAuth } from '../core/auth/AuthProvider.tsx';
 import { useHousehold } from '../core/household/HouseholdProvider.tsx';
 import { useSync } from '../sync/SyncEngine.ts';
@@ -14,6 +15,7 @@ import { ItemSheet } from './ItemSheet.tsx';
 import { UNDO_MS } from './Lists.ts';
 import { StorePickerSheet } from './StorePickerSheet.tsx';
 import { createStore, setListStore } from './Stores.ts';
+import { drainLookups } from './Barcode.ts';
 import { QuickAdd } from './QuickAdd.tsx';
 import styles from './ListDetail.module.css';
 
@@ -29,6 +31,21 @@ export function ListDetail() {
   syncRef.current = sync;
   const deps = useMemo(() => ({ onQueued: () => void syncRef.current.kick() }), []);
   const householdId = household?.id;
+  const api = useApi();
+  // SHOP-10: queued barcode lookups resolve when the screen opens, when the network returns and after each sync.
+  useEffect(() => {
+    if (!db || !householdId) return;
+    const drain = () => void drainLookups(db, deps, api, householdId).catch(() => undefined);
+    drain();
+    window.addEventListener('online', drain);
+    const unsubscribe = sync.subscribe(() => {
+      if (sync.getPhase() === 'idle') drain();
+    });
+    return () => {
+      window.removeEventListener('online', drain);
+      unsubscribe();
+    };
+  }, [db, householdId, deps, api, sync]);
   // The row as it was when its sheet opened: the form starts from it, so Save diffs against it, not against a row a pull changed meanwhile.
   const [editing, setEditing] = useState<ListItem | null>(null);
   const [pending, setPending] = useState<{ id: string; name: string }[]>([]);

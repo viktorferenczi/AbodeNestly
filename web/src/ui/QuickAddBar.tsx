@@ -15,11 +15,13 @@ type Props = {
   autoFocus?: boolean;
   /** Shows a Details button that hands over the typed text (opens the item sheet). */
   onDetails?: (text: string) => void;
+  /** Shows a Scan barcode button (SHOP-10); the caller opens the scanner. */
+  onScan?: () => void;
 };
 
 // DESIGN A6 QuickAddBar: field, Add button and an autocomplete listbox above it (ARIA combobox pattern).
-// Mic and barcode buttons arrive with SHOP-14 and SHOP-10.
-export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, placeholder = 'Add an item', autoFocus, onDetails }: Props) {
+// The mic button arrives with SHOP-14; the barcode button is SHOP-10.
+export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, placeholder = 'Add an item', autoFocus, onDetails, onScan }: Props) {
   const listId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(-1);
@@ -100,6 +102,13 @@ export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, pl
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
         />
+        {onScan ? (
+          <button type="button" className={styles.scan} aria-label="Scan barcode" onClick={onScan}>
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M4 7v10M7 7v10M11 7v10M14 7v10M18 7v10M20 7v10" />
+            </svg>
+          </button>
+        ) : null}
         {onDetails ? (
           <button type="button" className={styles.details} onClick={() => onDetails(value)}>
             Details

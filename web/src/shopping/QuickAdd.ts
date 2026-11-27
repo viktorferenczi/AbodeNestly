@@ -49,7 +49,7 @@ export function suggest(history: ListItem[], query: string, opts: { listId: stri
 export async function addItem(
   db: HouseholdDb,
   deps: Partial<MutateDeps>,
-  input: { householdId: string; listId: string; name: string; userId: string | null; quantity?: number | null; unit?: string | null; note?: string | null },
+  input: { householdId: string; listId: string; name: string; userId: string | null; quantity?: number | null; unit?: string | null; note?: string | null; barcode?: string | null },
 ): Promise<string> {
   const id = (deps.uuid ?? (() => crypto.randomUUID()))();
   const now = (deps.now ?? (() => new Date().toISOString()))();
@@ -64,7 +64,8 @@ export async function addItem(
     quantity: input.quantity ?? null,
     unit: input.unit ?? null,
     note: input.note ?? null,
-    barcode: null,
+    // Only set after a lookup returned the product: list_item.barcode has a foreign key to product(barcode).
+    barcode: input.barcode ?? null,
     checked: false,
     checked_at: null,
     checked_by: null,

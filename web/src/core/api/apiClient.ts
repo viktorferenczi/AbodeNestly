@@ -5,6 +5,7 @@ import type {
   Household,
   Invite,
   Member,
+  Product,
   Profile,
   Role,
   SignAttachmentRequest,
@@ -57,6 +58,8 @@ export interface ApiClient {
   makeOwner(householdId: string, userId: string): Promise<ApiResult<null>>;
   /** CORE-11: creates the attachment row and returns the Storage upload URL. 403 `module_disabled` when the entity's module is off. */
   signAttachment(req: SignAttachmentRequest): Promise<ApiResult<SignAttachmentResponse>>;
+  /** SHOP-10: GET /products/{barcode}. 404 and 400 → `not_found`; 502 (Open Food Facts down) → `retryable`; no network → `network`. */
+  getProduct(barcode: string): Promise<ApiResult<Product>>;
 }
 
 /** PUTs the bytes to the signed `upload_url` (plain fetch, no bearer: the URL carries the token). */
@@ -116,6 +119,15 @@ export function toSyncFailure(status: number, body: ApiError | null): ApiFailure
   if (status === 503 || code === 'retryable') return { code: 'retryable' };
   if (code === 'forbidden' || status === 403) return { code: 'forbidden' };
   if (code === 'validation' || status === 400) return { code: 'validation' };
+  return { code: 'unknown' };
+}
+
+/** Maps a /products/{barcode} error response to a failure; exported for the table test. */
+export function toProductFailure(status: number, body: ApiError | null): ApiFailure {
+  const code = body?.error?.code;
+  if (code === 'not_found' || status === 404) return { code: 'not_found' };
+  if (code === 'invalid_barcode' || status === 400) return { code: 'not_found' };
+  if (code === 'upstream_unavailable' || status === 502) return { code: 'retryable' };
   return { code: 'unknown' };
 }
 
@@ -343,6 +355,9 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
     },
     signAttachment(req) {
       return call<SignAttachmentResponse>('POST', '/attachments/sign', req, (s) => s === 200 || s === 201, toSignFailure);
+    },
+    getProduct(barcode) {
+      return call<Product>('GET', `/products/${encodeURIComponent(barcode)}`, undefined, (s) => s === 200, toProductFailure);
     },
     acceptInvite(code) {
       return call<{ household_id: string }>(

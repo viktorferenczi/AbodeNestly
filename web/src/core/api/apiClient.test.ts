@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toAcceptFailure, toRemoveFailure, toSignFailure, toSyncFailure } from './apiClient.ts';
+import { toAcceptFailure, toRemoveFailure, toProductFailure, toSignFailure, toSyncFailure } from './apiClient.ts';
 
 const body = (code: string) => ({ error: { code, message: 'x' } });
 
@@ -62,5 +62,19 @@ describe('SHOP-08: toSyncFailure', () => {
     [502, null, 'unknown'],
   ])('%s %j -> %s', (status, json, code) => {
     expect(toSyncFailure(status, json)).toEqual({ code });
+  });
+});
+
+describe('SHOP-10: toProductFailure', () => {
+  it.each([
+    [404, body('not_found'), 'not_found'],
+    [400, body('invalid_barcode'), 'not_found'],
+    [502, body('upstream_unavailable'), 'retryable'],
+    [502, null, 'retryable'],
+    [404, null, 'not_found'],
+    [401, body('unauthorized'), 'unknown'],
+    [500, body('internal'), 'unknown'],
+  ])('%i %j → %s', (status, json, code) => {
+    expect(toProductFailure(status, json)).toEqual({ code });
   });
 });
