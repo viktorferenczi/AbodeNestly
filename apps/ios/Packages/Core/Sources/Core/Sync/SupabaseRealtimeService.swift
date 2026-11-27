@@ -26,9 +26,9 @@ public final class SupabaseRealtimeService: RealtimeSubscribing {
         let id = householdId.uuidString.lowercased()
         let client = client
         let turn = turn
-        // One supervisor per subscription: join, stay while joined, and when the join fails or the channel leaves
-        // `.subscribed` (socket drop, `phx_close`), remove that channel and open a new one after a pause. A removed
-        // channel is never joined again. A failure is not an error here (AC3).
+        // One supervisor per subscription: join, stay joined through the client's own rejoins, and when a join fails
+        // or the channel is closed for good, remove that channel and open a new one after a pause. A removed channel
+        // is never joined again. A failure is not an error here (AC3).
         let supervisor = Task {
             // The client hands back the channel for a topic until `removeChannel` has finished, so wait until the
             // previous subscription (household switch, background then foreground) has removed its channel.
@@ -45,9 +45,17 @@ public final class SupabaseRealtimeService: RealtimeSubscribing {
                     try await channel.subscribeWithError()
                     // Catch up on whatever happened while the channel was not joined.
                     onChange()
-                    for await status in channel.statusChange where status == .unsubscribing || status == .unsubscribed { break }
+                    // A socket reconnect moves this channel to `.unsubscribed` and the client rejoins the same instance,
+                    // so wait for that rejoin rather than replacing the channel. `subscribeWithError()` throws only when
+                    // the instance was removed (server close) or the rejoin failed; then the channel is replaced below.
+                    while !Task.isCancelled {
+                        for await status in channel.statusChange where status == .unsubscribed { break }
+                        if Task.isCancelled { break }
+                        try await channel.subscribeWithError()
+                        onChange()
+                    }
                 } catch {
-                    // Offline, server down, or cancelled: fall through to teardown.
+                    // Join failed (offline, server down), the channel was closed for good, or cancelled: tear down.
                 }
                 listeners.forEach { $0.cancel() }
                 // Unstructured, so a cancelled supervisor does not cut the removal short.
