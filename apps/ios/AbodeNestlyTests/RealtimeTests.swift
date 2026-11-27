@@ -46,7 +46,7 @@ struct RealtimeTests {
     }
 
     @Test("SHOP-09: AC4 with Shopping off only the five core tables are subscribed")
-    func shoppingOff() async {
+    func shoppingOffSubscribesCoreOnly() async {
         let realtime = FakeRealtime()
         let task = Task { await HouseholdRealtime.run(realtime: realtime, householdId: household, modules: shoppingOff, sync: FakeSync()) }
         await settle { realtime.active == 1 }
