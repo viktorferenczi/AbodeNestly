@@ -132,7 +132,12 @@ struct BarcodeStoreTests {
     func eviction() {
         defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         // 8-digit codes are integer-like; an object would order them numerically, not by insertion.
-        let codes = (0..<BarcodeStore.namesCap + 5).map { $0 % 2 == 0 ? String(format: "%08ld", 90_000_000 - $0) : String(format: "%013ld", 3_000_000_000_000 + $0) }
+        var codes: [String] = []
+        for i in 0..<(BarcodeStore.namesCap + 5) {
+            let short = String(90_000_000 - i)
+            let long = String(3_000_000_000_000 + i)
+            codes.append(i.isMultiple(of: 2) ? short : long)
+        }
         for (index, code) in codes.enumerated() { store.cacheName(code: code, name: "Item \(index)") }
         let kept = store.names().map(\.code)
         #expect(kept == Array(codes.suffix(BarcodeStore.namesCap)))
