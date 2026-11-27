@@ -183,11 +183,11 @@ describe('SHOP-10: barcode scanner', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect((await stored()).items[0]).toMatchObject({ name: 'Oat bar', barcode: null });
-    expect(JSON.parse(localStorage.getItem('abodenestly.barcodeNames')!)).toEqual({ '12345678': 'Oat bar' });
+    expect(JSON.parse(localStorage.getItem('abodenestly.barcodeNames')!)).toEqual([{ code: '12345678', name: 'Oat bar' }]);
   });
 
   it('not-found prefills a name typed before, and Add is off while blank', async () => {
-    localStorage.setItem('abodenestly.barcodeNames', JSON.stringify({ '12345678': 'Oat bar' }));
+    localStorage.setItem('abodenestly.barcodeNames', JSON.stringify([{ code: '12345678', name: 'Oat bar' }]));
     await openScanner();
     device.emit('12345678');
     const field = (await screen.findByRole('textbox', { name: 'Name' })) as HTMLInputElement;
@@ -216,6 +216,44 @@ describe('SHOP-10: barcode scanner', () => {
     await openScanner(api);
     device.emit('4006381333931');
     expect(await screen.findByText(/We'll look it up when you're back online/)).toBeTruthy();
+  });
+
+  it('an unexpected lookup failure adds nothing, offers Retry and manual name entry', async () => {
+    const api = new FakeApiClient();
+    api.getProductResult = { ok: false, error: { code: 'unknown' } };
+    await openScanner(api);
+    device.emit('4006381333931');
+    expect(await screen.findByText("Couldn't look that up. Try again.")).toBeTruthy();
+    expect((await stored()).items).toHaveLength(0);
+    expect(localStorage.getItem('abodenestly.barcodeLookups')).toBeNull();
+    api.getProductResult = { ok: true, value: nutella };
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('heading', { name: 'Nutella' })).toBeTruthy();
+  });
+
+  it('the failed-lookup state still lets a name be typed', async () => {
+    const api = new FakeApiClient();
+    api.getProductResult = { ok: false, error: { code: 'unknown' } };
+    await openScanner(api);
+    device.emit('4006381333931');
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Pasta' } });
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect((await stored()).items[0]).toMatchObject({ name: 'Pasta', barcode: null });
+  });
+
+  it.each(['NotFoundError', 'NotReadableError', 'OverconstrainedError'])('%s shows camera-unavailable with manual entry', async (name) => {
+    device.failWith = name;
+    await openScanner();
+    expect(await screen.findByText("Can't use the camera")).toBeTruthy();
+    expect(screen.getByText(/Another app may be using it/)).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Barcode' })).toBeTruthy();
+  });
+
+  it('NotSupportedError shows the unsupported layout', async () => {
+    device.failWith = 'NotSupportedError';
+    await openScanner();
+    expect(await screen.findByText("Scanning isn't available in this browser")).toBeTruthy();
   });
 
   it('AC5: permission-denied explains and manual entry still works', async () => {

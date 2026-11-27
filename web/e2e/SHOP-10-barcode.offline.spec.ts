@@ -4,7 +4,7 @@ import { outboxCount } from './helpers/outbox.ts';
 
 const CODE = '3017620422003';
 
-// TESTING §6. Headless Chromium has no camera or BarcodeDetector, so the scanner opens its manual-entry layout.
+// TESTING §6. Headless Chromium has BarcodeDetector but no camera, so getUserMedia fails and the scanner shows its manual code field.
 test.describe('SHOP-10: barcode scan to add, offline', () => {
   let user: E2eUser;
   let householdId: string;
@@ -38,6 +38,12 @@ test.describe('SHOP-10: barcode scan to add, offline', () => {
     await page.goto(`/shopping/${listId}`);
     await expect(page.getByRole('combobox', { name: 'Add an item' })).toBeVisible();
 
+    const pushes: string[] = [];
+    await page.route('**/sync', (route) => {
+      if (route.request().method() === 'POST') pushes.push(route.request().postData() ?? '');
+      return route.continue();
+    });
+
     await context.setOffline(true);
     await page.getByRole('button', { name: 'Scan barcode' }).click();
     await page.getByLabel('Barcode').fill(CODE);
@@ -57,6 +63,13 @@ test.describe('SHOP-10: barcode scan to add, offline', () => {
     );
     await context.setOffline(false);
     await expect(page.getByRole('list', { name: 'Items' }).getByText('Nutella')).toBeVisible();
+    await expect
+      .poll(() =>
+        pushes
+          .flatMap((p) => (JSON.parse(p) as { mutations: { table: string; op: string; data: { name?: string; barcode?: string } }[] }).mutations)
+          .some((m) => m.table === 'list_item' && m.op === 'upsert' && m.data.name === 'Nutella' && m.data.barcode === CODE),
+      )
+      .toBe(true);
     await expect.poll(() => outboxCount(page, householdId)).toBe(0);
   });
 });

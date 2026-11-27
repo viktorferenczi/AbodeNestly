@@ -14,7 +14,9 @@ type Phase =
   | { kind: 'found'; product: Product }
   | { kind: 'not-found'; code: string }
   | { kind: 'queued'; code: string }
+  | { kind: 'lookup-failed'; code: string }
   | { kind: 'permission-denied' }
+  | { kind: 'camera-unavailable' }
   | { kind: 'unsupported' };
 
 type Props = {
@@ -58,7 +60,10 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
     try {
       const result = await lookup(api, raw, navigator.onLine);
       if (result.kind === 'found') setPhase({ kind: 'found', product: result.product });
-      else if (result.kind === 'not-found') {
+      else if (result.kind === 'error') {
+        setName(cachedName(raw) ?? '');
+        setPhase({ kind: 'lookup-failed', code: raw });
+      } else if (result.kind === 'not-found') {
         setName(cachedName(raw) ?? '');
         setPhase({ kind: 'not-found', code: raw });
       } else {
@@ -91,8 +96,10 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        const denied = e instanceof Error && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
-        setPhase({ kind: denied ? 'permission-denied' : 'unsupported' });
+        const n = e instanceof Error ? e.name : '';
+        if (n === 'NotAllowedError' || n === 'SecurityError') setPhase({ kind: 'permission-denied' });
+        else if (n === 'NotSupportedError') setPhase({ kind: 'unsupported' });
+        else setPhase({ kind: 'camera-unavailable' }); // NotFound, NotReadable, Overconstrained and the like
       });
     return () => {
       cancelled = true;
@@ -260,15 +267,60 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
         </div>
       );
       break;
+    case 'lookup-failed': {
+      const failedCode = phase.code;
+      const typed = name.trim();
+      body = (
+        <form
+          className={styles.card}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (typed) void run(() => addNamed(db, deps, input, failedCode, typed), onClose);
+          }}
+        >
+          <h3 className={styles.name}>Couldn't look that up. Try again.</h3>
+          <p className={styles.brand}>{failedCode}</p>
+          <label className={styles.label}>
+            Name
+            <input className={styles.field} ref={focusRef} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={() => {
+                handled.current = false;
+                void handle(failedCode);
+              }}
+            >
+              Retry
+            </button>
+            <button type="submit" className={styles.primary} disabled={!typed}>
+              Add
+            </button>
+          </div>
+        </form>
+      );
+      break;
+    }
     case 'permission-denied':
+    case 'camera-unavailable':
     case 'unsupported':
       body = (
         <>
-          <h3 className={styles.name}>{phase.kind === 'permission-denied' ? 'Camera access is off' : "Scanning isn't available in this browser"}</h3>
+          <h3 className={styles.name}>
+            {phase.kind === 'permission-denied'
+              ? 'Camera access is off'
+              : phase.kind === 'camera-unavailable'
+                ? "Can't use the camera"
+                : "Scanning isn't available in this browser"}
+          </h3>
           <p className={styles.hint}>
             {phase.kind === 'permission-denied'
               ? "Allow the camera for this site in your browser's settings, then open the scanner again. You can still enter the code."
-              : 'You can still enter the code printed under the barcode.'}
+              : phase.kind === 'camera-unavailable'
+                ? "Another app may be using it, or there's no camera. You can still enter the code."
+                : 'You can still enter the code printed under the barcode.'}
           </p>
           {manualForm}
         </>

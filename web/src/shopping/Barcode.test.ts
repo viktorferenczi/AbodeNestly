@@ -42,6 +42,25 @@ describe('SHOP-10: manual-name cache', () => {
     expect(cachedName(String(10000000 + NAMES_CAP + 4))).toBe(`n${NAMES_CAP + 4}`);
   });
 
+  it('evicts by insertion order with mixed 8- and 13-digit codes', () => {
+    // 8-digit codes are integer-like object keys; an object would order them before the 13-digit ones.
+    for (let i = 0; i < NAMES_CAP; i++) cacheName(i % 2 ? String(20000000 + i) : String(4000000000000 + i), `n${i}`);
+    cacheName('30000000', 'new');
+    expect(cachedName('4000000000000')).toBeNull(); // the oldest, a 13-digit code
+    expect(cachedName('20000001')).toBe('n1'); // an older 8-digit code survives
+    expect(cachedName('30000000')).toBe('new');
+    cacheName('20000001', 'again'); // re-saving moves it to the newest
+    cacheName('30000001', 'x');
+    expect(cachedName('20000001')).toBe('again');
+  });
+
+  it('ignores the old object format', () => {
+    localStorage.setItem('abodenestly.barcodeNames', JSON.stringify({ '12345678': 'Old' }));
+    expect(cachedName('12345678')).toBeNull();
+    cacheName('12345678', 'New');
+    expect(cachedName('12345678')).toBe('New');
+  });
+
   it('survives corrupt storage', () => {
     localStorage.setItem('abodenestly.barcodeNames', '{oops');
     expect(cachedName('12345678')).toBeNull();
@@ -89,6 +108,8 @@ describe('SHOP-10: lookup', () => {
     expect(await lookup(api, '12345678', true)).toEqual({ kind: 'offline' });
     api.getProductResult = { ok: false, error: { code: 'retryable' } };
     expect(await lookup(api, '12345678', true)).toEqual({ kind: 'offline' });
+    api.getProductResult = { ok: false, error: { code: 'unknown' } };
+    expect(await lookup(api, '12345678', true)).toEqual({ kind: 'error' });
   });
 });
 
@@ -147,6 +168,15 @@ describe('SHOP-10: drainLookups', () => {
       await drainLookups(db, {}, api, 'h1');
       expect(pendingLookups()).toHaveLength(1);
     }
+    await db.close();
+  });
+
+  it('an unknown failure (401, 500) drops the entry', async () => {
+    const { db, id, api } = await setup();
+    api.getProductResult = { ok: false, error: { code: 'unknown' } };
+    await drainLookups(db, {}, api, 'h1');
+    expect(pendingLookups()).toEqual([]);
+    expect(await db.list_item.get(id)).toMatchObject({ name: '3017620422003' });
     await db.close();
   });
 

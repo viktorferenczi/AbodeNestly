@@ -34,16 +34,22 @@ function writeJson(key: string, value: unknown): void {
 
 // ---------- names typed for codes the API does not know (DESIGN C7 not-found) ----------
 
-export const cachedName = (code: string): string | null => readJson<Record<string, string>>(NAMES_KEY, {})[code] ?? null;
+type NameEntry = { code: string; name: string };
+
+// An array, not an object: 8-digit codes are integer-like keys, which an object orders numerically, not by insertion.
+// The old object format fails the array check and is ignored.
+function readNames(): NameEntry[] {
+  const raw = readJson<unknown>(NAMES_KEY, []);
+  return Array.isArray(raw) ? (raw as NameEntry[]).filter((e) => typeof e?.code === 'string' && typeof e?.name === 'string') : [];
+}
+
+export const cachedName = (code: string): string | null => readNames().find((e) => e.code === code)?.name ?? null;
 
 /** Remembers `code → name` on this device; the oldest entries beyond NAMES_CAP are dropped. */
 export function cacheName(code: string, name: string): void {
-  const map = readJson<Record<string, string>>(NAMES_KEY, {});
-  delete map[code]; // re-insert so this code becomes the newest key
-  map[code] = name;
-  const keys = Object.keys(map);
-  for (const old of keys.slice(0, Math.max(0, keys.length - NAMES_CAP))) delete map[old];
-  writeJson(NAMES_KEY, map);
+  const list = readNames().filter((e) => e.code !== code);
+  list.push({ code, name });
+  writeJson(NAMES_KEY, list.slice(-NAMES_CAP));
 }
 
 // ---------- adding ----------
@@ -75,14 +81,17 @@ export async function addOffline(db: HouseholdDb, deps: Partial<MutateDeps>, inp
 
 // ---------- lookup ----------
 
-export type LookupResult = { kind: 'found'; product: Product } | { kind: 'not-found' } | { kind: 'offline' };
+export type LookupResult = { kind: 'found'; product: Product } | { kind: 'not-found' } | { kind: 'offline' } | { kind: 'error' };
 
-/** 404 and 400 mean the API has no such product; anything else (no network, 502, 401) is treated as offline. */
+/** Only a missing network or a 502 can pass by itself, so only those count as offline; 401 or 500 are `error`. */
+export const isTransient = (code: string): boolean => code === 'network' || code === 'retryable';
+
 export async function lookup(api: ApiClient, code: string, online: boolean): Promise<LookupResult> {
   if (!online) return { kind: 'offline' };
   const res = await api.getProduct(code);
   if (res.ok) return { kind: 'found', product: res.value };
-  return res.error.code === 'not_found' ? { kind: 'not-found' } : { kind: 'offline' };
+  if (res.error.code === 'not_found') return { kind: 'not-found' };
+  return isTransient(res.error.code) ? { kind: 'offline' } : { kind: 'error' };
 }
 
 // ---------- queued lookups ----------
@@ -92,7 +101,7 @@ let draining = false;
 /**
  * Resolves the household's queued lookups. A product renames the item and sets its barcode, but only while the item
  * still exists and is still named after the code, so a rename by the person wins. A 404 drops the entry; a network
- * or 502 failure keeps it for the next drain. Entries of other households wait until that household is open.
+ * or 502 failure keeps it for the next drain; any other failure drops it. Entries of other households wait until that household is open.
  */
 export async function drainLookups(db: HouseholdDb, deps: Partial<MutateDeps>, api: ApiClient, householdId: string): Promise<void> {
   if (draining || !navigator.onLine) return;
@@ -102,7 +111,8 @@ export async function drainLookups(db: HouseholdDb, deps: Partial<MutateDeps>, a
   try {
     for (const entry of mine) {
       const res = await api.getProduct(entry.code);
-      if (!res.ok && res.error.code !== 'not_found') continue; // keep it
+      // Keep the entry only for failures that can pass; anything else would be retried forever.
+      if (!res.ok && isTransient(res.error.code)) continue;
       if (res.ok) {
         const row = await db.list_item.get(entry.itemId);
         if (row && row.deleted_at == null && row.name === entry.code) {
