@@ -12,6 +12,7 @@ import com.abodenestly.sync.SyncPushResult
 import com.abodenestly.sync.SyncResult
 import com.abodenestly.sync.SyncTransport
 import com.abodenestly.sync.runHouseholdRealtime
+import com.abodenestly.sync.upsert
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
