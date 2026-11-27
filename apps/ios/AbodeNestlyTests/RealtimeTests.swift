@@ -51,7 +51,7 @@ struct RealtimeTests {
         let task = Task { await HouseholdRealtime.run(realtime: realtime, householdId: household, modules: shoppingOff, sync: FakeSync()) }
         await settle { realtime.active == 1 }
         #expect(realtime.subscriptions.first?.tables == ["location", "invite", "activity", "attachment", "notification_pref"])
-        #expect(RealtimeTables.tables(for: shoppingOff).allSatisfy { !RealtimeTables.shopping.contains($0) })
+        #expect(RealtimeTables.tables(for: shoppingOff).allSatisfy({ !RealtimeTables.shopping.contains($0) }))
         task.cancel()
         await task.value
     }
