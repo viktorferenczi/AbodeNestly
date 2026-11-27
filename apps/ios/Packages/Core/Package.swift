@@ -26,6 +26,7 @@ let package = Package(
                 .product(name: "NestlyUI", package: "NestlyUI"),
                 "Sync",
                 .product(name: "Auth", package: "supabase-swift"),
+                .product(name: "Realtime", package: "supabase-swift"),
             ],
             resources: [.process("Resources")]
         ),
