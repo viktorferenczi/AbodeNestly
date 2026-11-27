@@ -76,11 +76,12 @@ public enum QuickAdd {
         return ranked.prefix(limit).map { Suggestion(key: $0.key, label: $0.label) }
     }
 
-    /// The full `list_item` row for a manual add. The server derives `name_key` itself; the local value only serves
+    /// The full `list_item` row for a manual add. `barcode` is set only for a product a lookup found (SHOP-10): the
+    /// column has a foreign key to `product`. The server derives `name_key` itself; the local value only serves
     /// matching until the next pull replaces the row, and `upsert` never queues it.
     public static func row(
         id: UUID, householdId: UUID, listId: UUID, name: String, userId: UUID?, now: String,
-        quantity: Double? = nil, unit: String? = nil, note: String? = nil
+        quantity: Double? = nil, unit: String? = nil, note: String? = nil, barcode: String? = nil
     ) -> [String: JSONValue] {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return [
@@ -88,7 +89,7 @@ public enum QuickAdd {
             "list_id": .string(listId.uuidString.lowercased()), "name": .string(trimmed),
             "name_key": .string(NameKey.make(trimmed)),
             "quantity": quantity.map { .double($0) } ?? .null, "unit": unit.map { .string($0) } ?? .null,
-            "note": note.map { .string($0) } ?? .null, "barcode": .null,
+            "note": note.map { .string($0) } ?? .null, "barcode": barcode.map { .string($0) } ?? .null,
             "checked": .bool(false), "checked_at": .null, "checked_by": .null, "manual_position": .null,
             "source": .string("manual"), "pantry_item_id": .null, "maint_task_id": .null,
             "created_by": userId.map { .string($0.uuidString.lowercased()) } ?? .null,

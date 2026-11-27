@@ -12,7 +12,10 @@ public struct ListDetailView: View {
     private let fallbackTitle: String
     private let isOnline: Bool
     private let onManageStores: () -> Void
+    private let makeScanner: (@MainActor () -> BarcodeScannerModel)?
     @State private var checkedOpen: Bool
+    /// The open scanner (SHOP-10), built when the button is tapped so each scan starts from a fresh state.
+    @State private var scanner: BarcodeScannerModel?
     @State private var showStorePicker = false
     /// "Manage stores" pushes once the picker has finished dismissing; a push during the dismissal is dropped.
     @State private var manageAfterDismiss = false
@@ -20,11 +23,14 @@ public struct ListDetailView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     /// `checkedExpanded` starts the Checked group open (tests; the person opens it by tapping its header).
+    /// `makeScanner` shows the "Scan barcode" button in the quick-add bar (SHOP-10); without it there is none.
     public init(
-        model: ListDetailModel, title: String, isOnline: Bool, checkedExpanded: Bool = false, onManageStores: @escaping () -> Void = {}
+        model: ListDetailModel, title: String, isOnline: Bool, checkedExpanded: Bool = false, onManageStores: @escaping () -> Void = {},
+        makeScanner: (@MainActor () -> BarcodeScannerModel)? = nil
     ) {
         self.model = model
         self.onManageStores = onManageStores
+        self.makeScanner = makeScanner
         fallbackTitle = title
         self.isOnline = isOnline
         _checkedOpen = State(initialValue: checkedExpanded)
@@ -80,6 +86,11 @@ public struct ListDetailView: View {
                 },
                 onClose: { showStorePicker = false }
             )
+        }
+        .fullScreenCover(isPresented: Binding(get: { scanner != nil }, set: { if !$0 { scanner = nil } })) {
+            if let scanner {
+                BarcodeScannerView(model: scanner, onClose: { self.scanner = nil })
+            }
         }
         .toolbar {
             // Only item for now (Share, Template and Archive land later), and only when there is something to clear.
@@ -166,7 +177,8 @@ public struct ListDetailView: View {
                     fieldFocused = true
                 }
             },
-            onDetails: { model.openNew(prefill: $0) }
+            onDetails: { model.openNew(prefill: $0) },
+            onScan: makeScanner.map { make in { scanner = make() } }
         )
     }
 

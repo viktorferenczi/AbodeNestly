@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// DESIGN A6 QuickAddBar: a text field with an Add button and the autocomplete lines above it. Presentational, so
-/// pantry can reuse it. No mic or barcode button until SHOP-14 and SHOP-10.
+/// pantry can reuse it. The barcode button shows when `onScan` is given (SHOP-10); no mic button until SHOP-14.
 public struct QuickAddBar: View {
     public struct Suggestion: Identifiable, Equatable, Sendable {
         public var id: String
@@ -20,13 +20,17 @@ public struct QuickAddBar: View {
     private let onPick: (Suggestion) -> Void
     private let onSubmit: () -> Void
     private let onDetails: ((String) -> Void)?
+    private let onScan: (() -> Void)?
 
-    /// `onDetails` shows a "Details" button that hands over the typed text (SHOP-03: opens the item sheet).
+    /// `onDetails` shows a "Details" button that hands over the typed text (SHOP-03: opens the item sheet). `onScan`
+    /// shows a "Scan barcode" button (SHOP-10: opens the scanner).
     public init(
         text: Binding<String>, suggestions: [Suggestion], placeholder: String, focused: FocusState<Bool>.Binding,
-        onPick: @escaping (Suggestion) -> Void, onSubmit: @escaping () -> Void, onDetails: ((String) -> Void)? = nil
+        onPick: @escaping (Suggestion) -> Void, onSubmit: @escaping () -> Void, onDetails: ((String) -> Void)? = nil,
+        onScan: (() -> Void)? = nil
     ) {
         self.onDetails = onDetails
+        self.onScan = onScan
         _text = text
         self.suggestions = suggestions
         self.placeholder = placeholder
@@ -69,6 +73,13 @@ public struct QuickAddBar: View {
                     .background(Tokens.surface2, in: RoundedRectangle(cornerRadius: Tokens.cardRadius))
                     .accessibilityLabel("Add item")
                     .accessibilityIdentifier("quickadd.field")
+                if let onScan {
+                    Button(action: onScan) { Image(systemName: "barcode.viewfinder") }
+                        .tint(Tokens.accent)
+                        .frame(minWidth: Tokens.minTouchTarget, minHeight: Tokens.minTouchTarget)
+                        .accessibilityLabel("Scan barcode")
+                        .accessibilityIdentifier("quickadd.scan")
+                }
                 if let onDetails {
                     Button { onDetails(text) } label: { Image(systemName: "slider.horizontal.3") }
                         .tint(Tokens.accent)

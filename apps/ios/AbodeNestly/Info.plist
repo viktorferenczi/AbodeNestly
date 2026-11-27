@@ -16,6 +16,8 @@
 	<array>
 		<string>com.abodenestly.sync</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>AbodeNestly uses the camera to scan product barcodes.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

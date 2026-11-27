@@ -316,6 +316,32 @@ public final class HttpApiService: ApiService {
         }
     }
 
+    public func product(barcode: String) async -> ProductLookupResult {
+        // A code is user-typed text; `/` and `?` must not change the route.
+        let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
+        guard let encoded = barcode.addingPercentEncoding(withAllowedCharacters: allowed) else { return .notFound }
+        do {
+            let (data, status) = try await perform(
+                url: try apiURL("products/\(encoded)"), method: "GET", headers: ["Accept": "application/json"]
+            )
+            return Self.productResult(status: status, code: Self.errorCode(in: data), data: data)
+        } catch {
+            return Self.failure(for: error) == .network ? .offline : .failed
+        }
+    }
+
+    /// The API's own error code wins; with no parseable body the status decides. Only a 502 can pass by itself.
+    static func productResult(status: Int, code: String?, data: Data) -> ProductLookupResult {
+        if status == 200 {
+            guard let product = try? JSONDecoder().decode(Product.self, from: data) else { return .failed }
+            return .found(product)
+        }
+        if code == "not_found" || status == 404 { return .notFound }
+        if code == "invalid_barcode" || status == 400 { return .notFound }
+        if code == "upstream_unavailable" || status == 502 { return .offline }
+        return .failed
+    }
+
     /// The API's own error code wins; with no parseable body the status decides.
     static func signFailure(status: Int, code: String?) -> ApiFailure {
         switch code {

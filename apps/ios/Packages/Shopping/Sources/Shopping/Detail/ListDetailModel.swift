@@ -114,6 +114,38 @@ public final class ListDetailModel {
         return true
     }
 
+    /// SHOP-10: adds a scanned or looked-up item and returns its id (`nil` when it could not be stored). Unlike `create`
+    /// it leaves what is typed in the quick-add field alone. `barcode` only for a product a lookup found.
+    public func addScanned(name: String, barcode: String?) async -> UUID? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let id = makeId()
+        let stamp = now().formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true, timeZone: .gmt))
+        let row = QuickAdd.row(
+            id: id, householdId: householdId, listId: listId, name: trimmed, userId: userId, now: stamp, barcode: barcode
+        )
+        do {
+            try await database.upsert(table: "list_item", row: row, now: now())
+            writeFailed = false
+        } catch {
+            writeFailed = true
+            return nil
+        }
+        await kick()
+        return id
+    }
+
+    /// The scanner for this list (DESIGN C7): its adds go through `addScanned`.
+    public func makeScanner(
+        device: any ScannerDevice, lookup: @escaping @Sendable (String) async -> ProductLookupResult,
+        isOnline: @escaping @MainActor () -> Bool, store: BarcodeStore = BarcodeStore()
+    ) -> BarcodeScannerModel {
+        BarcodeScannerModel(
+            device: device, householdId: householdId, lookup: lookup, isOnline: isOnline, store: store,
+            add: { [weak self] name, barcode in await self?.addScanned(name: name, barcode: barcode) }
+        )
+    }
+
     /// Writes only the changed columns; nothing at all when nothing changed (AC3, AC4).
     @discardableResult
     public func save(_ item: ListItemRecord, _ fields: ItemFields) async -> Bool {

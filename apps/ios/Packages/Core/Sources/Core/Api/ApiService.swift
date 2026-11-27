@@ -1,5 +1,6 @@
 import Contract
 import Foundation
+import Sync
 
 /// Why an API call failed, as the Welcome screen needs to tell the person (mirrors web `ApiFailure`).
 public enum ApiFailure: Error, Sendable, Equatable {
@@ -107,4 +108,7 @@ public protocol ApiService: Sendable {
     ) async -> Result<SignedUpload, ApiFailure>
     /// PUTs the bytes to a signed `uploadURL` (no bearer: the URL carries the token). `.network` when it cannot be reached.
     func upload(to url: URL, data: Data, mime: String) async -> Result<Void, ApiFailure>
+    /// `GET /products/{barcode}` (SHOP-10). 404 and 400 → `.notFound`; no network or 502 → `.offline`; any other
+    /// failure → `.failed` (mirrors web `toProductFailure`).
+    func product(barcode: String) async -> ProductLookupResult
 }
