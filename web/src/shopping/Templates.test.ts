@@ -27,6 +27,19 @@ beforeEach(async () => {
 });
 
 describe('SHOP-11: addAllToList', () => {
+  it('keeps the template order on the target when the new ids sort the other way', async () => {
+    const db = await setup([item('1', 't', { name: 'Milk' }), item('22', 't', { name: 'Eggs' }), item('333', 't', { name: 'Bread' })]);
+    // Descending ids (row and mutation ids alike), so key order is the reverse of insertion order.
+    let next = 1000;
+    await addAllToList(db, { uuid: () => `id-${next--}`, now: () => '2026-05-05T00:00:00.000Z' }, input);
+    const copies = await db.list_item.where('list_id').equals('g').toArray();
+    // C2 sorts unchecked items oldest first, so each copy is one millisecond after the one before it.
+    const shown = [...copies].sort((a, b) => a.created_at.localeCompare(b.created_at)).map((c) => c.name);
+    expect(shown).toEqual(['Milk', 'Eggs', 'Bread']);
+    expect(copies.find((c) => c.name === 'Milk')?.created_at).toBe('2026-05-05T00:00:00.000Z');
+    expect(copies.find((c) => c.name === 'Bread')?.created_at).toBe('2026-05-05T00:00:00.002Z');
+  });
+
   it('AC2 copies each template item as a fresh unchecked row and queues one upsert per item, none for the template', async () => {
     const db = await setup([
       item('1', 't', { name: 'Milk', quantity: 2, unit: 'l', note: 'lactose free', barcode: null }),

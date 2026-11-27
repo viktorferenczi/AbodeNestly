@@ -20,6 +20,7 @@ export async function addAllToList(
 ): Promise<number> {
   const uuid = deps.uuid ?? (() => crypto.randomUUID());
   const now = (deps.now ?? (() => new Date().toISOString()))();
+  const start = Date.parse(now);
   // onQueued is held back until the whole copy has committed, so a rolled-back copy never kicks the sync.
   const inner = { ...deps, onQueued: undefined };
   const count = await db.transaction('rw', db.list_item, db.outbox, async () => {
@@ -30,7 +31,10 @@ export async function addAllToList(
       ...live.filter((i) => !i.checked).sort(byCreated),
       ...live.filter((i) => i.checked).sort((a, b) => (b.checked_at ?? '').localeCompare(a.checked_at ?? '')),
     ];
-    for (const src of ordered) {
+    for (const [index, src] of ordered.entries()) {
+      // C2 sorts unchecked items oldest first; one millisecond apart keeps the template's order locally. created_at is
+      // server-owned, so the server's single push transaction gives them one timestamp again after the next pull.
+      const createdAt = new Date(start + index).toISOString();
       const row: ListItem = {
         id: uuid(),
         household_id: input.householdId,
@@ -50,8 +54,8 @@ export async function addAllToList(
         maint_task_id: null,
         created_by: input.userId,
         deleted_at: null,
-        created_at: now,
-        updated_at: now,
+        created_at: createdAt,
+        updated_at: createdAt,
         sync_seq: 0,
       };
       await mutate(db, { ...inner, uuid }).upsert('list_item', row);

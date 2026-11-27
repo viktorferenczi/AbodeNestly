@@ -59,7 +59,9 @@ test.describe('SHOP-11: template lists, offline', () => {
     await expect(page.getByText('Added 2 items to Groceries')).toBeVisible();
     await expect.poll(() => outboxCount(page, householdId)).toBe(5);
 
-    await page.goto(`/shopping/${listId}`);
+    // Stay in the SPA: an offline page.goto is a new document request and fails (there is no service worker).
+    await page.getByRole('link', { name: 'Shopping' }).first().click();
+    await page.getByRole('button', { name: /^Groceries/ }).first().click();
     const rows = page.getByRole('list', { name: 'Items' });
     await expect(rows.getByText('Milk')).toBeVisible();
     await expect(rows.getByText('Bread')).toBeVisible();
