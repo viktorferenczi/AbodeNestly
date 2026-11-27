@@ -77,6 +77,19 @@ extension HouseholdDatabase {
         }
     }
 
+    /// The stored name and `deleted_at` of one item (SHOP-10: a queued barcode lookup renames it only while it still bears
+    /// the code and is not deleted). `nil` when there is no such row.
+    public func listItemIdentity(id: UUID) throws -> (name: String, deletedAt: String?)? {
+        guard let pool else { throw HouseholdDatabaseError.notOpen }
+        return try pool.read { db in
+            try Row.fetchOne(db, sql: "SELECT name, deleted_at FROM list_item WHERE id = ?", arguments: [id.uuidString.lowercased()])
+                .map { row in
+                    let name: String? = row["name"]
+                    return (name ?? "", row["deleted_at"])
+                }
+        }
+    }
+
     /// One list with its store name, its live items and the household's item history, re-emitted whenever any of them
     /// changes. Finishes at once when the household is not open.
     public func observeListDetail(householdId: UUID, listId: UUID) -> AsyncStream<ListDetailSnapshot> {

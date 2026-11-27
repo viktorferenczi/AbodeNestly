@@ -199,7 +199,13 @@ private struct SignedInView: View {
 
     private func kickSync() {
         let sync = environment.sync
-        Task { await sync.kick() }
+        let env = environment
+        // SHOP-10: queued barcode lookups are drained on household open, on reconnect and after each sync run.
+        let household = session.household?.moduleShopping == true ? session.currentHouseholdId : nil
+        Task {
+            await sync.kick()
+            if let household { await drainBarcodeLookups(environment: env, householdId: household) }
+        }
     }
 
     /// Flags search filters by, from the cache when the household is unknown (offline `.home`); `nil` hides the magnifier.
@@ -483,15 +489,38 @@ private struct ListDetailScreen: View {
         let sync = environment.sync
         _model = State(initialValue: ListDetailModel(
             householdId: householdId, listId: route.id, userId: userId, database: environment.database,
-            kick: { await sync.kick() }
+            // A sync run that ended also resolves the lookups queued while offline (SHOP-10).
+            kick: {
+                await sync.kick()
+                await drainBarcodeLookups(environment: environment, householdId: householdId)
+            }
         ))
     }
 
     var body: some View {
+        let api = environment.api
+        let network = environment.network
         ListDetailView(
-            model: model, title: title, isOnline: environment.network.isOnline, onManageStores: onManageStores
+            model: model, title: title, isOnline: environment.network.isOnline, onManageStores: onManageStores,
+            makeScanner: { [model] in
+                model.makeScanner(
+                    device: AVScannerDevice(), lookup: { await api.product(barcode: $0) }, isOnline: { network.isOnline }
+                )
+            }
         )
     }
+}
+
+/// Resolves the barcode lookups queued while offline for the open household (SHOP-10). A rename it makes is pushed by
+/// the kick it asks for, which does not drain again.
+private func drainBarcodeLookups(environment: AppEnvironment, householdId: UUID) async {
+    let api = environment.api
+    let network = environment.network
+    let sync = environment.sync
+    try? await BarcodeLookupDrainer.shared.drain(BarcodeLookupDrainer.Request(
+        database: environment.database, householdId: householdId, lookup: { await api.product(barcode: $0) },
+        isOnline: { network.isOnline }, onRenamed: { await sync.kick() }
+    ))
 }
 
 /// Owns the `HomeModel` for the Home tab, so a re-render of the tabs never resets it. The tabs are rebuilt (`.id`)

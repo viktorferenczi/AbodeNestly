@@ -20,6 +20,7 @@ public final class FakeApiService: ApiService, SyncTransport {
         case updateHousehold(householdId: UUID, name: String?, currency: String?)
         case signAttachment(householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int)
         case upload(url: URL, byteCount: Int, mime: String)
+        case product(barcode: String)
         case syncPush(SyncPushBody)
         case syncPull(householdId: String, since: Int, limit: Int)
         case refreshSession
@@ -44,6 +45,8 @@ public final class FakeApiService: ApiService, SyncTransport {
             attachmentId: UUID(), uploadURL: URL(string: "https://upload.test/object")!, storagePath: "h/pantry_item/e/a.jpg"
         ))
         var uploadResult: Result<Void, ApiFailure> = .success(())
+        var productResult: ProductLookupResult = .notFound
+        var productQueue: [ProductLookupResult] = []
         var signQueue: [Result<SignedUpload, ApiFailure>] = []
         /// Results for the next `/sync` calls, in order; with none queued a push applies everything and a pull is empty.
         var pushResults: [Result<SyncPushResult, SyncFailure>] = []
@@ -205,6 +208,17 @@ public final class FakeApiService: ApiService, SyncTransport {
         state.withLock { $0.calls.append(.upload(url: url, byteCount: data.count, mime: mime)) }
         await suspendIfHeld()
         return state.withLock { $0.uploadResult }
+    }
+
+    /// Every `product` lookup returns this once the queued results are used up.
+    public func setProductResult(_ result: ProductLookupResult) { state.withLock { $0.productResult = result } }
+    /// Queued results for `product`, consumed in order.
+    public func queueProductResults(_ results: [ProductLookupResult]) { state.withLock { $0.productQueue.append(contentsOf: results) } }
+
+    public func product(barcode: String) async -> ProductLookupResult {
+        state.withLock { $0.calls.append(.product(barcode: barcode)) }
+        await suspendIfHeld()
+        return state.withLock { $0.productQueue.isEmpty ? $0.productResult : $0.productQueue.removeFirst() }
     }
 
     // MARK: /sync
