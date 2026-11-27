@@ -47,6 +47,10 @@ struct AddAllSheet: View {
             }
         }
         .presentationDetents([.medium])
+        // Focus stays on the list just tapped, so say the failure (web: `role="alert"`).
+        .onChange(of: failed) { _, isFailed in
+            if isFailed { AccessibilityNotification.Announcement("Could not add the items. Try again.").post() }
+        }
     }
 
     private func pick(_ list: ListRecord) {

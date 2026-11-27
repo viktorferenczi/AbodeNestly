@@ -117,6 +117,10 @@ public struct ListDetailView: View {
         .task { await model.start() }
         // An action still inside its undo window is written when the person leaves, not dropped.
         .onDisappear { Task { await model.flush() } }
+        // The add-all sheet has just closed and focus is elsewhere, so say the result (web: `role="status"`).
+        .onChange(of: model.status) { _, status in
+            if let status { AccessibilityNotification.Announcement(status).post() }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { Task { await model.flush() } }
         }
@@ -189,7 +193,6 @@ public struct ListDetailView: View {
                 .foregroundStyle(Tokens.text2)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Tokens.screenPadding)
-                .accessibilityAddTraits(.updatesFrequently)
                 .accessibilityIdentifier("list.status")
         }
         if !isOnline {
