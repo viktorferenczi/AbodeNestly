@@ -63,6 +63,8 @@ dependencies {
 
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.auth)
+    // SHOP-09: Realtime on the same client as Auth; its websocket rides the same Ktor engine.
+    implementation(libs.supabase.realtime)
     // supabase-kt needs a Ktor engine; OkHttp keeps one HTTP stack in the app.
     implementation(libs.ktor.client.okhttp)
 

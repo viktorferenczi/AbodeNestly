@@ -15,6 +15,9 @@ import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.auth.user.UserSession
 import io.github.jan.supabase.auth.SignOutScope
 import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.realtime.Realtime
+import com.abodenestly.core.realtime.SupabaseRealtimeService
+import com.abodenestly.sync.RealtimeSubscribing
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -46,8 +49,13 @@ class SupabaseAuthService(private val config: AppConfig) : AuthService {
             scheme = config.authScheme
             host = AppConfig.AUTH_HOST
         }
+        // SHOP-09: Realtime reads the Auth session for its token, so it must be installed after Auth.
+        install(Realtime)
     }
     private val auth get() = client.auth
+
+    /** SHOP-09: Realtime on the one client the app builds, so it shares the session with Auth (no second client). */
+    fun realtimeService(): RealtimeSubscribing = SupabaseRealtimeService(client)
 
     // MARK: Session
 
