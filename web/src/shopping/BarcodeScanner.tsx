@@ -44,6 +44,15 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
   const [failed, setFailed] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const handled = useRef(false);
+  // True from the start of a lookup to its end; a second Retry tap must not start another.
+  const looking = useRef(false);
+  // The code whose name field is on screen: the cache prefills it only when a new code appears, never over typed text.
+  const nameCode = useRef<string | null>(null);
+  const prefill = (raw: string) => {
+    if (nameCode.current === raw) return;
+    nameCode.current = raw;
+    setName(cachedName(raw) ?? '');
+  };
   const input = { householdId, listId, userId };
   // Sheet focuses its own panel in an effect that runs after its children's, so focus waits one microtask.
   const focusRef = useCallback((el: HTMLInputElement | null) => {
@@ -53,18 +62,19 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
   const scanning = phase.kind === 'scanning';
 
   const handle = async (raw: string) => {
-    if (handled.current) return;
+    if (handled.current || looking.current) return;
     handled.current = true;
+    looking.current = true;
     setPhase({ kind: 'looking', code: raw });
     setFailed(false);
     try {
       const result = await lookup(api, raw, navigator.onLine);
       if (result.kind === 'found') setPhase({ kind: 'found', product: result.product });
       else if (result.kind === 'error') {
-        setName(cachedName(raw) ?? '');
+        prefill(raw);
         setPhase({ kind: 'lookup-failed', code: raw });
       } else if (result.kind === 'not-found') {
-        setName(cachedName(raw) ?? '');
+        prefill(raw);
         setPhase({ kind: 'not-found', code: raw });
       } else {
         await addOffline(db, deps, input, raw);
@@ -74,6 +84,8 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
       setFailed(true);
       handled.current = false;
       setPhase({ kind: 'scanning' });
+    } finally {
+      looking.current = false;
     }
   };
 
@@ -137,6 +149,7 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
   };
 
   const scanAgain = () => {
+    nameCode.current = null;
     handled.current = false;
     setFailed(false);
     setCode('');
@@ -289,6 +302,7 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
               type="button"
               className={styles.secondary}
               onClick={() => {
+                if (looking.current) return; // clearing the guard mid-lookup would allow a second item
                 handled.current = false;
                 void handle(failedCode);
               }}

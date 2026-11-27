@@ -1,5 +1,5 @@
 import type { Household, ListItem, Product, Profile, ShoppingList } from '@abodenestly/contract';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -229,6 +229,38 @@ describe('SHOP-10: barcode scanner', () => {
     api.getProductResult = { ok: true, value: nutella };
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByRole('heading', { name: 'Nutella' })).toBeTruthy();
+  });
+
+  it('Retry clicked twice during a slow lookup that resolves offline leaves one item', async () => {
+    const api = new FakeApiClient();
+    api.getProductResult = { ok: false, error: { code: 'unknown' } };
+    await openScanner(api);
+    device.emit('4006381333931');
+    const retry = await screen.findByRole('button', { name: 'Retry' });
+    api.getProductResult = { ok: false, error: { code: 'network' } };
+    api.pending = true;
+    act(() => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    await waitFor(() => expect(api.getProductCalls).toHaveLength(2));
+    api.pending = false;
+    act(() => api.resolvePending());
+    await screen.findByText(/We'll look it up when you're back online/);
+    expect(api.getProductCalls).toHaveLength(2);
+    expect((await stored()).items).toHaveLength(1);
+  });
+
+  it.each(['error', 'not-found'] as const)('a name typed on the error card survives a retry that ends in %s', async (next) => {
+    const api = new FakeApiClient();
+    api.getProductResult = { ok: false, error: { code: 'unknown' } };
+    await openScanner(api);
+    device.emit('4006381333931');
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Pasta' } });
+    api.getProductResult = next === 'error' ? { ok: false, error: { code: 'unknown' } } : { ok: false, error: { code: 'not_found' } };
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText(next === 'error' ? "Couldn't look that up. Try again." : "We don't know this product");
+    expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Pasta');
   });
 
   it('the failed-lookup state still lets a name be typed', async () => {

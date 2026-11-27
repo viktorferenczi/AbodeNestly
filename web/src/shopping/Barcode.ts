@@ -97,32 +97,53 @@ export async function lookup(api: ApiClient, code: string, online: boolean): Pro
 // ---------- queued lookups ----------
 
 let draining = false;
+let again = false;
 
 /**
  * Resolves the household's queued lookups. A product renames the item and sets its barcode, but only while the item
  * still exists and is still named after the code, so a rename by the person wins. A 404 drops the entry; a network
  * or 502 failure keeps it for the next drain; any other failure drops it. Entries of other households wait until that household is open.
+ * A call during a pass sets `again`, and one more pass runs when it ends (like the sync engine), skipping the entries
+ * that just failed transiently so they are not fetched twice back to back.
  */
 export async function drainLookups(db: HouseholdDb, deps: Partial<MutateDeps>, api: ApiClient, householdId: string): Promise<void> {
-  if (draining || !navigator.onLine) return;
-  const mine = pendingLookups().filter((e) => e.householdId === householdId);
-  if (mine.length === 0) return;
+  if (draining) {
+    again = true;
+    return;
+  }
   draining = true;
   try {
-    for (const entry of mine) {
-      const res = await api.getProduct(entry.code);
-      // Keep the entry only for failures that can pass; anything else would be retried forever.
-      if (!res.ok && isTransient(res.error.code)) continue;
-      if (res.ok) {
-        const row = await db.list_item.get(entry.itemId);
-        if (row && row.deleted_at == null && row.name === entry.code) {
-          await mutate(db, deps).patch('list_item', row.id, { name: res.value.name, barcode: res.value.barcode }, { name_key: nameKey(res.value.name) });
-        }
-      }
-      // Re-read: the queue may have grown while the lookup was in flight.
-      savePending(pendingLookups().filter((e) => !(e.householdId === entry.householdId && e.itemId === entry.itemId)));
-    }
+    let skip = new Set<string>();
+    do {
+      again = false;
+      skip = await drainPass(db, deps, api, householdId, skip);
+    } while (again);
   } finally {
     draining = false;
+    again = false;
   }
+}
+
+/** One pass over the queue; returns the item ids that failed transiently. */
+async function drainPass(db: HouseholdDb, deps: Partial<MutateDeps>, api: ApiClient, householdId: string, skip: Set<string>): Promise<Set<string>> {
+  const failedNow = new Set<string>();
+  if (!navigator.onLine) return failedNow;
+  const mine = pendingLookups().filter((e) => e.householdId === householdId && !skip.has(e.itemId));
+  for (const entry of mine) {
+    const res = await api.getProduct(entry.code);
+    // Keep the entry only for failures that can pass; anything else would be retried forever.
+    if (!res.ok && isTransient(res.error.code)) {
+      failedNow.add(entry.itemId);
+      continue;
+    }
+    if (res.ok) {
+      const row = await db.list_item.get(entry.itemId);
+      if (row && row.deleted_at == null && row.name === entry.code) {
+        await mutate(db, deps).patch('list_item', row.id, { name: res.value.name, barcode: res.value.barcode }, { name_key: nameKey(res.value.name) });
+      }
+    }
+    // Re-read: the queue may have grown while the lookup was in flight.
+    savePending(pendingLookups().filter((e) => !(e.householdId === entry.householdId && e.itemId === entry.itemId)));
+  }
+  return failedNow;
 }

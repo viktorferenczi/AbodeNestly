@@ -1,6 +1,6 @@
 import type { ListItem, Product } from '@abodenestly/contract';
 import Dexie from 'dexie';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient } from '../core/api/FakeApiClient.ts';
 import { openHouseholdDb } from '../sync/db.ts';
 import { addNamed, addOffline, addProduct, cacheName, cachedName, drainLookups, isValidCode, lookup, NAMES_CAP, pendingLookups } from './Barcode.ts';
@@ -177,6 +177,26 @@ describe('SHOP-10: drainLookups', () => {
     await drainLookups(db, {}, api, 'h1');
     expect(pendingLookups()).toEqual([]);
     expect(await db.list_item.get(id)).toMatchObject({ name: '3017620422003' });
+    await db.close();
+  });
+
+  it('a lookup queued during a slow pass is handled by a follow-up pass that skips the entry that just failed', async () => {
+    const { db, id, api } = await setup();
+    const other = '4006381333931';
+    api.getProductResult = (code) =>
+      code === other ? { ok: true, value: { ...nutella, barcode: other, name: 'Pasta' } } : { ok: false, error: { code: 'network' } };
+    api.pending = true;
+    const first = drainLookups(db, {}, api, 'h1');
+    await vi.waitFor(() => expect(api.getProductCalls).toEqual(['3017620422003']));
+    const id2 = await addOffline(db, {}, input, other); // queued while the pass is waiting on the network
+    await drainLookups(db, {}, api, 'h1'); // returns at once, flags a follow-up
+    api.resolvePending();
+    await vi.waitFor(() => expect(api.getProductCalls).toEqual(['3017620422003', other]));
+    api.resolvePending();
+    await first;
+    expect(api.getProductCalls).toEqual(['3017620422003', other]); // the failed one is not fetched twice
+    expect(await db.list_item.get(id2)).toMatchObject({ name: 'Pasta', barcode: other });
+    expect(pendingLookups()).toEqual([{ householdId: 'h1', itemId: id, code: '3017620422003' }]);
     await db.close();
   });
 
