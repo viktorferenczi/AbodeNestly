@@ -6,6 +6,10 @@ import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.sync.listItemIdentity
 import com.abodenestly.sync.patch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -143,6 +147,9 @@ class BarcodeLookupDrainer(private val now: () -> java.time.Instant = java.time.
     private var running = false
     private var latest: DrainRequest? = null
 
+    /** Runs a follow-up whose pass was cancelled before it could pick it up; it outlives the cancelled caller. */
+    private val handoff = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     suspend fun drain(request: DrainRequest) {
         synchronized(this) {
             if (running) {
@@ -181,9 +188,24 @@ class BarcodeLookupDrainer(private val now: () -> java.time.Instant = java.time.
                 current = next
             }
         } finally {
-            if (!released) synchronized(this) {
-                running = false
-                latest = null
+            if (!released) {
+                val orphan = synchronized(this) {
+                    running = false
+                    latest.also { latest = null }
+                }
+                // Cancelled (a household switch cancels its effect) after a follow-up handed itself over and returned:
+                // run that request on its own, or it would be lost until the next sync or reconnect.
+                if (orphan != null) {
+                    handoff.launch {
+                        try {
+                            drain(orphan)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            // Like any drain, a failed follow-up keeps its entries for the next one.
+                        }
+                    }
+                }
             }
         }
         failure?.let { throw it }

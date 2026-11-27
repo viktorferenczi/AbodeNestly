@@ -544,4 +544,28 @@ class BarcodeTest {
         drainer.drain(request({ ProductLookupResult.NotFound }))
         assertEquals(0, store.pending().size)
     }
+
+    @Test
+    fun `a request handed over to a pass that is then cancelled still runs`() = runBlocking<Unit> {
+        open()
+        queuedItem("11111111")
+        val drainer = BarcodeLookupDrainer()
+        val handedOver = CompletableDeferred<Unit>()
+        val secondRan = CompletableDeferred<String>()
+        val second = request({ secondRan.complete(it); ProductLookupResult.NotFound })
+        val first = request({
+            // A household-open drain hands itself over and returns; then this pass is cancelled mid-lookup.
+            drainer.drain(second)
+            handedOver.complete(Unit)
+            kotlinx.coroutines.awaitCancellation()
+        })
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val job = scope.launch { drainer.drain(first) }
+        handedOver.await()
+        job.cancel()
+        job.join()
+
+        assertEquals("11111111", kotlinx.coroutines.withTimeout(5_000) { secondRan.await() })
+        scope.cancel()
+    }
 }

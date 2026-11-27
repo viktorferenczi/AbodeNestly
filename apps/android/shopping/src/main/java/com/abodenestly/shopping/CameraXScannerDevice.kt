@@ -28,6 +28,7 @@ import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -137,12 +138,11 @@ class CameraXScannerDevice(context: Context) : ScannerDevice {
                 cameraProvider.bindToLifecycle(owner, selector, preview, analysis)
             }
         } catch (e: CancellationException) {
-            pool.shutdown()
-            scanner.close()
+            // Close can cancel after bindToLifecycle ran but before `provider` is set, so stop() can't unbind it.
+            releaseAfterFailedStart(cameraProvider, pool) { scanner.close() }
             throw e
         } catch (e: Exception) {
-            pool.shutdown()
-            scanner.close()
+            releaseAfterFailedStart(cameraProvider, pool) { scanner.close() }
             throw ScannerException(ScannerException.Kind.Unavailable)
         }
         provider = cameraProvider
@@ -151,6 +151,17 @@ class CameraXScannerDevice(context: Context) : ScannerDevice {
     }
 
     private var closer: (() -> Unit)? = null
+
+    /** Unbinds (safe if binding never finished) on the main thread, even while cancelled, then frees the pool and scanner. */
+    private suspend fun releaseAfterFailedStart(cameraProvider: ProcessCameraProvider, pool: ExecutorService, close: () -> Unit) {
+        try {
+            withContext(NonCancellable + Dispatchers.Main) { cameraProvider.unbindAll() }
+        } catch (e: Exception) {
+            // Nothing more to release on the camera side.
+        }
+        pool.shutdown()
+        close()
+    }
 
     override fun stop() {
         val toUnbind = provider
