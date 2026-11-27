@@ -1,4 +1,5 @@
 import type { Household, ListItem, Product, Profile, ShoppingList } from '@abodenestly/contract';
+import { createRoot } from 'react-dom/client';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +11,7 @@ import { FakeApiClient } from '../core/api/FakeApiClient.ts';
 import { AuthProvider } from '../core/auth/AuthProvider.tsx';
 import { FakeAuthClient } from '../core/auth/FakeAuthClient.ts';
 import { writeLastHousehold } from '../core/auth/lastHousehold.ts';
+import { BarcodeScanner } from './BarcodeScanner.tsx';
 import { FakeSync } from '../sync/FakeSync.ts';
 import { openHouseholdDb } from '../sync/db.ts';
 import { SyncProvider } from '../sync/SyncEngine.ts';
@@ -380,5 +382,29 @@ describe('SHOP-10: barcode scanner', () => {
     expect(items[0]).toMatchObject({ name: 'Nutella', barcode: '3017620422003' });
     expect(out).toHaveLength(1);
     expect(sync.kicks).toBe(1);
+  });
+});
+
+describe('SHOP-10: initial focus', () => {
+  it('the manual field keeps focus after Sheet takes it for its panel (real effect ordering, no act)', async () => {
+    const flag = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const before = flag.IS_REACT_ACT_ENVIRONMENT;
+    flag.IS_REACT_ACT_ENVIRONMENT = false; // effects then flush on the scheduler, after microtasks queued during commit
+    const unsupported = new FakeDevice();
+    unsupported.isSupported = false;
+    const db = await openHouseholdDb('h1');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    root.render(
+      <ApiProvider client={new FakeApiClient()}>
+        <BarcodeScanner db={db} deps={{}} householdId="h1" listId="a" userId="u1" onClose={() => undefined} device={unsupported} />
+      </ApiProvider>,
+    );
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Barcode' })));
+    root.unmount();
+    host.remove();
+    await db.close();
+    flag.IS_REACT_ACT_ENVIRONMENT = before;
   });
 });

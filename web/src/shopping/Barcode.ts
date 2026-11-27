@@ -96,36 +96,51 @@ export async function lookup(api: ApiClient, code: string, online: boolean): Pro
 
 // ---------- queued lookups ----------
 
-let draining = false;
-let again = false;
+type DrainRequest = { db: HouseholdDb; deps: Partial<MutateDeps>; api: ApiClient; householdId: string };
+
+let running = false;
+let latest: DrainRequest | null = null;
 
 /**
  * Resolves the household's queued lookups. A product renames the item and sets its barcode, but only while the item
  * still exists and is still named after the code, so a rename by the person wins. A 404 drops the entry; a network
  * or 502 failure keeps it for the next drain; any other failure drops it. Entries of other households wait until that household is open.
- * A call during a pass sets `again`, and one more pass runs when it ends (like the sync engine), skipping the entries
- * that just failed transiently so they are not fetched twice back to back.
+ * A call during a pass is remembered (the latest one wins) and runs as one more pass when the current one ends, even
+ * if it threw (a household switch closes the database). For the same household that pass skips the entries that just
+ * failed transiently, so they are not fetched twice back to back.
  */
 export async function drainLookups(db: HouseholdDb, deps: Partial<MutateDeps>, api: ApiClient, householdId: string): Promise<void> {
-  if (draining) {
-    again = true;
+  const request: DrainRequest = { db, deps, api, householdId };
+  if (running) {
+    latest = request;
     return;
   }
-  draining = true;
+  running = true;
+  let failed: unknown;
   try {
+    let current: DrainRequest | null = request;
     let skip = new Set<string>();
-    do {
-      again = false;
-      skip = await drainPass(db, deps, api, householdId, skip);
-    } while (again);
+    while (current) {
+      latest = null;
+      let failedNow = new Set<string>();
+      try {
+        failedNow = await drainPass(current, skip);
+      } catch (e) {
+        if (current === request) failed = e;
+      }
+      const next = latest as DrainRequest | null; // a call during the pass may have set it
+      skip = next && next.householdId === current.householdId ? failedNow : new Set();
+      current = next;
+    }
   } finally {
-    draining = false;
-    again = false;
+    running = false;
+    latest = null;
   }
+  if (failed !== undefined) throw failed;
 }
 
 /** One pass over the queue; returns the item ids that failed transiently. */
-async function drainPass(db: HouseholdDb, deps: Partial<MutateDeps>, api: ApiClient, householdId: string, skip: Set<string>): Promise<Set<string>> {
+async function drainPass({ db, deps, api, householdId }: DrainRequest, skip: Set<string>): Promise<Set<string>> {
   const failedNow = new Set<string>();
   if (!navigator.onLine) return failedNow;
   const mine = pendingLookups().filter((e) => e.householdId === householdId && !skip.has(e.itemId));

@@ -12,6 +12,7 @@ beforeEach(async () => {
   localStorage.clear();
   Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
   await Dexie.delete('abodenestly-h1');
+  await Dexie.delete('abodenestly-h2');
 });
 
 describe('SHOP-10: code validation', () => {
@@ -198,6 +199,25 @@ describe('SHOP-10: drainLookups', () => {
     expect(await db.list_item.get(id2)).toMatchObject({ name: 'Pasta', barcode: other });
     expect(pendingLookups()).toEqual([{ householdId: 'h1', itemId: id, code: '3017620422003' }]);
     await db.close();
+  });
+
+  it('a request for another household made during a pass that then throws still runs with its own db', async () => {
+    const { db, id, api } = await setup();
+    const db2 = await openHouseholdDb('h2');
+    const id2 = await addOffline(db2, {}, { ...input, householdId: 'h2' }, '4006381333931');
+    api.getProductResult = (code) => ({ ok: true, value: { ...nutella, barcode: code, name: code === '4006381333931' ? 'Pasta' : 'Nutella' } });
+    api.pending = true;
+    const first = drainLookups(db, {}, api, 'h1');
+    await vi.waitFor(() => expect(api.getProductCalls).toEqual(['3017620422003']));
+    await db.close(); // the household switch: the first pass will fail on its closed database
+    await drainLookups(db2, {}, api, 'h2');
+    api.resolvePending();
+    await vi.waitFor(() => expect(api.getProductCalls).toEqual(['3017620422003', '4006381333931']));
+    api.resolvePending();
+    await first.catch(() => undefined);
+    expect(await db2.list_item.get(id2)).toMatchObject({ name: 'Pasta', barcode: '4006381333931' });
+    expect(pendingLookups().map((e) => e.itemId)).toEqual([id]); // h1's entry waits for h1 to open again
+    await db2.close();
   });
 
   it('does nothing offline, and skips other households', async () => {

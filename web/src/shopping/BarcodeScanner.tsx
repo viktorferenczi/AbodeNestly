@@ -1,5 +1,5 @@
 import type { Product } from '@abodenestly/contract';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes } from 'react';
 import { useApi } from '../core/api/ApiProvider.tsx';
 import type { HouseholdDb } from '../sync/db.ts';
 import type { MutateDeps } from '../sync/outbox.ts';
@@ -30,6 +30,16 @@ type Props = {
   device?: ScannerDevice;
 };
 
+// Focuses itself on mount. The effect belongs to a descendant of Sheet, so it runs before Sheet's own mount effect
+// (which focuses the panel); the microtask then lands after both and the field keeps focus.
+function FocusedInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  const el = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    queueMicrotask(() => el.current?.focus());
+  }, []);
+  return <input ref={el} {...props} />;
+}
+
 // DESIGN C7: states scanning, found, not-found, permission-denied and offline (here `queued`), plus `unsupported`
 // for browsers without BarcodeDetector (same layout as permission-denied, manual entry only).
 export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose, device = browserScannerDevice }: Props) {
@@ -54,11 +64,6 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
     setName(cachedName(raw) ?? '');
   };
   const input = { householdId, listId, userId };
-  // Sheet focuses its own panel in an effect that runs after its children's, so focus waits one microtask.
-  const focusRef = useCallback((el: HTMLInputElement | null) => {
-    if (el) queueMicrotask(() => el.focus());
-  }, []);
-
   const scanning = phase.kind === 'scanning';
 
   const handle = async (raw: string) => {
@@ -160,12 +165,11 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
     <form onSubmit={submitCode} className={styles.manual}>
       <label className={styles.label}>
         Barcode
-        <input
+        <FocusedInput
           className={styles.field}
           inputMode="numeric"
           autoComplete="off"
           // The field is the whole point of the unsupported and permission-denied layouts, and appears on request while scanning.
-          ref={focusRef}
           value={code}
           aria-invalid={codeError}
           aria-describedby={codeError ? 'barcode-error' : undefined}
@@ -251,7 +255,7 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
           <p className={styles.brand}>{notFoundCode}</p>
           <label className={styles.label}>
             Name
-            <input className={styles.field} ref={focusRef} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
+            <FocusedInput className={styles.field} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
           <div className={styles.actions}>
             <button type="button" className={styles.secondary} onClick={scanAgain}>
@@ -295,7 +299,7 @@ export function BarcodeScanner({ db, deps, householdId, listId, userId, onClose,
           <p className={styles.brand}>{failedCode}</p>
           <label className={styles.label}>
             Name
-            <input className={styles.field} ref={focusRef} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
+            <FocusedInput className={styles.field} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
           <div className={styles.actions}>
             <button
