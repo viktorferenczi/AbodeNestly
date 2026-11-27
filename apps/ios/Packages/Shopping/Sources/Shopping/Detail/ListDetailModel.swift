@@ -20,11 +20,17 @@ public final class ListDetailModel {
     /// Deletes, check-offs and clears inside their undo window, newest first. Deleted and cleared rows are already
     /// hidden from the list; a checked row shows ticked in place until its write lands.
     public private(set) var pendingActions: [PendingAction] = []
+    /// The household's lists, for "Add all to…" (SHOP-11).
+    public private(set) var lists: [ListRecord] = []
+    /// A plain status line (no Undo) that clears by itself: the result of "Add all to list".
+    public private(set) var status: String?
 
     /// Actions whose window has ended and whose write is running: no toast, no Undo, row still hidden or ticked.
     private var writing: Set<UUID> = []
 
     @ObservationIgnored private let undoWindow: Duration
+    @ObservationIgnored private let statusWindow: Duration
+    @ObservationIgnored private var statusTimer: Task<Void, Never>?
     @ObservationIgnored private var timers: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private let householdId: UUID
     @ObservationIgnored private let listId: UUID
@@ -37,9 +43,11 @@ public final class ListDetailModel {
     public init(
         householdId: UUID, listId: UUID, userId: UUID?, database: HouseholdDatabase,
         kick: @escaping @Sendable () async -> Void, now: @escaping @MainActor () -> Date = { Date() },
-        makeId: @escaping @MainActor () -> UUID = { UUID() }, undoWindow: Duration = Lists.undoWindow
+        makeId: @escaping @MainActor () -> UUID = { UUID() }, undoWindow: Duration = Lists.undoWindow,
+        statusWindow: Duration = Lists.undoWindow
     ) {
         self.undoWindow = undoWindow
+        self.statusWindow = statusWindow
         self.householdId = householdId
         self.listId = listId
         self.userId = userId
@@ -48,6 +56,11 @@ public final class ListDetailModel {
         self.now = now
         self.makeId = makeId
     }
+
+    /// SHOP-11: this list is a template, so it offers "Add all to list".
+    public var isTemplate: Bool { snapshot.list?.isTemplate ?? false }
+    /// The lists "Add all to…" offers: active, not templates, oldest first.
+    public var targets: [ListRecord] { Templates.targets(lists: lists) }
 
     public var isGone: Bool { loaded && snapshot.list == nil }
     public var suggestions: [Suggestion] { QuickAdd.suggest(history: snapshot.history, query: query, listId: listId) }
@@ -77,6 +90,8 @@ public final class ListDetailModel {
 
     /// Follows the local rows until the view goes away or the household's database closes.
     public func start() async {
+        let watcher = Task { await self.followLists() }
+        defer { watcher.cancel() }
         for await snapshot in await database.observeListDetail(householdId: householdId, listId: listId) {
             self.snapshot = snapshot
             loaded = true
@@ -85,6 +100,43 @@ public final class ListDetailModel {
         }
         // A stream that ended at once (database not open): nothing cached to show.
         loaded = true
+    }
+
+    private func followLists() async {
+        for await snapshot in await database.observeShoppingLists(householdId: householdId) {
+            lists = snapshot.lists
+        }
+    }
+
+    /// SHOP-11: copies every live item of this template onto `target` in one local transaction, then kicks sync once
+    /// (only when something was copied). An empty template writes nothing. The result's message shows as the status line.
+    @discardableResult
+    public func addAll(to target: ListRecord) async -> AddAllResult {
+        let count: Int
+        do {
+            count = try await Templates.addAllToList(
+                database: database, householdId: householdId, templateId: listId, targetListId: target.id, userId: userId,
+                now: now(), uuid: { makeId() }
+            )
+        } catch {
+            return .failed
+        }
+        let result: AddAllResult = count == 0 ? .empty : .added(count: count, listName: target.name)
+        show(result.message)
+        if count > 0 { await kick() }
+        return result
+    }
+
+    private func show(_ message: String?) {
+        statusTimer?.cancel()
+        status = message
+        guard message != nil else { return }
+        let window = statusWindow
+        statusTimer = Task { [weak self] in
+            try? await Task.sleep(for: window)
+            guard !Task.isCancelled, let self else { return }
+            self.status = nil
+        }
     }
 
     /// Adds `name` as typed. The row exists locally and in the outbox before this returns (AC4).

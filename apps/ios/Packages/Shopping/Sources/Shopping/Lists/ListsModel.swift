@@ -63,7 +63,7 @@ public final class ListsModel {
 
     /// Saves a new list and returns it. The list exists locally and in the outbox before this returns (AC5, AC6).
     @discardableResult
-    public func create(name: String, storeId: UUID?) async -> ListRow? {
+    public func create(name: String, storeId: UUID?, isTemplate: Bool = false) async -> ListRow? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let id = makeId()
@@ -72,7 +72,7 @@ public final class ListsModel {
         let row: [String: JSONValue] = [
             "id": .string(id.uuidString.lowercased()), "household_id": .string(householdId.uuidString.lowercased()),
             "name": .string(trimmed), "store_id": storeId.map { .string($0.uuidString.lowercased()) } ?? .null,
-            "is_template": .bool(false), "archived_at": .null, "deleted_at": .null,
+            "is_template": .bool(isTemplate), "archived_at": .null, "deleted_at": .null,
             "created_at": .string(stamp), "updated_at": .string(stamp), "sync_seq": .int(0),
         ]
         do {
