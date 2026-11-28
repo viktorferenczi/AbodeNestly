@@ -423,6 +423,14 @@ interface ShoppingListDao {
     @Query("SELECT * FROM item_price WHERE household_id = :householdId AND deleted_at IS NULL")
     fun observePrices(householdId: String): Flow<List<ItemPriceEntity>>
 
+    /** SHOP-15: the household row's `module_shopping`, read once; null when the row is not pulled yet or the flag is empty. */
+    @Query("SELECT module_shopping FROM household WHERE id = :householdId")
+    suspend fun moduleShopping(householdId: String): Boolean?
+
+    /** SHOP-15: the household's live lists, read once (the assistant has no screen to observe from). */
+    @Query("SELECT * FROM shopping_list WHERE household_id = :householdId AND deleted_at IS NULL")
+    suspend fun liveLists(householdId: String): List<ShoppingListEntity>
+
     /** SHOP-12: the household's currency (CORE-05); null until the household row has been pulled. */
     @Query("SELECT currency FROM household WHERE id = :householdId")
     fun observeCurrency(householdId: String): Flow<String?>

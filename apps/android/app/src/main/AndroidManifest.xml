@@ -42,7 +42,18 @@
                     android:host="auth"
                     android:path="/callback" />
             </intent-filter>
+            <!-- SHOP-15: the Google Assistant App Action (add to the shopping list). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+        <!-- SHOP-15: runs the App Action without opening the main UI; the Assistant starts it, so it is exported. -->
+        <activity
+            android:name=".AssistantAddActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 
 </manifest>
