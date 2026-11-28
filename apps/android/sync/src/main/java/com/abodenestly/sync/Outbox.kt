@@ -20,7 +20,7 @@ import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 
 /** Tables the server accepts in `POST /sync` today (SHOP-08-api). Everything else stays queued and is never sent. */
-val PUSHABLE_TABLES: Set<String> = setOf("store", "shopping_list", "list_item", "location")
+val PUSHABLE_TABLES: Set<String> = setOf("store", "shopping_list", "list_item", "location", "item_price")
 
 /** The household-scoped tables SPEC §6.2 lets a client write. Names go into SQL, so [Outbox] checks against this set. */
 internal val WRITABLE_TABLES: Set<String> = PUSHABLE_TABLES + setOf("pantry_item", "recipe", "asset", "maint_task", "contractor")
@@ -94,14 +94,47 @@ suspend fun DatabaseRegistry.patch(householdId: UUID, table: String, id: String,
     requireWritable(table)
     withOpenFor(householdId) { db ->
         db.runInTransaction(Callable {
+            storePatch(db.openHelper.writableDatabase, table, id, fields, now, localOnly)
+        })
+    }
+}
+
+private fun storePatch(raw: SupportSQLiteDatabase, table: String, id: String, fields: JsonObject, now: Instant, localOnly: Boolean) {
+    val cv = contentValues(raw, table, fields.without(setOf("id")))
+    // A table with a local copy but no such row: nothing changed, so nothing is queued (a bare partial upsert would insert a bare row on the server).
+    if (hasLocalTable(raw, table) && !rowExists(raw, table, id)) return
+    if (cv.size() > 0) raw.update(table, SQLiteDatabase.CONFLICT_NONE, cv, "id = ?", arrayOf(id))
+    // Nothing left after dropping server-owned columns (SPEC §6.2): nothing to send.
+    val sendable = sendableFields(table, fields)
+    if (!localOnly && sendable.isNotEmpty()) queue(raw, table, "upsert", id, sendable, now)
+}
+
+/** The `list_item` half of [writeItem]: a whole new row, or only the changed columns of an existing one. */
+sealed interface ItemChange {
+    data class Upsert(val row: JsonObject) : ItemChange
+    data class Patch(val id: String, val fields: JsonObject) : ItemChange
+}
+
+/**
+ * A `list_item` change and an optional new `item_price` row (SHOP-12) in ONE transaction: both local rows and both
+ * queued mutations are stored, or, when one fails, none is. Nothing to do when both are null. Callers kick sync once
+ * afterwards, so a push never runs ahead of the rows. Twin: iOS `HouseholdDatabase.writeItem`, web `saveWithPrice`.
+ */
+suspend fun DatabaseRegistry.writeItem(householdId: UUID, change: ItemChange?, price: JsonObject?, now: Instant = Instant.now()) {
+    if (change == null && price == null) return
+    requireWritable("list_item")
+    requireWritable("item_price")
+    val itemId = (change as? ItemChange.Upsert)?.let { rowIdOf(it.row) }
+    val priceId = price?.let(::rowIdOf)
+    withOpenFor(householdId) { db ->
+        db.runInTransaction(Callable {
             val raw = db.openHelper.writableDatabase
-            val cv = contentValues(raw, table, fields.without(setOf("id")))
-            // A table with a local copy but no such row: nothing changed, so nothing is queued (a bare partial upsert would insert a bare row on the server).
-            if (hasLocalTable(raw, table) && !rowExists(raw, table, id)) return@Callable Unit
-            if (cv.size() > 0) raw.update(table, SQLiteDatabase.CONFLICT_NONE, cv, "id = ?", arrayOf(id))
-            // Nothing left after dropping server-owned columns (SPEC §6.2): nothing to send.
-            val sendable = sendableFields(table, fields)
-            if (!localOnly && sendable.isNotEmpty()) queue(raw, table, "upsert", id, sendable, now)
+            when (change) {
+                is ItemChange.Upsert -> storeUpsert(raw, "list_item", householdId, itemId!!, change.row, now)
+                is ItemChange.Patch -> storePatch(raw, "list_item", change.id, change.fields, now, localOnly = false)
+                null -> Unit
+            }
+            if (price != null) storeUpsert(raw, "item_price", householdId, priceId!!, price, now)
             Unit
         })
     }
@@ -191,7 +224,14 @@ internal fun columnsOf(raw: SupportSQLiteDatabase, table: String): Set<String> =
 /** [row]'s keys the local [table] has, as SQLite values. Unknown keys are ignored (a newer server may send more). */
 internal fun contentValues(raw: SupportSQLiteDatabase, table: String, row: JsonObject): ContentValues {
     val columns = columnsOf(raw, table)
-    return ContentValues().apply { row.forEach { (key, value) -> if (key in columns) putJson(key, value) } }
+    return ContentValues().apply {
+        row.forEach { (key, value) ->
+            if (key !in columns) return@forEach
+            val money = if (table == "item_price" && key == "price" && value is JsonPrimitive && value !is JsonNull) value.content.toBigDecimalOrNull() else null
+            // Money is stored as its canonical digit text, never through a Double (AGENTS.md §4); a pulled number or string lands the same.
+            if (money != null) put(key, priceText(money)) else putJson(key, value)
+        }
+    }
 }
 
 private fun ContentValues.putJson(key: String, value: JsonElement) {

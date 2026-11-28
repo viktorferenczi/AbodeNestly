@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.sync.ListDetail
 import com.abodenestly.sync.ListItemRecord
+import com.abodenestly.sync.ItemChange
 import com.abodenestly.sync.ListRecord
 import com.abodenestly.sync.patch
+import com.abodenestly.sync.writeItem
 import com.abodenestly.sync.remove
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +28,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
+import java.util.Locale
 import java.util.UUID
 
 /**
@@ -66,6 +69,13 @@ data class ListDetailUiState(
     val isTemplate: Boolean get() = detail.list?.isTemplate == true
 
     val suggestions: List<Suggestion> get() = QuickAdd.suggest(detail.history, query, listId)
+
+    /** SHOP-12: the newest price for [name] (the C2 rule: the list's store when it has one, else any store). */
+    fun lastBought(name: String): LastBought? = Price.lastBought(name, detail.prices, detail.stores, currentStoreId)
+
+    /** SHOP-12: the row caption "€1.20 · Test Market", or null when there is no price. */
+    fun caption(item: ListItemRecord, locale: Locale = Locale.getDefault()): String? =
+        lastBought(item.name)?.let { Price.caption(it, detail.currency, locale) }
 
     internal val hidden: Set<String> get() = pending.flatMapTo(HashSet()) { it.hiddenIds } + settling
 
@@ -455,14 +465,17 @@ class ListDetailViewModel(
 
     /**
      * Saves the open sheet. `new` adds the row with the sheet's quantity, unit and note; `edit` writes only the changed
-     * columns (and nothing when there are none). The sheet closes once the write is stored; a write that cannot be
-     * stored keeps it open with the input and shows [SAVE_ERROR] (the sheet reads [ListDetailUiState.saveFailed]).
+     * columns (and nothing when there are none). A typed price (SHOP-12, only while the list has a live store) is one new
+     * `item_price` row in the same transaction, so a price-only save still writes and closes the sheet. One kick follows
+     * the commit. The sheet closes once the write is stored; a write that cannot be stored keeps it open with the input
+     * and shows [SAVE_ERROR] (the sheet reads [ListDetailUiState.saveFailed]).
      */
     private fun save(form: ItemForm) {
         val current = mutableState.value
         val sheet = current.sheet ?: return
         val fields = ItemSheetLogic.fields(form) ?: return
         if (savingSheet) return
+        val priceStore = current.currentStoreId
         when (sheet) {
             is SheetState.New -> {
                 if (!current.loaded || current.detail.list == null) return
@@ -471,7 +484,8 @@ class ListDetailViewModel(
                 scope.launch {
                     val at = now()
                     val row = QuickAdd.row(newId(), listId, fields.name, userId, at, fields.quantity, fields.unit, fields.note)
-                    val ok = stored { addItem(database, householdId, row, at) }
+                    val priced = priceRow(priceStore, fields, at)
+                    val ok = stored { database.writeItem(householdId, ItemChange.Upsert(row), priced, at) }
                     savingSheet = false
                     if (!ok) return@launch
                     // The bar's text goes with the item it became; text typed meanwhile stays.
@@ -482,7 +496,7 @@ class ListDetailViewModel(
             is SheetState.Edit -> {
                 val before = current.detail.items.firstOrNull { it.id == sheet.itemId } ?: return
                 val changes = ItemSheetLogic.changes(before, fields)
-                if (changes.isEmpty) {
+                if (changes.isEmpty && fields.price == null) {
                     mutableState.update { it.copy(sheet = null, saveFailed = false) }
                     return
                 }
@@ -490,11 +504,13 @@ class ListDetailViewModel(
                 mutableState.update { it.copy(saveFailed = false) }
                 scope.launch {
                     val at = now()
+                    val priced = priceRow(priceStore, fields, at)
                     val ok = stored {
-                        // One transaction: `patch` writes every key locally and queues all but the server-owned ones, so
+                        // One transaction: the patch writes every key locally and queues all but the server-owned ones, so
                         // the local name_key (keeps suggestions matching until the next pull) goes with the rename.
-                        val fields = changes.nameKey?.let { key -> JsonObject(changes.fields + ("name_key" to JsonPrimitive(key))) } ?: changes.fields
-                        database.patch(householdId, "list_item", before.id, fields, at)
+                        val columns = changes.nameKey?.let { key -> JsonObject(changes.fields + ("name_key" to JsonPrimitive(key))) } ?: changes.fields
+                        val change = if (changes.isEmpty) null else ItemChange.Patch(before.id, columns)
+                        database.writeItem(householdId, change, priced, at)
                     }
                     savingSheet = false
                     if (!ok) return@launch
@@ -503,6 +519,13 @@ class ListDetailViewModel(
                 }
             }
         }
+    }
+
+    /** The new `item_price` row for a save: only with a typed price and a live list store (the sheet offers no field otherwise). */
+    private fun priceRow(storeId: String?, fields: ItemFields, at: Instant): JsonObject? {
+        val price = fields.price ?: return null
+        if (storeId == null) return null
+        return Price.row(newId(), householdId.toString(), storeId, fields.name, price, at)
     }
 
     /** Runs a local write for the sheet. A write that cannot be stored sets [ListDetailUiState.saveFailed] and returns false. */

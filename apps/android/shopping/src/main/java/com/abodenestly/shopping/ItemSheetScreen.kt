@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -43,11 +44,21 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.abodenestly.sync.ListItemRecord
 import com.abodenestly.ui.LocalTokens
 import com.abodenestly.ui.QuantityStepper
 import com.abodenestly.ui.Tokens
+
+/**
+ * SHOP-12: what the sheet needs to offer a price, provided by [ListDetailScreenHost] around the sheet slot so the slot's
+ * signature stays as it was. [storeName] is the list's live store: null means no store, so no price field (AC3).
+ * [lastBoughtLine] answers for the name as typed now (the same lookup as the C2 caption) and is null when there is no price.
+ */
+internal data class PriceSheetInfo(val storeName: String?, val lastBoughtLine: (String) -> String?)
+
+internal val LocalPriceSheet = staticCompositionLocalOf<PriceSheetInfo?> { null }
 
 /** The item sheet as [ListDetailScreenHost] mounts it; tests mount the sheet's body inline instead of a popup. */
 internal typealias ItemSheetSlot = @Composable (
@@ -79,7 +90,7 @@ fun ItemSheet(
 }
 
 /**
- * The sheet's body (DESIGN C3): name, quantity stepper, unit with suggestion chips, note; Cancel and Save, and in edit a
+ * The sheet's body (DESIGN C3): name, quantity stepper, unit with suggestion chips, note, the price and its Last bought line (SHOP-12); Cancel and Save, and in edit a
  * Delete button. Save is off while the name is blank or the quantity is invalid (the view model ignores a second tap while a save is in flight);
  * [failed] shows the message. [history] feeds the unit chips. Tested directly so Robolectric never drives the popup.
  */
@@ -98,9 +109,14 @@ internal fun ItemSheetContent(
     var quantity by rememberSaveable { mutableStateOf(initial.quantityText) }
     var unit by rememberSaveable { mutableStateOf(initial.unit) }
     var note by rememberSaveable { mutableStateOf(initial.note) }
-    val form = ItemForm(name, quantity, unit, note)
+    var price by rememberSaveable { mutableStateOf(initial.priceText) }
+    val pricing = LocalPriceSheet.current
+    val priceStore = pricing?.storeName
+    // Without a store nothing was typed, so the form's price is blank and never blocks Save.
+    val form = ItemForm(name, quantity, unit, note, if (priceStore != null) price else "")
     val valid = ItemSheetLogic.fields(form) != null
     val quantityError = ItemSheetLogic.quantityError(quantity)
+    val priceError = priceStore != null && ItemSheetLogic.priceError(price)
     val units = ItemSheetLogic.unitSuggestions(history, unit)
     val focus = remember { FocusRequester() }
     // A new item starts on its name; an edit opens without the keyboard.
@@ -158,6 +174,31 @@ internal fun ItemSheetContent(
             maxLines = 4,
             modifier = Modifier.fillMaxWidth().testTag("item.note"),
         )
+        if (priceStore != null) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedTextField(
+                    value = price,
+                    onValueChange = { price = it },
+                    label = { Text("Price at $priceStore") },
+                    singleLine = true,
+                    isError = priceError,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = Tokens.MinTouchTarget).testTag("itemsheet.price"),
+                )
+                if (priceError) {
+                    Text(
+                        PRICE_ERROR, color = tokens.danger, style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("itemsheet.priceError").semantics { liveRegion = LiveRegionMode.Assertive },
+                    )
+                }
+            }
+        }
+        pricing?.lastBoughtLine?.invoke(name)?.let { line ->
+            Text(
+                line, color = tokens.text2, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.testTag("itemsheet.lastBought"),
+            )
+        }
         if (failed) {
             Text(
                 SAVE_ERROR, color = tokens.danger, style = MaterialTheme.typography.bodyMedium,
@@ -184,6 +225,9 @@ internal fun ItemSheetContent(
         }
     }
 }
+
+/** SHOP-12: the inline message under a price that is not a price. */
+internal const val PRICE_ERROR = "Enter a price like 1.20"
 
 /** A tappable unit suggestion; the row is 48 dp tall for the touch target, the capsule inside it is smaller. */
 @Composable

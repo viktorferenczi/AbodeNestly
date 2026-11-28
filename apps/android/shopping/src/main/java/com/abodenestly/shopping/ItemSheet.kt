@@ -6,16 +6,17 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.math.BigDecimal
 
-/** What the C3 sheet edits, as the person typed it. */
-data class ItemForm(val name: String = "", val quantityText: String = "", val unit: String = "", val note: String = "") {
+/** What the C3 sheet edits, as the person typed it. [priceText] (SHOP-12) is always empty on open. */
+data class ItemForm(val name: String = "", val quantityText: String = "", val unit: String = "", val note: String = "", val priceText: String = "") {
     companion object {
         fun of(item: ListItemRecord) = ItemForm(item.name, ItemSheetLogic.quantityText(item.quantity), item.unit.orEmpty(), item.note.orEmpty())
     }
 }
 
-/** What gets stored: trimmed, blanks as null. */
-data class ItemFields(val name: String, val quantity: Double? = null, val unit: String? = null, val note: String? = null)
+/** What gets stored: trimmed, blanks as null. [price] (SHOP-12) is a new observation to record, not a `list_item` column. */
+data class ItemFields(val name: String, val quantity: Double? = null, val unit: String? = null, val note: String? = null, val price: BigDecimal? = null)
 
 /** The columns an edit changes, ready for `patch`; [nameKey] is the local-only `name_key` that goes with a rename. */
 data class ItemChanges(val fields: JsonObject, val nameKey: String?) {
@@ -32,7 +33,7 @@ sealed interface SheetState {
 object ItemSheetLogic {
     val UNIT_PRESETS = listOf("pcs", "g", "kg", "ml", "l", "pack", "bottle", "can")
 
-    /** Null when the form cannot be saved (blank name, bad quantity). */
+    /** Null when the form cannot be saved (blank name, bad quantity, bad price). */
     fun fields(form: ItemForm): ItemFields? {
         val name = form.name.trim()
         if (name.isEmpty()) return null
@@ -41,8 +42,16 @@ object ItemSheetLogic {
             QuantityText.Parse.Invalid -> return null
             is QuantityText.Parse.Valid -> q.value
         }
-        return ItemFields(name, quantity, blankToNull(form.unit), blankToNull(form.note))
+        val price = when (val p = Price.parse(form.priceText)) {
+            PriceParse.Empty -> null
+            PriceParse.Invalid -> return null
+            is PriceParse.Value -> p.value
+        }
+        return ItemFields(name, quantity, blankToNull(form.unit), blankToNull(form.note), price)
     }
+
+    /** True when the price text is not blank and not a price (drives the inline message). */
+    fun priceError(text: String): Boolean = Price.parse(text) == PriceParse.Invalid
 
     /** True when the quantity text is not blank and not a valid quantity (drives the inline message). */
     fun quantityError(text: String): Boolean = QuantityText.parse(text) == QuantityText.Parse.Invalid
