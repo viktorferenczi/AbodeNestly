@@ -72,6 +72,13 @@ struct QueuedMutation: Equatable {
     var mutation: SyncMutation
 }
 
+/// An upsert ready to store: see `HouseholdDatabase.prepareUpsert`.
+struct PreparedUpsert: Sendable {
+    var rowId: String
+    var local: [String: JSONValue]
+    var data: [String: JSONValue]
+}
+
 extension HouseholdDatabase {
     // MARK: Writes (the web `mutate` twin: every shopping and pantry write goes through here)
 
@@ -81,15 +88,39 @@ extension HouseholdDatabase {
     public func upsert(table: String, row: [String: JSONValue], now: Date = Date()) throws {
         let pool = try requirePool()
         guard let household = handle?.householdId else { throw HouseholdDatabaseError.notOpen }
+        let prepared = try Self.prepareUpsert(row: row, household: household)
+        try pool.write { db in
+            try Self.requireTable(db, table)
+            try Self.writeAndQueue(db, table: table, prepared: prepared, now: now)
+        }
+    }
+
+    /// `upsert` for many rows of one table in a single transaction (SHOP-11 "Add all"): every row and every outbox entry
+    /// is stored, or, when one fails, none is. An empty list is a no-op. The caller kicks sync once afterwards.
+    public func upsertAll(table: String, rows: [[String: JSONValue]], now: Date = Date()) throws {
+        guard !rows.isEmpty else { return }
+        let pool = try requirePool()
+        guard let household = handle?.householdId else { throw HouseholdDatabaseError.notOpen }
+        var prepared: [PreparedUpsert] = []
+        for row in rows { prepared.append(try Self.prepareUpsert(row: row, household: household)) }
+        try pool.write { db in
+            try Self.requireTable(db, table)
+            for item in prepared { try Self.writeAndQueue(db, table: table, prepared: item, now: now) }
+        }
+    }
+
+    /// The row to store locally (household filled in) and the fields to queue (server-owned columns removed).
+    private static func prepareUpsert(row: [String: JSONValue], household: UUID) throws -> PreparedUpsert {
         guard case .string(let rowId)? = row["id"] else { throw SyncWriteError.invalidRow }
         var local = row
         if local["household_id"] == nil { local["household_id"] = .string(household.uuidString.lowercased()) }
         let data = row.filter { !SyncTables.serverOwned.contains($0.key) }
-        try pool.write { db in
-            try Self.requireTable(db, table)
-            try Self.writeRow(db, table: table, row: local)
-            try Self.queue(db, table: table, op: "upsert", rowId: rowId, data: data, now: now)
-        }
+        return PreparedUpsert(rowId: rowId, local: local, data: data)
+    }
+
+    private static func writeAndQueue(_ db: Database, table: String, prepared: PreparedUpsert, now: Date) throws {
+        try writeRow(db, table: table, row: prepared.local)
+        try queue(db, table: table, op: "upsert", rowId: prepared.rowId, data: prepared.data, now: now)
     }
 
     /// Updates only `fields` locally and queues just those columns, so a concurrent edit of another column on another

@@ -18,12 +18,15 @@ public struct ListItemRecord: Sendable, Equatable, Identifiable {
     public var note: String?
     /// Millisecond UTC text of the check-off, or `nil` while unchecked (or for a row from before it was stamped).
     public var checkedAt: String?
+    /// The scanned product's code, when the row came from a lookup (SHOP-10).
+    public var barcode: String?
 
     public init(
         id: UUID, listId: UUID? = nil, name: String, nameKey: String? = nil, checked: Bool = false,
         deletedAt: String? = nil, createdAt: String? = nil, quantity: Double? = nil, unit: String? = nil, note: String? = nil,
-        checkedAt: String? = nil
+        checkedAt: String? = nil, barcode: String? = nil
     ) {
+        self.barcode = barcode
         self.checkedAt = checkedAt
         self.quantity = quantity
         self.unit = unit
@@ -90,6 +93,34 @@ extension HouseholdDatabase {
         }
     }
 
+    /// The live items of one list, read straight from the database (SHOP-11 copies them, so a lagging observation must
+    /// not be the source). Unordered; the caller sorts.
+    public func liveListItems(listId: UUID) throws -> [ListItemRecord] {
+        guard let pool, let household = handle?.householdId else { throw HouseholdDatabaseError.notOpen }
+        let key = household.uuidString.lowercased()
+        return try pool.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT id, list_id, name, name_key, quantity, unit, note, barcode, checked, checked_at, deleted_at, created_at
+                FROM list_item WHERE household_id = ? AND list_id = ? AND deleted_at IS NULL
+                """,
+                arguments: [key, listId.uuidString.lowercased()]
+            )
+            var items: [ListItemRecord] = []
+            for row in rows {
+                guard let id = UUID(uuidString: row["id"]) else { continue }
+                let checked: Bool? = row["checked"]
+                items.append(ListItemRecord(
+                    id: id, listId: listId, name: row["name"], nameKey: row["name_key"], checked: checked ?? false,
+                    deletedAt: row["deleted_at"], createdAt: row["created_at"], quantity: row["quantity"], unit: row["unit"],
+                    note: row["note"], checkedAt: row["checked_at"], barcode: row["barcode"]
+                ))
+            }
+            return items
+        }
+    }
+
     /// One list with its store name, its live items and the household's item history, re-emitted whenever any of them
     /// changes. Finishes at once when the household is not open.
     public func observeListDetail(householdId: UUID, listId: UUID) -> AsyncStream<ListDetailSnapshot> {
@@ -123,7 +154,7 @@ extension HouseholdDatabase {
             let rows = try Row.fetchAll(
                 db,
                 sql: """
-                SELECT id, list_id, name, name_key, quantity, unit, note, checked, checked_at, deleted_at, created_at FROM list_item
+                SELECT id, list_id, name, name_key, quantity, unit, note, barcode, checked, checked_at, deleted_at, created_at FROM list_item
                 WHERE household_id = ? AND (deleted_at IS NULL OR checked = 1)
                 """,
                 arguments: [key]
@@ -134,7 +165,8 @@ extension HouseholdDatabase {
                 return ListItemRecord(
                     id: id, listId: list.flatMap { UUID(uuidString: $0) }, name: row["name"], nameKey: row["name_key"],
                     checked: checked ?? false, deletedAt: row["deleted_at"], createdAt: row["created_at"],
-                    quantity: row["quantity"], unit: row["unit"], note: row["note"], checkedAt: row["checked_at"]
+                    quantity: row["quantity"], unit: row["unit"], note: row["note"], checkedAt: row["checked_at"],
+                    barcode: row["barcode"]
                 )
             }
             let items = rows.filter { $0.listId == listId && $0.deletedAt == nil }

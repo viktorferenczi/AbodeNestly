@@ -3,7 +3,7 @@ import SwiftUI
 import Sync
 import UI
 
-/// DESIGN C1 sheet: name and store. The Template switch waits for SHOP-11-ios. `onSave` returns whether the list was
+/// DESIGN C1 sheet: name, store and the Template switch (SHOP-11). `onSave` returns whether the list was
 /// stored; the sheet stays open with a message when it was not.
 struct NewListSheet: View {
     /// The fields and the save state live in an object so a component test can fill them in (a `@State` outside a
@@ -13,18 +13,19 @@ struct NewListSheet: View {
     final class Draft {
         var name = ""
         var storeId: UUID?
+        var isTemplate = false
         var busy = false
         var failed = false
         var valid: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     let stores: [StoreRecord]
-    let onSave: (String, UUID?) async -> Bool
+    let onSave: (String, UUID?, Bool) async -> Bool
     let onClose: () -> Void
     @Bindable private var draft: Draft
 
     init(
-        stores: [StoreRecord], draft: Draft = Draft(), onSave: @escaping (String, UUID?) async -> Bool,
+        stores: [StoreRecord], draft: Draft = Draft(), onSave: @escaping (String, UUID?, Bool) async -> Bool,
         onClose: @escaping () -> Void
     ) {
         self.stores = stores
@@ -50,6 +51,8 @@ struct NewListSheet: View {
                     }
                     .accessibilityIdentifier("newlist.store")
                 }
+                Toggle("Template", isOn: $draft.isTemplate)
+                    .accessibilityIdentifier("newlist.template")
             }
             .navigationTitle("New list")
             .navigationBarTitleDisplayMode(.inline)
@@ -63,7 +66,7 @@ struct NewListSheet: View {
                         draft.busy = true
                         draft.failed = false
                         Task {
-                            let saved = await onSave(draft.name, draft.storeId)
+                            let saved = await onSave(draft.name, draft.storeId, draft.isTemplate)
                             draft.busy = false
                             draft.failed = !saved
                         }

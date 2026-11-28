@@ -17,6 +17,8 @@ public struct ListDetailView: View {
     /// The open scanner (SHOP-10), built when the button is tapped so each scan starts from a fresh state.
     @State private var scanner: BarcodeScannerModel?
     @State private var showStorePicker = false
+    /// The "Add all to…" sheet of a template (SHOP-11).
+    @State private var addingAll = false
     /// "Manage stores" pushes once the picker has finished dismissing; a push during the dismissal is dropped.
     @State private var manageAfterDismiss = false
     @FocusState private var fieldFocused: Bool
@@ -93,12 +95,10 @@ public struct ListDetailView: View {
             }
         }
         .toolbar {
-            // Only item for now (Share, Template and Archive land later), and only when there is something to clear.
-            if !model.checked.isEmpty {
+            if !listActions.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button("Clear checked") { model.clearChecked() }
-                            .accessibilityIdentifier("list.actions.clearChecked")
+                        ForEach(listActions, id: \.self) { action in actionButton(action) }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -107,13 +107,41 @@ public struct ListDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $addingAll) {
+            AddAllSheet(
+                lists: model.targets,
+                onPick: { target in await model.addAll(to: target) },
+                onClose: { addingAll = false }
+            )
+        }
         .task { await model.start() }
         // An action still inside its undo window is written when the person leaves, not dropped.
         .onDisappear { Task { await model.flush() } }
+        // The add-all sheet has just closed and focus is elsewhere, so say the result (web: `role="status"`).
+        .onChange(of: model.status) { _, status in
+            if let status { AccessibilityNotification.Announcement(status).post() }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { Task { await model.flush() } }
         }
         .accessibilityIdentifier("list.screen")
+    }
+
+    /// Template: always the menu, "Add all to list" first (SHOP-11); otherwise only when something is checked (SHOP-04).
+    private var listActions: [ListAction] {
+        Templates.actions(isTemplate: model.isTemplate, hasChecked: !model.checked.isEmpty)
+    }
+
+    @ViewBuilder
+    private func actionButton(_ action: ListAction) -> some View {
+        switch action {
+        case .addAll:
+            Button("Add all to list") { addingAll = true }
+                .accessibilityIdentifier("list.actions.addAll")
+        case .clearChecked:
+            Button("Clear checked") { model.clearChecked() }
+                .accessibilityIdentifier("list.actions.clearChecked")
+        }
     }
 
     private var gone: some View {
@@ -126,6 +154,14 @@ public struct ListDetailView: View {
 
     @ViewBuilder
     private var detail: some View {
+        if model.isTemplate {
+            Text("Template")
+                .font(.caption)
+                .foregroundStyle(Tokens.text2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Tokens.screenPadding)
+                .accessibilityIdentifier("list.template")
+        }
         HStack {
             let store = model.snapshot.storeName
             Button { showStorePicker = true } label: {
@@ -150,6 +186,14 @@ public struct ListDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Tokens.screenPadding)
                 .accessibilityIdentifier("list.error")
+        }
+        if let status = model.status {
+            Text(status)
+                .font(.subheadline)
+                .foregroundStyle(Tokens.text2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Tokens.screenPadding)
+                .accessibilityIdentifier("list.status")
         }
         if !isOnline {
             OfflineBanner(message: "Offline — changes will sync when you're back online")

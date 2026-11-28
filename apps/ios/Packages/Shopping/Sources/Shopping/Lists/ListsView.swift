@@ -56,8 +56,8 @@ public struct ListsView: View {
             }
         }
         .sheet(isPresented: $showSheet) {
-            NewListSheet(stores: model.stores) { name, storeId in
-                guard let row = await model.create(name: name, storeId: storeId) else { return false }
+            NewListSheet(stores: model.stores) { name, storeId, isTemplate in
+                guard let row = await model.create(name: name, storeId: storeId, isTemplate: isTemplate) else { return false }
                 showSheet = false
                 onOpen(row)
                 return true

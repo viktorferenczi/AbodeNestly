@@ -102,7 +102,7 @@ struct ListsViewTests {
         let lidl = UUID()
         let saved = SavedBox()
         let draft = NewListSheet.Draft()
-        let sheet = NewListSheet(stores: [StoreRecord(id: lidl, name: "Lidl")], draft: draft) { name, store in
+        let sheet = NewListSheet(stores: [StoreRecord(id: lidl, name: "Lidl")], draft: draft) { name, store, _ in
             await saved.set(name, store)
             return true
         } onClose: {}
