@@ -142,7 +142,7 @@ internal fun ListDetailScreenHost(
     // SHOP-13: the C8 share sheet, only for a list that has loaded and is not gone.
     if (ui.shareOpen && share != null && ui.canShare) {
         val clipboard = LocalClipboardManager.current
-        val model = remember { viewModel.makeShare(share.webBase, share.share, share.stop, copy = { clipboard.setText(AnnotatedString(it)) }) }
+        val model = remember(viewModel, share) { viewModel.makeShare(share.webBase, share.share, share.stop, copy = { clipboard.setText(AnnotatedString(it)) }) }
         DisposableEffect(model) { onDispose { model.close() } }
         shareSheet(model, ui.online) { viewModel.onEvent(ListDetailEvent.CloseShare) }
     }

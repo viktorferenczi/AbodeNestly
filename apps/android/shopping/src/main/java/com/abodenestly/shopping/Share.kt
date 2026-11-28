@@ -45,10 +45,20 @@ object Share {
         return decoded.ifEmpty { null }
     }
 
-    /** `<web base>/shared/<token>`; the token is percent-encoded as one path segment. */
-    fun link(webBase: String, token: String): String {
+    /**
+     * `<web base>/shared/<token>`; the token is percent-encoded as one path segment. `null` when [webBase] is not an
+     * absolute http(s) URL (a build without `WEB_BASE_URL`), so the sheet never offers a broken relative link.
+     */
+    fun link(webBase: String, token: String): String? {
+        val base: URI = try {
+            URI(webBase.trim())
+        } catch (e: java.net.URISyntaxException) {
+            return null
+        }
+        val scheme: String = base.scheme?.lowercase() ?: return null
+        if ((scheme != "http" && scheme != "https") || base.host.isNullOrEmpty()) return null
         val encoded: String = URLEncoder.encode(token, "UTF-8").replace("+", "%20")
-        return webBase.trimEnd('/') + "/shared/" + encoded
+        return webBase.trim().trimEnd('/') + "/shared/" + encoded
     }
 }
 

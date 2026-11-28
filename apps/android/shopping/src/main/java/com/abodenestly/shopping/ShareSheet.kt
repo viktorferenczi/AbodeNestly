@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -108,6 +109,8 @@ internal fun ShareSheetContent(model: ShareSheetModel, online: Boolean, onSystem
     val enabled: Boolean = online && !ui.share.isBusy
     val link: String? = ui.link
     val systemShare: (String) -> Unit = onSystemShare ?: { url: String -> shareLinkWithChooser(context, url) }
+    // "Link copied" is a StateFlow value, so a repeat Copy inside the window emits nothing; announce from the tap itself.
+    val view = LocalView.current
     Column(
         Modifier.fillMaxWidth().padding(horizontal = Tokens.ScreenPadding).padding(bottom = Tokens.ScreenPadding).testTag("share.sheet"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -130,24 +133,29 @@ internal fun ShareSheetContent(model: ShareSheetModel, online: Boolean, onSystem
         if (!online) {
             Text(SHARE_OFFLINE_MESSAGE, color = tokens.text2, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("share.offline"))
         }
-        if (link != null) {
-            SelectionContainer {
-                Text(link, style = MaterialTheme.typography.bodyLarge, color = tokens.text, modifier = Modifier.fillMaxWidth().testTag("share.link"))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { model.copyLink() }, modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("share.copy")) {
-                    Text("Copy link")
+        if (ui.share.isOn) {
+            if (link != null) {
+                SelectionContainer {
+                    Text(link, style = MaterialTheme.typography.bodyLarge, color = tokens.text, modifier = Modifier.fillMaxWidth().testTag("share.link"))
                 }
-                OutlinedButton(
-                    onClick = { systemShare(link) },
-                    modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("share.system"),
-                ) { Text("Share…") }
-            }
-            if (ui.copied) {
-                Text(
-                    SHARE_COPIED_MESSAGE, color = tokens.text2, style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.testTag("share.copied").semantics { liveRegion = LiveRegionMode.Polite },
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        model.copyLink()
+                        @Suppress("DEPRECATION") view.announceForAccessibility(SHARE_COPIED_MESSAGE)
+                    }, modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("share.copy")) {
+                        Text("Copy link")
+                    }
+                    OutlinedButton(
+                        onClick = { systemShare(link) },
+                        modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("share.system"),
+                    ) { Text("Share…") }
+                }
+                if (ui.copied) {
+                    Text(
+                        SHARE_COPIED_MESSAGE, color = tokens.text2, style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("share.copied").semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
             }
             Text(SHARE_VIEW_NOTE, color = tokens.text2, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("share.note"))
             TextButton(onClick = { model.turnOff() }, enabled = enabled, modifier = Modifier.heightIn(min = Tokens.MinTouchTarget).testTag("share.stop")) {

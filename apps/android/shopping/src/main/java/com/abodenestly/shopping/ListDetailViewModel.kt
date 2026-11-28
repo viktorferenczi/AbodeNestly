@@ -484,13 +484,18 @@ class ListDetailViewModel(
     )
 
     private suspend fun recordShare(token: String?) {
+        val change: Int = shareChanges.incrementAndGet()
         // A failed local write is harmless: the server holds the truth and the next pull brings the same value.
         writeShareToken(token)
         kick()
         // The kick can join a pull whose page was read before this change committed, and that page writes the old token
-        // back. Write the server's answer again so it is the last local write.
-        writeShareToken(token)
+        // back. Write the server's answer again so it is the last local write, unless a newer share change (Stop sharing
+        // tapped while this kick ran) has written since: its answer is the one that stands.
+        if (shareChanges.get() == change) writeShareToken(token)
     }
+
+    /** Counts recorded share changes, so a stale [recordShare] skips its write after the kick. */
+    private val shareChanges = java.util.concurrent.atomic.AtomicInteger(0)
 
     private suspend fun writeShareToken(token: String?) {
         try {

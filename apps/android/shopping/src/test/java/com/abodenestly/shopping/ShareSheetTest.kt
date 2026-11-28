@@ -51,7 +51,7 @@ class ShareSheetTest {
     // --- Pure logic ---
 
     @Test
-    fun `token is the last path segment of an absolute path, percent-decoded`() {
+    fun `SHOP-13 token is the last path segment of an absolute path, percent-decoded`() {
         assertEquals("tok123", Share.token("https://api.test/shared/tok123"))
         assertEquals("tok123", Share.token("https://api.test/shared/tok123/"))
         assertEquals("tok123", Share.token("http://localhost:3000/shared/tok123?x=1#y"))
@@ -61,7 +61,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `token is none for an empty, relative or non-URL text`() {
+    fun `SHOP-13 token is none for an empty, relative or non-URL text`() {
         assertNull(Share.token(""))
         assertNull(Share.token("http://api.test"))
         assertNull(Share.token("http://api.test/"))
@@ -71,14 +71,23 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `link is the web origin plus shared and the encoded token`() {
+    fun `SHOP-13 link is the web origin plus shared and the encoded token`() {
         assertEquals("http://localhost:5173/shared/tok123", Share.link("http://localhost:5173", "tok123"))
         assertEquals("https://app.example.com/shared/tok123", Share.link("https://app.example.com/", "tok123"))
         assertEquals("https://app.example.com/shared/a%2Fb%20c", Share.link("https://app.example.com", "a/b c"))
     }
 
     @Test
-    fun `state transitions only change the token on success`() {
+    fun `SHOP-13 link is none when the web origin is blank, relative or not http`() {
+        assertNull(Share.link("", "tok123"))
+        assertNull(Share.link("   ", "tok123"))
+        assertNull(Share.link("/app", "tok123"))
+        assertNull(Share.link("ftp://app.example.com", "tok123"))
+        assertNull(Share.link("not a url", "tok123"))
+    }
+
+    @Test
+    fun `SHOP-13 state transitions only change the token on success`() {
         val off = ShareState(null)
         assertFalse(off.isOn)
         val turning = off.begin(ShareBusy.TurningOn)
@@ -97,7 +106,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `actions offer Share first, templates too, and only when sharing is available`() {
+    fun `SHOP-13 actions offer Share first, templates too, and only when sharing is available`() {
         assertEquals(listOf(ListAction.Share), Templates.actions(isTemplate = false, hasChecked = false, canShare = true))
         assertEquals(listOf(ListAction.Share, ListAction.ClearChecked), Templates.actions(isTemplate = false, hasChecked = true, canShare = true))
         assertEquals(listOf(ListAction.Share, ListAction.AddAll), Templates.actions(isTemplate = true, hasChecked = false, canShare = true))
@@ -109,7 +118,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `Share is not offered before the list has loaded or on a gone list`() {
+    fun `SHOP-13 Share is not offered before the list has loaded or on a gone list`() {
         val list = ListRecord("l1", "Groceries", null, false, null, null)
         assertFalse(ListDetailUiState().canShare)
         assertFalse(ListDetailUiState(loaded = false, detail = ListDetail(list = list)).canShare)
@@ -118,7 +127,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `forApi calls the list's UUID and fails a text that is not one without a call`() {
+    fun `SHOP-13 forApi calls the list's UUID and fails a text that is not one without a call`() {
         val api = FakeApiService()
         val setup = ShareSetup.forApi("http://localhost:5173", api)
         val id = uuid(5)
@@ -155,7 +164,7 @@ class ShareSheetTest {
     )
 
     @Test
-    fun `AC1 a list with no token starts off, and one with a token starts on with its link`() {
+    fun `SHOP-13 AC1 a list with no token starts off, and one with a token starts on with its link`() {
         val calls = Calls()
         assertFalse(model(calls).state.value.share.isOn)
         assertNull(model(calls).state.value.link)
@@ -165,7 +174,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `AC2 turning on posts, builds the link from the token and records it`() {
+    fun `SHOP-13 AC2 turning on posts, builds the link from the token and records it`() {
         val calls = Calls()
         val m = model(calls)
         m.setOn(true)
@@ -177,7 +186,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `AC3 turning off deletes, returns the switch to off and records null`() {
+    fun `SHOP-13 AC3 turning off deletes, returns the switch to off and records null`() {
         val calls = Calls()
         val m = model(calls, token = "tok123")
         m.setOn(false)
@@ -188,7 +197,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `AC4 offline disables the switch and makes no API call`() {
+    fun `SHOP-13 AC4 offline disables the switch and makes no API call`() {
         val calls = Calls().also { it.online = false }
         val off = model(calls)
         assertFalse(off.canChange)
@@ -206,7 +215,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `offline a known link stays copyable`() {
+    fun `SHOP-13 offline a known link stays copyable`() {
         val calls = Calls().also { it.online = false }
         val m = model(calls, token = "tok123")
         m.copyLink()
@@ -215,7 +224,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `a failed turn-on returns the switch to off with the error and records nothing`() {
+    fun `SHOP-13 a failed turn-on returns the switch to off with the error and records nothing`() {
         val calls = Calls().also { it.shareResult = ApiResult.Failure(ApiFailure.Network) }
         val m = model(calls)
         m.turnOn()
@@ -225,7 +234,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `a POST URL with no token counts as a failure`() {
+    fun `SHOP-13 a POST URL with no token counts as a failure`() {
         val calls = Calls().also { it.shareResult = ApiResult.Success("http://api.test") }
         val m = model(calls)
         m.turnOn()
@@ -235,7 +244,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `a call that throws counts as a failure`() {
+    fun `SHOP-13 a call that throws counts as a failure`() {
         val m = ShareSheetModel(
             initialToken = null, webBase = "http://localhost:5173", share = { error("boom") }, stop = { error("boom") },
             record = { }, isOnline = { true }, copy = { }, scope = scope,
@@ -245,7 +254,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `a failed stop keeps it on with the error and records nothing`() {
+    fun `SHOP-13 a failed stop keeps it on with the error and records nothing`() {
         val calls = Calls().also { it.stopResult = ApiResult.Failure(ApiFailure.Unknown) }
         val m = model(calls, token = "tok123")
         m.turnOff()
@@ -256,7 +265,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `turning on while on, or off while off, calls nothing`() {
+    fun `SHOP-13 turning on while on, or off while off, calls nothing`() {
         val calls = Calls()
         model(calls, token = "tok123").turnOn()
         model(calls).turnOff()
@@ -265,7 +274,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `Link copied shows until the window ends`() {
+    fun `SHOP-13 Link copied shows until the window ends`() {
         val calls = Calls()
         val gate = CompletableDeferred<Unit>()
         val m = model(calls, token = "tok123", delayer = { gate.await() })
@@ -277,7 +286,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `copy does nothing while sharing is off`() {
+    fun `SHOP-13 copy does nothing while sharing is off`() {
         val calls = Calls()
         val m = model(calls)
         m.copyLink()
@@ -310,7 +319,7 @@ class ShareSheetTest {
     )
 
     @Test
-    fun `a successful POST writes share_token locally with no outbox row and one kick, and a DELETE clears it`() {
+    fun `SHOP-13 a successful POST writes share_token locally with no outbox row and one kick, and a DELETE clears it`() {
         val vm = detailVm()
         val calls = Calls()
         val m = makeShare(vm, calls)
@@ -332,7 +341,32 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `a kick that writes the old value does not leave it, for both on and stop`() {
+    fun `SHOP-13 Stop sharing while the turn-on kick runs leaves the link off`() {
+        val firstKick = CompletableDeferred<Unit>()
+        val kickCalls = AtomicInteger()
+        val vm = detailVm(kick = { if (kickCalls.incrementAndGet() == 1) firstKick.await() })
+        val calls = Calls()
+        val m = makeShare(vm, calls)
+
+        // Turn on: the token is written and the first kick is still running.
+        m.turnOn()
+        runBlocking { awaitUntil { localToken() == "tok123" && kickCalls.get() == 1 } }
+        assertTrue(m.state.value.share.isOn)
+
+        // Stop sharing before that kick returns: the DELETE's answer is written and its own kick finishes.
+        m.turnOff()
+        runBlocking { awaitUntil { calls.stops.get() == 1 && kickCalls.get() == 2 } }
+        assertNull(localToken())
+
+        // The turn-on kick returns last; its rewrite of the revoked token must not happen.
+        firstKick.complete(Unit)
+        runBlocking { awaitUntil { !m.state.value.share.isBusy } }
+        assertNull(localToken())
+        assertFalse(m.state.value.share.isOn)
+    }
+
+    @Test
+    fun `SHOP-13 a kick that writes the old value does not leave it, for both on and stop`() {
         val stale = AtomicInteger()
         var staleToken: String? = null
         val vm = detailVm(kick = { kicks.incrementAndGet(); registry.setShareToken(household, "l1", staleToken); stale.incrementAndGet() })
@@ -354,7 +388,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `setShareToken says false for a list that is not there and throws for another household`() {
+    fun `SHOP-13 setShareToken says false for a list that is not there and throws for another household`() {
         runBlocking {
             registry.open(household)
             assertFalse(registry.setShareToken(household, "missing", "x"))
@@ -365,7 +399,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `OpenShare opens the sheet on a loaded list and CloseShare closes it`() {
+    fun `SHOP-13 OpenShare opens the sheet on a loaded list and CloseShare closes it`() {
         val vm = detailVm()
         vm.onEvent(ListDetailEvent.OpenShare)
         assertTrue(vm.state.value.shareOpen)
@@ -374,7 +408,7 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `OpenShare does nothing on a gone list`() {
+    fun `SHOP-13 OpenShare does nothing on a gone list`() {
         val vm = detailVm(listId = "gone")
         assertTrue(vm.state.value.isGone)
         vm.onEvent(ListDetailEvent.OpenShare)

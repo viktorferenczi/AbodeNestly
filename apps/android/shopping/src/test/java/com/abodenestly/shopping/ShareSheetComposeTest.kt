@@ -122,7 +122,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `Share is the first item of the List actions menu, even on a list with nothing checked`() {
+    fun `SHOP-13 Share is the first item of the List actions menu, even on a list with nothing checked`() {
         seedList()
         showDetail()
         await("list.actions")
@@ -134,7 +134,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `without a share setup the menu has no Share`() {
+    fun `SHOP-13 without a share setup the menu has no Share`() {
         seedList()
         showDetail(withShare = false)
         await("list.title")
@@ -142,7 +142,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `a gone list has no menu`() {
+    fun `SHOP-13 a gone list has no menu`() {
         runBlocking { registry.open(household) }
         showDetail(listId = "gone")
         await("list.gone")
@@ -150,7 +150,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `AC1 sharing is off, so the switch is off and there is no link`() {
+    fun `SHOP-13 AC1 sharing is off, so the switch is off and there is no link`() {
         seedList()
         showDetail()
         openShare()
@@ -161,7 +161,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `AC2 turning the switch on shows the link, Copy link and the unchecked-items line`() {
+    fun `SHOP-13 AC2 turning the switch on shows the link, Copy link and the unchecked-items line`() {
         seedList()
         showDetail()
         openShare()
@@ -177,7 +177,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `a list that already has a token opens on`() {
+    fun `SHOP-13 a list that already has a token opens on`() {
         seedList(token = "tok123")
         showDetail()
         openShare()
@@ -187,7 +187,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `AC3 Stop sharing deletes and the switch is off`() {
+    fun `SHOP-13 AC3 Stop sharing deletes and the switch is off`() {
         seedList(token = "tok123")
         showDetail()
         openShare()
@@ -199,7 +199,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `turning the switch off deletes too`() {
+    fun `SHOP-13 turning the switch off deletes too`() {
         seedList(token = "tok123")
         showDetail()
         openShare()
@@ -209,7 +209,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `Copy link puts the link on the clipboard and says Link copied politely`() {
+    fun `SHOP-13 Copy link puts the link on the clipboard and says Link copied politely`() {
         seedList(token = "tok123")
         showDetail()
         openShare()
@@ -220,7 +220,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `a failed turn-on returns the switch to off with an assertive error`() {
+    fun `SHOP-13 a failed turn-on returns the switch to off with an assertive error`() {
         shareResult = ApiResult.Failure(ApiFailure.Network)
         seedList()
         showDetail()
@@ -233,7 +233,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `a failed stop keeps it on with an assertive error`() {
+    fun `SHOP-13 a failed stop keeps it on with an assertive error`() {
         stopResult = ApiResult.Failure(ApiFailure.Unknown)
         seedList(token = "tok123")
         showDetail()
@@ -246,7 +246,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `AC4 offline the switch is disabled, no call is made and the message shows`() {
+    fun `SHOP-13 AC4 offline the switch is disabled, no call is made and the message shows`() {
         seedList()
         showDetail(online = false)
         openShare()
@@ -259,7 +259,7 @@ class ShareSheetComposeTest {
     }
 
     @Test
-    fun `offline a known link stays visible and copyable, and Stop sharing is disabled`() {
+    fun `SHOP-13 offline a known link stays visible and copyable, and Stop sharing is disabled`() {
         seedList(token = "tok123")
         showDetail(online = false)
         openShare()
