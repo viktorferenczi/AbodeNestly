@@ -80,7 +80,7 @@ object Templates {
     }
 
     /**
-     * Copies every live item of [templateId] (except [exclude], rows a delete or clear is hiding) onto [targetListId] in
+     * Copies every live item of [templateId] (a delete still inside its undo window is still live, as on web and iOS) onto [targetListId] in
      * one transaction and returns how many. Nothing is written for an empty template. The caller kicks sync once
      * afterwards, and only when the count is above 0.
      */
@@ -92,9 +92,8 @@ object Templates {
         userId: UUID?,
         now: Instant,
         uuid: () -> String = { UUID.randomUUID().toString() },
-        exclude: Set<String> = emptySet(),
     ): Int {
-        val items = database.liveListItems(householdId, templateId).filter { it.id !in exclude }
+        val items = database.liveListItems(householdId, templateId)
         val rows = copies(items, templateId, targetListId, householdId, userId, now, uuid)
         if (rows.isEmpty()) return 0
         database.upsertAll(householdId, "list_item", rows, now)

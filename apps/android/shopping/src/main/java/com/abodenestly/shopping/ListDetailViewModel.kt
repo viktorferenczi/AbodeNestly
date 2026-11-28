@@ -269,7 +269,7 @@ class ListDetailViewModel(
             // A copy that has started finishes even when the view model is cleared meanwhile.
             val count: Int? = withContext(NonCancellable) {
                 try {
-                    Templates.addAllToList(database, householdId, listId, target.id, userId, now(), newId, s.hidden)
+                    Templates.addAllToList(database, householdId, listId, target.id, userId, now(), newId)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
