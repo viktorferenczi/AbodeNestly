@@ -314,10 +314,12 @@ class ShareSheetTest {
         val vm = detailVm()
         val calls = Calls()
         val m = makeShare(vm, calls)
+        // Creating the list queued its own upsert; the share writes must add none.
+        val before = runBlocking { registry.pendingCount(household) }
         assertFalse(m.state.value.share.isOn)
         m.turnOn()
         runBlocking { awaitUntil { localToken() == "tok123" && kicks.get() == 1 } }
-        assertEquals(0, runBlocking { registry.pendingCount(household) })
+        assertEquals(before, runBlocking { registry.pendingCount(household) })
         assertEquals(1, kicks.get())
 
         // A new sheet starts from the local token.
@@ -325,7 +327,7 @@ class ShareSheetTest {
 
         m.turnOff()
         runBlocking { awaitUntil { localToken() == null && kicks.get() == 2 } }
-        assertEquals(0, runBlocking { registry.pendingCount(household) })
+        assertEquals(before, runBlocking { registry.pendingCount(household) })
         assertEquals(1, calls.stops.get())
     }
 
