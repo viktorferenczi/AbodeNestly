@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SHOP-15: Google Assistant App Action. "Add milk to my shopping list in AbodeNestly" starts AssistantAddActivity with
+     the item as an extra; the list name is ignored (the default list receives it). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <capability android:name="actions.intent.CREATE_ITEM_LIST">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.abodenestly.app.AssistantAddActivity"
+            android:targetPackage="@string/shortcut_target_package">
+            <parameter
+                android:name="itemList.itemListElement.name"
+                android:key="item" />
+            <parameter
+                android:name="itemList.name"
+                android:key="list" />
+        </intent>
+    </capability>
+</shortcuts>

@@ -68,7 +68,7 @@ syncEngine.kick()
 ## Platform features
 - **Barcode** (SHOP-10, PANT-09): CameraX `ImageAnalysis` + ML Kit `BarcodeScanning` (EAN-13/8, UPC-A). Lookup `GET /products/{barcode}`; cache in local `product` table.
 - **Voice add** (SHOP-14): `SpeechRecognizer`; parse with `shared/QuantityParser` (same cases as iOS).
-- **Assistant** (SHOP-15): App Actions `shortcuts.xml` with `actions.intent.CREATE_ITEM_LIST` → deep link handled by `MainActivity`, writes via outbox.
+- **Assistant** (SHOP-15): App Actions `shortcuts.xml` with `actions.intent.CREATE_ITEM_LIST` → the dedicated translucent `AssistantAddActivity` (not `MainActivity`; extra `item`), which runs `AssistantShortcut.add` in `:shopping` (writes via outbox), shows the reply as a Toast and finishes.
 - **Push** (PANT-16, MAINT-08): `FirebaseMessagingService`; register token with `POST /devices` on refresh. Notification channels per `NotificationType`. Tap opens the entity route.
 - **QR** (MAINT-14): generate with a small in-house QR encoder in `:shared` (no ZXing) or ML Kit scan + `Bitmap` from the API-provided PNG; deep link `abodenestly://asset/<qr_code>`.
 - **PDF export** (MAINT-13): download via API to cache dir, share with `FileProvider`.

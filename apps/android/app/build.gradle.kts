@@ -34,6 +34,8 @@ android {
             create(name) {
                 dimension = "env"
                 if (name == "dev") applicationIdSuffix = ".dev"
+                // shortcuts.xml (SHOP-15) names the package the App Action targets; res files take no ${applicationId} placeholder.
+                resValue("string", "shortcut_target_package", if (name == "dev") "com.abodenestly.app.dev" else "com.abodenestly.app")
                 // Magic link and OAuth return here. Dev's scheme is on the allow-list in supabase/config.toml;
                 // App Links replace the custom scheme once a domain exists (same note as the iOS README).
                 val scheme = if (name == "dev") "abodenestly-dev" else "abodenestly"
