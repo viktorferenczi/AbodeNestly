@@ -74,6 +74,7 @@ describe('SHOP-13: share sheet (C8)', () => {
     expect(toggle().checked).toBe(true);
     expect(screen.getByText('Anyone with the link can view unchecked items')).toBeTruthy();
     expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenLastCalledWith(NEW_TOKEN);
     fireEvent.click(screen.getByRole('button', { name: 'Copy link' }));
     expect((await screen.findByRole('status')).textContent).toBe('Link copied');
     expect(writeText).toHaveBeenCalledWith(link.value);
@@ -127,6 +128,7 @@ describe('SHOP-13: share sheet (C8)', () => {
     expect(api.stopCalls).toEqual(['l1']);
     expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull();
     expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenLastCalledWith(null);
   });
 
   it('turning the switch off also DELETEs', async () => {

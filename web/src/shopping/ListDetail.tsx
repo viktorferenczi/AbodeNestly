@@ -20,6 +20,7 @@ import { drainLookups } from './Barcode.ts';
 import { QuickAdd } from './QuickAdd.tsx';
 import { AddAllSheet } from './AddAllSheet.tsx';
 import { ShareSheet } from './ShareSheet.tsx';
+import { recordShare } from './ShareSheet.ts';
 import { addAllToList, targetLists } from './Templates.ts';
 import styles from './ListDetail.module.css';
 
@@ -345,7 +346,7 @@ export function ListDetail() {
           onCreate={(name) => createStore(db, deps, { householdId, name })}
         />
       ) : null}
-      {sharing ? <ShareSheet listId={listId} token={data.list.share_token} onChanged={() => void sync.kick()} onClose={() => setSharing(false)} /> : null}
+      {sharing ? <ShareSheet listId={listId} token={data.list.share_token} onChanged={(token) => void recordShare(db, listId, token).then(() => sync.kick())} onClose={() => setSharing(false)} /> : null}
       {addingAll ? (
         <AddAllSheet
           lists={targetLists(data.lists).filter((l) => l.household_id === householdId)}

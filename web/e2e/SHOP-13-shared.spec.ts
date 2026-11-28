@@ -17,9 +17,9 @@ test.describe('SHOP-13: share link', () => {
     const { data: list, error: listError } = await admin.from('shopping_list').insert({ household_id: householdId, name: 'Groceries' }).select('id').single();
     if (listError) throw listError;
     const { error: itemError } = await admin.from('list_item').insert([
-      { household_id: householdId, list_id: list.id, name: 'Milk', name_key: 'milk', quantity: 2 },
-      { household_id: householdId, list_id: list.id, name: 'Bread', name_key: 'bread' },
-      { household_id: householdId, list_id: list.id, name: 'Secret eggs', name_key: 'secret eggs', checked: true },
+      { household_id: householdId, list_id: list.id, name: 'Milk', quantity: 2 },
+      { household_id: householdId, list_id: list.id, name: 'Bread' },
+      { household_id: householdId, list_id: list.id, name: 'Secret eggs', checked: true },
     ]);
     if (itemError) throw itemError;
   });

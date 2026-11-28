@@ -10,7 +10,7 @@ const COPIED_MS = 3000;
 // DESIGN C8: switch "Share with a link", the link with Copy, the hint, and Stop sharing. Online only.
 // `token` is the list's local share_token; a POST or DELETE made in this sheet wins over it until the sheet closes,
 // because the local row only catches up after the next pull.
-export function ShareSheet({ listId, token, onChanged, onClose }: { listId: string; token: string | null; onChanged: () => void; onClose: () => void }) {
+export function ShareSheet({ listId, token, onChanged, onClose }: { listId: string; token: string | null; onChanged: (token: string | null) => void; onClose: () => void }) {
   const api = useApi();
   const online = useOnline();
   const [override, setOverride] = useState<{ token: string | null } | null>(null);
@@ -35,7 +35,7 @@ export function ShareSheet({ listId, token, onChanged, onClose }: { listId: stri
     const minted = result.ok ? tokenFromUrl(result.value.url) : null;
     if (minted) {
       setOverride({ token: minted });
-      onChanged();
+      onChanged(minted);
     } else {
       setError('Could not turn on sharing. Try again.');
     }
@@ -49,7 +49,7 @@ export function ShareSheet({ listId, token, onChanged, onClose }: { listId: stri
     if (result.ok) {
       setOverride({ token: null });
       setCopied(false);
-      onChanged();
+      onChanged(null);
     } else {
       setError('Could not stop sharing. Try again.');
     }
