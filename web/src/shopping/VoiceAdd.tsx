@@ -90,6 +90,8 @@ export function VoiceAdd({ db, deps, householdId, listId, userId, onClose, onTyp
 
   const add = async (item: SpokenItem) => {
     if (busy) return;
+    // Clear the last failure so a repeat failure remounts the alert and the screen reader announces it again.
+    setFailed(false);
     setBusy(true);
     try {
       await addItem(db, deps, { householdId, listId, userId, name: item.name, quantity: item.quantity, unit: item.unit });
@@ -140,7 +142,7 @@ export function VoiceAdd({ db, deps, householdId, listId, userId, onClose, onTyp
             <li className={styles.chip}>{item.name}</li>
           </ul>
           <div className={styles.actions}>
-            <button type="button" className={styles.secondary} onClick={tryAgain}>
+            <button type="button" className={styles.secondary} disabled={busy} onClick={tryAgain}>
               Try again
             </button>
             <button type="button" className={styles.primary} disabled={busy} onClick={() => void add(item)}>

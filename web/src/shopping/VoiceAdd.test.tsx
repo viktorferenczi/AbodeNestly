@@ -312,4 +312,40 @@ describe('SHOP-14: voice add', () => {
     expect(items).toHaveLength(1);
     expect(out).toHaveLength(1);
   });
+
+  it('a second failing add announces again: the alert goes away while adding and returns as a new element', async () => {
+    await openVoice();
+    await waitFor(() => expect(rec.starts).toHaveLength(1));
+    rec.say('2 litres milk');
+    const spy = vi.spyOn(Dexie.prototype, 'transaction').mockRejectedValueOnce(new Error('closed'));
+    fireEvent.click(await dialog().findByRole('button', { name: 'Add' }));
+    const first = await dialog().findByRole('alert');
+    let release: (e: Error) => void = () => undefined;
+    spy.mockReturnValueOnce(new Promise((_, reject) => void (release = reject)) as never);
+    fireEvent.click(await dialog().findByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(dialog().queryByRole('alert')).toBeNull());
+    await act(async () => release(new Error('closed again')));
+    const second = await dialog().findByRole('alert');
+    expect(second).not.toBe(first);
+    expect(second.textContent).toBe("Couldn't add that item. Try again.");
+    spy.mockRestore();
+  });
+
+  it('Try again is disabled while an add is pending', async () => {
+    await openVoice();
+    await waitFor(() => expect(rec.starts).toHaveLength(1));
+    rec.say('2 litres milk');
+    let release: (e: Error) => void = () => undefined;
+    const spy = vi
+      .spyOn(Dexie.prototype, 'transaction')
+      .mockReturnValueOnce(new Promise((_, reject) => void (release = reject)) as never);
+    fireEvent.click(await dialog().findByRole('button', { name: 'Add' }));
+    const retry = dialog().getByRole('button', { name: 'Try again' }) as HTMLButtonElement;
+    await waitFor(() => expect(retry.disabled).toBe(true));
+    fireEvent.click(retry);
+    expect(rec.starts).toHaveLength(1);
+    await act(async () => release(new Error('closed')));
+    await waitFor(() => expect((dialog().getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(false));
+    spy.mockRestore();
+  });
 });
