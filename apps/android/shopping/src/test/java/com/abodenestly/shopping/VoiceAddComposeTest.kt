@@ -315,6 +315,15 @@ class VoiceAddComposeTest {
     }
 
     @Test
+    fun `SHOP-14 a transcript with no name still shows what was heard above the message`() {
+        show()
+        awaitListening()
+        device.emit(VoiceEvent.Final("2 litres"))
+        await("voice.message")
+        rule.onNodeWithTag("voice.parsed.transcript").assertTextEquals("2 litres")
+    }
+
+    @Test
     fun `SHOP-14 an error after partial results shows Didn't catch that with Try again`() {
         show()
         awaitListening()

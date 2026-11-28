@@ -152,6 +152,10 @@ internal fun VoiceAddContent(model: VoiceAddModel, onClose: () -> Unit, onTypeIn
                 }
             }
             is VoicePhase.NoItem -> {
+                Text(
+                    phase.transcript, style = MaterialTheme.typography.bodyLarge, color = tokens.text2,
+                    modifier = Modifier.fillMaxWidth().testTag("voice.parsed.transcript"),
+                )
                 Message(VOICE_NO_ITEM)
                 TryAgainButton { scope.launch { model.tryAgain() } }
             }

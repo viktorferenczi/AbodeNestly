@@ -91,8 +91,12 @@ class AndroidSpeechRecognizerDevice(context: Context) : SpeechRecognizerDevice {
     }
 
     private fun create(offline: Boolean): SpeechRecognizer {
-        if (offline && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(appContext)) {
-            return SpeechRecognizer.createOnDeviceSpeechRecognizer(appContext)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val onDevice: Boolean = SpeechRecognizer.isOnDeviceRecognitionAvailable(appContext)
+            val service: Boolean = SpeechRecognizer.isRecognitionAvailable(appContext)
+            if (useOnDevice(Build.VERSION.SDK_INT, offline, onDevice, service)) {
+                return SpeechRecognizer.createOnDeviceSpeechRecognizer(appContext)
+            }
         }
         return SpeechRecognizer.createSpeechRecognizer(appContext)
     }
@@ -151,6 +155,13 @@ class AndroidSpeechRecognizerDevice(context: Context) : SpeechRecognizerDevice {
                 if (text.isNullOrBlank()) VoiceEvent.Error(VoiceErrorKind.Other) else VoiceEvent.Final(text)
             RecognizerCallback.Partial -> if (text.isNullOrBlank()) null else VoiceEvent.Partial(text)
         }
+
+        /**
+         * Whether to create the on-device recognizer (pure, so it is unit tested): API 31+, one is installed, and either the
+         * person wants offline or there is no recognition service for `createSpeechRecognizer` to bind to.
+         */
+        fun useOnDevice(sdk: Int, offline: Boolean, onDevice: Boolean, service: Boolean): Boolean =
+            sdk >= Build.VERSION_CODES.S && onDevice && (offline || !service)
 
         /** Access withdrawn is denied; a language the recognizer lacks is unavailable; no match, silence and the rest are "didn't catch that". */
         fun errorKind(errorCode: Int): VoiceErrorKind = when (errorCode) {

@@ -370,4 +370,14 @@ class VoiceAddTest {
         m.tryAgain()
         assertFalse(m.state.value.addFailed)
     }
+
+    @Test
+    fun `SHOP-14 the on-device recognizer is used offline, or online when no recognition service exists`() {
+        val s = android.os.Build.VERSION_CODES.S
+        assertTrue(AndroidSpeechRecognizerDevice.useOnDevice(s, offline = true, onDevice = true, service = true))
+        assertTrue(AndroidSpeechRecognizerDevice.useOnDevice(s, offline = false, onDevice = true, service = false))
+        assertFalse(AndroidSpeechRecognizerDevice.useOnDevice(s, offline = false, onDevice = true, service = true))
+        assertFalse(AndroidSpeechRecognizerDevice.useOnDevice(s, offline = true, onDevice = false, service = true))
+        assertFalse(AndroidSpeechRecognizerDevice.useOnDevice(s - 1, offline = true, onDevice = true, service = false))
+    }
 }

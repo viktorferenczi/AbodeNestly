@@ -141,7 +141,7 @@ internal fun ListDetailScreenHost(
     )
     if (voiceOpen && voice != null) {
         val device = voice.device()
-        val model = remember { viewModel.makeVoice(device) }
+        val model = remember(viewModel, device) { viewModel.makeVoice(device) }
         voiceSheet(model, { voiceOpen = false }, { typeInstead = true; voiceOpen = false })
     }
     if (scanning && scanner != null) {
