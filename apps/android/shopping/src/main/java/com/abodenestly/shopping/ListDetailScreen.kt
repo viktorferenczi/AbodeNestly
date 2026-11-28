@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -57,6 +58,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -83,8 +85,10 @@ fun ListDetailScreen(
     onManageStores: () -> Unit = {},
     /** SHOP-10: the barcode scanner's camera, lookup and storage; `null` hides the bar's scan button. */
     scanner: ScannerSetup? = null,
+    /** SHOP-13: the share link's origin and API calls; `null` hides "Share" from the List actions menu. */
+    share: ShareSetup? = null,
 ) {
-    ListDetailScreenHost(viewModel, onBack, modifier, onManageStores, scanner) { isNew, initial, history, failed, onSave, onDelete, onClose ->
+    ListDetailScreenHost(viewModel, onBack, modifier, onManageStores, scanner, share = share) { isNew, initial, history, failed, onSave, onDelete, onClose ->
         ItemSheet(isNew, initial, history, failed, onSave, onDelete, onClose)
     }
 }
@@ -96,6 +100,8 @@ internal fun ListDetailScreenHost(
     modifier: Modifier = Modifier,
     onManageStores: () -> Unit = {},
     scanner: ScannerSetup? = null,
+    share: ShareSetup? = null,
+    shareSheet: ShareSlot = { model, online, onClose -> ShareSheet(model, online, onClose) },
     picker: StorePickerSlot = { stores, current, failed, onCreate, onSave, onManage, onClose ->
         StorePickerSheet(stores, current, failed, onCreate, onSave, onManage, onClose)
     },
@@ -112,7 +118,7 @@ internal fun ListDetailScreenHost(
     DisposableEffect(viewModel) { onDispose { if (activity?.isChangingConfigurations != true) viewModel.onEvent(ListDetailEvent.Flush) } }
     // SHOP-10: the scanner is a full-screen modal over the list; what is typed in the bar is left alone.
     var scanning by rememberSaveable { mutableStateOf(false) }
-    ListDetailContent(ui, viewModel::onEvent, onBack, modifier, onScan = if (scanner != null) ({ scanning = true }) else null)
+    ListDetailContent(ui, viewModel::onEvent, onBack, modifier, onScan = if (scanner != null) ({ scanning = true }) else null, canShare = share != null)
     if (scanning && scanner != null) {
         val device = scanner.device()
         val scannerScope = rememberCoroutineScope()
@@ -132,6 +138,13 @@ internal fun ListDetailScreenHost(
             },
             { viewModel.onEvent(ListDetailEvent.ClosePicker) },
         )
+    }
+    // SHOP-13: the C8 share sheet, only for a list that has loaded and is not gone.
+    if (ui.shareOpen && share != null && ui.canShare) {
+        val clipboard = LocalClipboardManager.current
+        val model = remember { viewModel.makeShare(share.webBase, share.share, share.stop, copy = { clipboard.setText(AnnotatedString(it)) }) }
+        DisposableEffect(model) { onDispose { model.close() } }
+        shareSheet(model, ui.online) { viewModel.onEvent(ListDetailEvent.CloseShare) }
     }
     // SHOP-11: the template's "Add all to…" sheet.
     if (ui.addAllOpen && ui.isTemplate) {
@@ -178,6 +191,8 @@ internal fun ListDetailContent(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onScan: (() -> Unit)? = null,
+    /** SHOP-13: the app can share; "Share" is then the menu's first entry once the list has loaded. */
+    canShare: Boolean = false,
 ) {
     val tokens = LocalTokens.current
     val focus = remember { FocusRequester() }
@@ -202,8 +217,8 @@ internal fun ListDetailContent(
                         list.name, style = MaterialTheme.typography.headlineSmall, color = tokens.text,
                         modifier = Modifier.weight(1f).testTag("list.title").semantics { heading() },
                     )
-                    // A template always has the menu, Add all first; otherwise only Clear checked lives here, and only when something is checked.
-                    val actions = Templates.actions(ui.isTemplate, checked.isNotEmpty())
+                    // Share comes first once sharing is available; then Add all on a template and Clear checked when something is checked.
+                    val actions = Templates.actions(ui.isTemplate, checked.isNotEmpty(), canShare = canShare && ui.canShare)
                     if (actions.isNotEmpty()) {
                         Box {
                             IconButton(onClick = { actionsOpen = true }, modifier = Modifier.testTag("list.actions")) {
@@ -212,6 +227,11 @@ internal fun ListDetailContent(
                             DropdownMenu(expanded = actionsOpen, onDismissRequest = { actionsOpen = false }) {
                                 actions.forEach { action ->
                                     when (action) {
+                                        ListAction.Share -> DropdownMenuItem(
+                                            text = { Text("Share") },
+                                            onClick = { actionsOpen = false; onEvent(ListDetailEvent.OpenShare) },
+                                            modifier = Modifier.testTag("list.actions.share"),
+                                        )
                                         ListAction.AddAll -> DropdownMenuItem(
                                             text = { Text("Add all to list") },
                                             onClick = { actionsOpen = false; onEvent(ListDetailEvent.OpenAddAll) },
