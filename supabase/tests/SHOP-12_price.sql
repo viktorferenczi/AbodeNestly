@@ -1,7 +1,7 @@
 -- SHOP-12-db: item_price rows per (store, name_key), written directly by a member as a synced client does.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(14);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'a1@example.com', 'authenticated', 'authenticated'),
