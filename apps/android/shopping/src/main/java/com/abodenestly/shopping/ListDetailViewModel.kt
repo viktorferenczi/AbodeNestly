@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.sync.ListDetail
 import com.abodenestly.sync.ListItemRecord
+import com.abodenestly.sync.ListRecord
 import com.abodenestly.sync.patch
 import com.abodenestly.sync.remove
 import kotlinx.coroutines.CancellationException
@@ -33,6 +34,8 @@ import java.util.UUID
  * [pending] are deletes, check-offs and clears inside their undo window, newest first. A delete or clear hides its rows;
  * a check-off shows its row ticked in place. [settling] are hidden rows whose removal the list has not re-emitted yet, and
  * [settlingChecks] are checked rows the list still shows unchecked, so neither flashes back. [saveFailed] keeps the sheet's message up.
+ * SHOP-11: [targets] are the lists a template can be added to, [addAllOpen] is the "Add all to…" sheet (with [addAllFailed] its message)
+ * and [status] is the plain line that follows a copy (cleared after [STATUS_MILLIS], no Undo).
  */
 data class ListDetailUiState(
     val detail: ListDetail = ListDetail(),
@@ -49,15 +52,22 @@ data class ListDetailUiState(
     val pending: List<PendingAction> = emptyList(),
     val settling: Set<String> = emptySet(),
     val settlingChecks: Set<String> = emptySet(),
+    val targets: List<ListRecord> = emptyList(),
+    val addAllOpen: Boolean = false,
+    val addAllFailed: Boolean = false,
+    val status: String? = null,
 ) {
     val isGone: Boolean get() = loaded && detail.list == null
 
     /** The list's store when it points to a live store: what the chip shows and the picker starts on. */
     val currentStoreId: String? get() = detail.list?.storeId?.takeIf { id -> detail.stores.any { it.id == id } }
 
+    /** SHOP-11: the open list is a template. */
+    val isTemplate: Boolean get() = detail.list?.isTemplate == true
+
     val suggestions: List<Suggestion> get() = QuickAdd.suggest(detail.history, query, listId)
 
-    private val hidden: Set<String> get() = pending.flatMapTo(HashSet()) { it.hiddenIds } + settling
+    internal val hidden: Set<String> get() = pending.flatMapTo(HashSet()) { it.hiddenIds } + settling
 
     /** Rows are hidden by a delete or clear still in its undo window (or not yet re-emitted): they are not gone yet. */
     val hidingRows: Boolean get() = hidden.isNotEmpty()
@@ -132,6 +142,14 @@ sealed interface ListDetailEvent {
     /** The picker's Save: the list's store, or null for no store. Writes only when it differs from what the list has. */
     data class SetStore(val storeId: String?) : ListDetailEvent
 
+    /** SHOP-11: the List actions entry "Add all to list": opens the "Add all to…" sheet (templates only). */
+    data object OpenAddAll : ListDetailEvent
+
+    data object CloseAddAll : ListDetailEvent
+
+    /** SHOP-11: the sheet's pick: copies every live item onto this list in one transaction. */
+    data class AddAll(val targetId: String) : ListDetailEvent
+
     /** Leaving the screen or the app writes what is still waiting rather than dropping it. */
     data object Flush : ListDetailEvent
 }
@@ -170,6 +188,11 @@ class ListDetailViewModel(
     /** A store choice is being written: a second tap on the picker's Save must not queue a second patch. */
     private var savingStore = false
 
+    /** SHOP-11: a copy is running; a second tap on a list must not copy twice. */
+    private var addingAll = false
+
+    private var statusJob: Job? = null
+
     /** Actions whose write has started, so the timer and a flush can never both queue it. */
     private val committing = java.util.concurrent.ConcurrentHashMap.newKeySet<PendingAction>()
 
@@ -188,6 +211,11 @@ class ListDetailViewModel(
                         settlingChecks = s.settlingChecks.filterTo(HashSet()) { it in stillUnchecked },
                     )
                 }
+            }
+        }
+        scope.launch {
+            database.observeListOverview(householdId).collect { overview ->
+                mutableState.update { it.copy(targets = Templates.targets(overview.lists)) }
             }
         }
         scope.launch { isOnline.collect { online -> mutableState.update { it.copy(online = online) } } }
@@ -211,7 +239,63 @@ class ListDetailViewModel(
             ListDetailEvent.OpenPicker -> openPicker()
             ListDetailEvent.ClosePicker -> mutableState.update { it.copy(picker = false, pickerFailed = false) }
             is ListDetailEvent.SetStore -> setStore(event.storeId)
+            ListDetailEvent.OpenAddAll -> openAddAll()
+            ListDetailEvent.CloseAddAll -> mutableState.update { it.copy(addAllOpen = false, addAllFailed = false) }
+            is ListDetailEvent.AddAll -> addAll(event.targetId)
             ListDetailEvent.Flush -> flush()
+        }
+    }
+
+    // --- Template: Add all to list (SHOP-11) ---
+
+    private fun openAddAll() {
+        val current = mutableState.value
+        if (!current.loaded || !current.isTemplate) return
+        mutableState.update { it.copy(addAllOpen = true, addAllFailed = false) }
+    }
+
+    /**
+     * Copies every live item of this template onto the picked list in one local transaction ([Templates.addAllToList]),
+     * then kicks sync once, and only when something was copied. An empty template writes nothing and says so. The sheet
+     * closes unless the copy failed, which it says in place ([ListDetailUiState.addAllFailed]); a failed copy never kicks.
+     */
+    private fun addAll(targetId: String) {
+        val s = mutableState.value
+        if (addingAll || !s.isTemplate) return
+        val target = s.targets.firstOrNull { it.id == targetId } ?: return
+        addingAll = true
+        mutableState.update { it.copy(addAllFailed = false) }
+        scope.launch {
+            // A copy that has started finishes even when the view model is cleared meanwhile.
+            val count: Int? = withContext(NonCancellable) {
+                try {
+                    Templates.addAllToList(database, householdId, listId, target.id, userId, now(), newId, s.hidden)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            addingAll = false
+            if (count == null) {
+                mutableState.update { it.copy(addAllFailed = true) }
+                return@launch
+            }
+            mutableState.update { it.copy(addAllOpen = false, addAllFailed = false) }
+            val result = if (count == 0) AddAllResult.Empty else AddAllResult.Added(count, target.name)
+            showStatus(result.message)
+            if (count > 0) kick()
+        }
+    }
+
+    private fun showStatus(message: String?) {
+        statusJob?.cancel()
+        mutableState.update { it.copy(status = message) }
+        if (message == null) return
+        statusJob = scope.launch {
+            delayer(STATUS_MILLIS)
+            ensureActive()
+            mutableState.update { if (it.status == message) it.copy(status = null) else it }
         }
     }
 
