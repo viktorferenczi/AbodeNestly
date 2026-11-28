@@ -116,14 +116,20 @@ public final class AppleSpeechRecognizer: SpeechRecognizer {
         _ recognizer: SFSpeechRecognizer, box: RequestBox, emit: @escaping @Sendable (VoiceEvent) -> Void
     ) -> SFSpeechRecognitionTask {
         recognizer.recognitionTask(with: box.request) { result, error in
-            if let result {
-                let text = result.bestTranscription.formattedString
-                emit(result.isFinal ? .final(text) : .partial(text))
-            } else if error != nil {
-                // A cancelled run (`stop`) also lands here; its generation is stale by then and `deliver` drops it.
-                emit(.error(.other))
+            // A cancelled run (`stop`) also lands here with an error; its generation is stale by then and `deliver` drops it.
+            if let event = AppleSpeechRecognizer.event(isFinal: result?.isFinal, text: result?.bestTranscription.formattedString, hasError: error != nil) {
+                emit(event)
             }
         }
+    }
+
+    /// Maps one Speech callback to an event. A final result wins; otherwise an error ends the run (even when it arrives with
+    /// a partial result); otherwise a partial result is a live update. `isFinal` is nil when there was no result.
+    nonisolated static func event(isFinal: Bool?, text: String?, hasError: Bool) -> VoiceEvent? {
+        if isFinal == true, let text { return .final(text) }
+        if hasError { return .error(.other) }
+        if let text { return .partial(text) }
+        return nil
     }
 
     private enum AudioInputError: Error { case none }

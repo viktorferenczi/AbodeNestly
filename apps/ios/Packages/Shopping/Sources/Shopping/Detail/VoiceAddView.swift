@@ -9,8 +9,6 @@ public struct VoiceAddView: View {
     private let onClose: () -> Void
     private let onTypeInstead: () -> Void
     private let openSettings: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
 
     /// `onTypeInstead` closes the sheet and puts the cursor in the Quick add field. `openSettings` opens the app's page in Settings.
     public init(
@@ -80,22 +78,9 @@ public struct VoiceAddView: View {
 
     // MARK: states
 
-    /// Still under Reduce Motion: no animation is attached at all.
-    private var pulseAnimation: Animation? {
-        reduceMotion ? nil : Animation.easeInOut(duration: 0.8).repeatForever(autoreverses: true)
-    }
-
     private func listening(_ partial: String) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Image(systemName: "mic.fill")
-                .font(.system(size: 44))
-                .foregroundStyle(Tokens.accent)
-                .scaleEffect(pulse && !reduceMotion ? 1.18 : 1)
-                .animation(pulseAnimation, value: pulse)
-                .frame(maxWidth: .infinity)
-                .accessibilityHidden(true)
-                .accessibilityIdentifier("voice.indicator")
-                .onAppear { pulse = true }
+            ListeningIndicator()
             Text("Listening…")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Tokens.text)
@@ -122,14 +107,10 @@ public struct VoiceAddView: View {
             Text(transcript)
                 .foregroundStyle(Tokens.text2)
                 .accessibilityIdentifier("voice.transcript")
-            HStack(spacing: 8) {
-                if let quantity = item.quantity {
-                    chip(ItemSheetLogic.formatQty(quantity, nil), label: "Quantity", id: "voice.chip.quantity")
-                }
-                if let unit = item.unit, !unit.isEmpty {
-                    chip(unit, label: "Unit", id: "voice.chip.unit")
-                }
-                chip(item.name, label: "Name", id: "voice.chip.name")
+            // One row when it fits, otherwise stacked, so a long name or a large Dynamic Type size never clips.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { chips(item) }
+                VStack(alignment: .leading, spacing: 8) { chips(item) }
             }
             HStack(spacing: 12) {
                 Button("Try again") { Task { await model.tryAgain() } }
@@ -155,13 +136,25 @@ public struct VoiceAddView: View {
         }
     }
 
+    @ViewBuilder
+    private func chips(_ item: SpokenItem) -> some View {
+        if let quantity = item.quantity {
+            chip(ItemSheetLogic.formatQty(quantity, nil), label: "Quantity", id: "voice.chip.quantity")
+        }
+        if let unit = item.unit, !unit.isEmpty {
+            chip(unit, label: "Unit", id: "voice.chip.unit")
+        }
+        chip(item.name, label: "Name", id: "voice.chip.name")
+    }
+
     /// Read-only; each chip is its own VoiceOver element ("Quantity 2", "Unit l", "Name Milk").
     private func chip(_ value: String, label: String, id: String) -> some View {
         Text(value)
             .font(.subheadline.weight(.medium))
             .foregroundStyle(Tokens.text)
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(Tokens.accentBg, in: Capsule())
+            .fixedSize(horizontal: false, vertical: true)
+            .background(Tokens.accentBg, in: RoundedRectangle(cornerRadius: 16))
             .accessibilityLabel("\(label) \(value)")
             .accessibilityIdentifier(id)
     }
@@ -204,5 +197,30 @@ public struct VoiceAddView: View {
                     .accessibilityIdentifier("voice.typeinstead")
             }
         }
+    }
+}
+
+/// The pulsing mic. It owns its `@State`, so the pulse starts from rest each time the indicator appears (first listen and
+/// every Try again), and `.repeatForever` restarts.
+private struct ListeningIndicator: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+
+    /// Still under Reduce Motion: no animation is attached at all.
+    private var pulseAnimation: Animation? {
+        reduceMotion ? nil : Animation.easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+    }
+
+    var body: some View {
+        Image(systemName: "mic.fill")
+            .font(.system(size: 44))
+            .foregroundStyle(Tokens.accent)
+            .scaleEffect(pulse && !reduceMotion ? 1.18 : 1)
+            .animation(pulseAnimation, value: pulse)
+            .frame(maxWidth: .infinity)
+            .accessibilityHidden(true)
+            .accessibilityIdentifier("voice.indicator")
+            .onAppear { pulse = true }
+            .onDisappear { pulse = false }
     }
 }
