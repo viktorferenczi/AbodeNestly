@@ -21,6 +21,11 @@ struct AppEnvironment: Sendable {
     /// Household change events (SHOP-09): each one kicks `sync`. Previews and tests pass `NoRealtime` or `FakeRealtime`.
     let realtime: any RealtimeSubscribing
 
+    /// The one environment of the process: the app's screens and the Siri intent (SHOP-15) must share its database and
+    /// sync engine, because a second `HouseholdDatabase` on the same files would not see the first one's open household.
+    @MainActor
+    static let shared = AppEnvironment.live()
+
     @MainActor
     static func live() -> AppEnvironment {
         let config = AppConfig.main

@@ -252,13 +252,11 @@ public final class ListDetailModel {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let id = makeId()
-        let stamp = now().formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true, timeZone: .gmt))
-        let row = QuickAdd.row(
-            id: id, householdId: householdId, listId: listId, name: trimmed, userId: userId, now: stamp,
-            quantity: quantity, unit: unit
-        )
         do {
-            try await database.upsert(table: "list_item", row: row, now: now())
+            try await QuickAdd.write(
+                database: database, householdId: householdId, listId: listId, name: trimmed, userId: userId, now: now(),
+                id: id, quantity: quantity, unit: unit
+            )
             writeFailed = false
         } catch {
             writeFailed = true
