@@ -10,11 +10,16 @@ final class ItemFormBox {
     init(_ form: ItemForm) { self.form = form }
 }
 
-/// DESIGN C3 (SHOP-03 slice): name, quantity with the stepper, unit with suggestion chips, note; Delete when editing.
+/// DESIGN C3 (SHOP-03 and SHOP-12 slices): name, quantity with the stepper, unit with suggestion chips, note, the price
+/// at the list's store and the "Last bought" line; Delete when editing.
 /// Swiping the sheet down is Cancel. Web twin: `web/src/shopping/ItemSheet.tsx`.
 struct ItemSheetView: View {
     let state: ItemSheetState
     let unitSuggestions: [String]
+    /// The list's live store: the price field is offered only with one (SHOP-12, AC3).
+    let priceStoreName: String?
+    /// The "Last bought: 3 Nov, €1.20 at Test Market" line for the name typed so far, or `nil` for none.
+    let lastBoughtLine: (String) -> String?
     let onSave: (ItemFields) async -> Bool
     let onDelete: (ListItemRecord) -> Void
     let onCancel: () -> Void
@@ -24,11 +29,14 @@ struct ItemSheetView: View {
     @State private var saveFailed = false
 
     init(
-        state: ItemSheetState, unitSuggestions: [String], onSave: @escaping (ItemFields) async -> Bool,
+        state: ItemSheetState, unitSuggestions: [String], priceStoreName: String? = nil,
+        lastBoughtLine: @escaping (String) -> String? = { _ in nil }, onSave: @escaping (ItemFields) async -> Bool,
         onDelete: @escaping (ListItemRecord) -> Void, onCancel: @escaping () -> Void
     ) {
         self.state = state
         self.unitSuggestions = unitSuggestions
+        self.priceStoreName = priceStoreName
+        self.lastBoughtLine = lastBoughtLine
         self.onSave = onSave
         self.onDelete = onDelete
         self.onCancel = onCancel
@@ -44,7 +52,12 @@ struct ItemSheetView: View {
     }
 
     private var form: ItemForm { box.form }
-    private var fields: ItemFields? { ItemSheetLogic.fields(form) }
+    /// A price typed before the store went away is ignored, not saved and not blocking Save.
+    private var fields: ItemFields? {
+        var effective: ItemForm = form
+        if priceStoreName == nil { effective.priceText = "" }
+        return ItemSheetLogic.fields(effective)
+    }
 
     /// Chips narrow as the person types; an exact match needs no chip.
     private var chips: [String] {
@@ -83,6 +96,28 @@ struct ItemSheetView: View {
                                 }
                             }
                         }
+                    }
+                }
+                if let priceStoreName {
+                    Section("Price") {
+                        TextField("Price at \(priceStoreName)", text: $box.form.priceText)
+                            .keyboardType(.decimalPad)
+                            .accessibilityLabel("Price at \(priceStoreName)")
+                            .accessibilityIdentifier("item.price")
+                        if ItemSheetLogic.priceInvalid(form) {
+                            Text("Enter a price like 1.20")
+                                .font(.footnote)
+                                .foregroundStyle(Tokens.danger)
+                                .accessibilityIdentifier("item.priceError")
+                        }
+                    }
+                }
+                if let lastLine = lastBoughtLine(form.name) {
+                    Section {
+                        Text(lastLine)
+                            .font(.footnote)
+                            .foregroundStyle(Tokens.text2)
+                            .accessibilityIdentifier("item.lastBought")
                     }
                 }
                 if saveFailed {

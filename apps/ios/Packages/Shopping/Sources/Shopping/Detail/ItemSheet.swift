@@ -9,12 +9,15 @@ public struct ItemForm: Equatable, Sendable {
     public var quantityText = ""
     public var unit = ""
     public var note = ""
+    /// The price field (SHOP-12). Always empty when the sheet opens; the field exists only when the list has a store.
+    public var priceText = ""
 
-    public init(name: String = "", quantityText: String = "", unit: String = "", note: String = "") {
+    public init(name: String = "", quantityText: String = "", unit: String = "", note: String = "", priceText: String = "") {
         self.name = name
         self.quantityText = quantityText
         self.unit = unit
         self.note = note
+        self.priceText = priceText
     }
 
     public init(_ item: ListItemRecord) {
@@ -28,12 +31,15 @@ public struct ItemFields: Equatable, Sendable {
     public var quantity: Double?
     public var unit: String?
     public var note: String?
+    /// A price to record for this save (SHOP-12); `nil` when the field was left empty, so nothing is recorded.
+    public var price: Double?
 
-    public init(name: String, quantity: Double? = nil, unit: String? = nil, note: String? = nil) {
+    public init(name: String, quantity: Double? = nil, unit: String? = nil, note: String? = nil, price: Double? = nil) {
         self.name = name
         self.quantity = quantity
         self.unit = unit
         self.note = note
+        self.price = price
     }
 }
 
@@ -54,12 +60,21 @@ public enum ItemSheetState: Equatable, Identifiable, Sendable {
 public enum ItemSheetLogic {
     public static let unitPresets = ["pcs", "g", "kg", "ml", "l", "pack", "bottle", "can"]
 
-    /// `nil` when the form cannot be saved (blank name, bad quantity).
+    /// `nil` when the form cannot be saved (blank name, bad quantity, bad price).
     public static func fields(_ form: ItemForm) -> ItemFields? {
         let name = form.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, case .valid(let quantity) = QuantityText.parse(form.quantityText) else { return nil }
-        return ItemFields(name: name, quantity: quantity, unit: blankToNil(form.unit), note: blankToNil(form.note))
+        var price: Double?
+        switch Price.parse(form.priceText) {
+        case .empty: price = nil
+        case .value(let amount): price = amount
+        case .invalid: return nil
+        }
+        return ItemFields(name: name, quantity: quantity, unit: blankToNil(form.unit), note: blankToNil(form.note), price: price)
     }
+
+    /// True when the price text is non-blank and not a price (drives "Enter a price like 1.20").
+    public static func priceInvalid(_ form: ItemForm) -> Bool { Price.parse(form.priceText) == .invalid }
 
     /// True when the quantity text is non-blank and not a valid quantity (drives the inline message).
     public static func quantityInvalid(_ form: ItemForm) -> Bool { QuantityText.parse(form.quantityText) == .invalid }
