@@ -67,7 +67,7 @@ object AssistantShortcut {
                     QuickAdd.row(newId(), list.id, spoken.name, userId, now, quantity = spoken.quantity, unit = spoken.unit),
                     now,
                 )
-                AssistantResult.Added(spoken.name, list.name)
+                AssistantResult.Added(spoken.name, list.name.trim())
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
