@@ -7,6 +7,8 @@ export const SWIPE_THRESHOLD = 80;
 type ListRowProps = {
   title: string;
   subtitle?: string;
+  /** Small secondary line, e.g. the last price. */
+  caption?: string;
   /** Small chip next to the title (e.g. the store). */
   chip?: string;
   /** Right-aligned text such as a quantity. */
@@ -23,7 +25,7 @@ type ListRowProps = {
 };
 
 // DESIGN A6 ListRow. Swipe uses plain pointer events; no gesture library.
-export function ListRow({ title, subtitle, chip, trailing, muted, onOpen, check, onSwipeLeft, actions }: ListRowProps) {
+export function ListRow({ title, subtitle, caption, chip, trailing, muted, onOpen, check, onSwipeLeft, actions }: ListRowProps) {
   const [dx, setDx] = useState(0);
   // The latest delta lives in a ref: pointerup can run before React commits the last pointermove's state.
   const latest = useRef(0);
@@ -79,6 +81,7 @@ export function ListRow({ title, subtitle, chip, trailing, muted, onOpen, check,
           {chip ? <span className={styles.chip}>{chip}</span> : null}
           {trailing ? <span className={styles.trailing}>{trailing}</span> : null}
           {subtitle ? <span className={styles.subtitle}>{subtitle}</span> : null}
+          {caption ? <span className={styles.subtitle}>{caption}</span> : null}
         </button>
         {actions ? <div className={styles.actions}>{actions}</div> : null}
       </div>

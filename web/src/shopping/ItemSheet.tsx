@@ -2,8 +2,12 @@ import { useId, useState, type FormEvent } from 'react';
 import { parseQuantity } from '../lib/quantity.ts';
 import { Sheet } from '../ui/Sheet.tsx';
 import { Stepper } from '../ui/Stepper.tsx';
+import { lastBoughtLine, parsePrice, type LastBought } from './Price.ts';
 import { formFrom, toFields, type ItemFields } from './ItemSheet.ts';
 import styles from './ItemSheet.module.css';
+
+/** SHOP-12: what the sheet needs to offer a price. `storeName` is null when the list has no live store: no field then. */
+export type Pricing = { storeName: string | null; currency: string; lastBought: (name: string) => LastBought | null };
 
 type Props = {
   mode: 'new' | 'edit';
@@ -12,21 +16,30 @@ type Props = {
   /** Name typed in the quick add bar, for a new item. */
   initialName?: string;
   units: string[];
-  onSave: (fields: ItemFields) => Promise<void>;
+  pricing?: Pricing;
+  /** `price` is null when the field was left empty: nothing is recorded then. */
+  onSave: (fields: ItemFields, price: number | null) => Promise<void>;
   onDelete?: () => void;
   onClose: () => void;
 };
 
-// DESIGN C3: name, quantity stepper, unit and note. Price and "Last bought" arrive with SHOP-12.
-export function ItemSheet({ mode, item, initialName = '', units, onSave, onDelete, onClose }: Props) {
+// DESIGN C3: name, quantity stepper, unit, note, and (SHOP-12) the price at the list's store with the "Last bought" line.
+export function ItemSheet({ mode, item, initialName = '', units, pricing, onSave, onDelete, onClose }: Props) {
   const [form, setForm] = useState(() => formFrom(item, initialName));
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const unitsId = useId();
   const errorId = useId();
+  const priceErrorId = useId();
+  const priceId = useId();
+  const [priceText, setPriceText] = useState('');
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const badQuantity = !parseQuantity(form.quantity).ok;
-  const fields = toFields(form);
+  const parsedPrice = parsePrice(priceText);
+  const showPrice = pricing?.storeName != null;
+  const badPrice = showPrice && !parsedPrice.ok;
+  const fields = badPrice ? null : toFields(form);
+  const last = pricing && form.name.trim() ? pricing.lastBought(form.name) : null;
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
@@ -34,7 +47,7 @@ export function ItemSheet({ mode, item, initialName = '', units, onSave, onDelet
     setBusy(true);
     setFailed(false);
     try {
-      await onSave(fields);
+      await onSave(fields, showPrice && parsedPrice.ok ? parsedPrice.value : null);
     } catch {
       setFailed(true);
     } finally {
@@ -86,6 +99,27 @@ export function ItemSheet({ mode, item, initialName = '', units, onSave, onDelet
           Note
           <textarea rows={3} value={form.note} onChange={(e) => set({ note: e.target.value })} />
         </label>
+        {showPrice && pricing ? (
+          <div className={styles.field}>
+            <label htmlFor={priceId}>Price at {pricing.storeName}</label>
+            <input
+              id={priceId}
+              className={styles.price}
+              inputMode="decimal"
+              value={priceText}
+              onChange={(e) => setPriceText(e.target.value)}
+              autoComplete="off"
+              aria-invalid={badPrice || undefined}
+              aria-describedby={badPrice ? priceErrorId : undefined}
+            />
+            {badPrice ? (
+              <p id={priceErrorId} role="alert" className={styles.error}>
+                Enter a price like 1.20
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {last && pricing ? <p className={styles.last}>{lastBoughtLine(last, pricing.currency)}</p> : null}
         {failed ? <p role="alert">Could not save the item. Try again.</p> : null}
         {/* Enter in a single-line field submits; the visible Save lives in the footer. */}
         <button type="submit" hidden />

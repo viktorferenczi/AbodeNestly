@@ -11,7 +11,8 @@ import { UndoToast } from '../ui/UndoToast.tsx';
 import { useLiveQuery } from '../ui/useLiveQuery.ts';
 import { deleteItem, formatQty, unitSuggestions, updateItem } from './ItemSheet.ts';
 import { clearChecked, createCheckOffQueue, uncheck } from './CheckOff.ts';
-import { ItemSheet } from './ItemSheet.tsx';
+import { ItemSheet, type Pricing } from './ItemSheet.tsx';
+import { lastBoughtLookup, priceCaption, saveWithPrice } from './Price.ts';
 import { UNDO_MS } from './Lists.ts';
 import { StorePickerSheet } from './StorePickerSheet.tsx';
 import { createStore, setListStore } from './Stores.ts';
@@ -96,13 +97,14 @@ export function ListDetail() {
 
   const data = useLiveQuery(async () => {
     if (!db || !householdId) return null;
-    const [list, items, stores, lists] = await Promise.all([
+    const [list, items, stores, lists, prices] = await Promise.all([
       db.shopping_list.get(listId),
       db.list_item.where('household_id').equals(householdId).toArray(),
       db.store.where('household_id').equals(householdId).toArray(),
       db.shopping_list.where('household_id').equals(householdId).toArray(),
+      db.item_price.where('household_id').equals(householdId).toArray(),
     ]);
-    return { list, items, stores, lists };
+    return { list, items, stores, lists, prices };
   }, [db, householdId, listId]);
 
   const view = useMemo(() => {
@@ -111,13 +113,22 @@ export function ListDetail() {
     const mine = data.items.filter((i) => i.list_id === listId && i.deleted_at == null && !hidden.has(i.id));
     const byCreated = (a: { created_at: string }, b: { created_at: string }) => a.created_at.localeCompare(b.created_at);
     const store = data.list?.store_id ? data.stores.find((s) => s.id === data.list!.store_id && s.deleted_at == null) : undefined;
+    const currency = household?.currency ?? 'EUR';
+    const lookup = lastBoughtLookup(data.prices, data.stores, store?.id ?? null);
+    const pricing: Pricing = { storeName: store?.name ?? null, currency, lastBought: lookup };
     return {
+      pricing,
+      storeId: store?.id ?? null,
+      caption: (name: string) => {
+        const last = lookup(name);
+        return last ? priceCaption(last, currency) : undefined;
+      },
       unchecked: mine.filter((i) => !i.checked).sort(byCreated),
       checked: mine.filter((i) => i.checked).sort((a, b) => (b.checked_at ?? '').localeCompare(a.checked_at ?? '')),
       storeName: store?.name ?? null,
       stores: data.stores.filter((s) => s.deleted_at == null).sort((a, b) => a.name.localeCompare(b.name)),
     };
-  }, [data, listId, pending, clears]);
+  }, [data, listId, pending, clears, household?.currency]);
 
   // The row was deleted elsewhere while its sheet was open: drop the sheet.
   const gone = editing != null && data != null && !data.items.some((i) => i.id === editing.id && i.deleted_at == null);
@@ -153,6 +164,7 @@ export function ListDetail() {
         key={i.id}
         title={i.name}
         subtitle={i.note ?? undefined}
+        caption={view.caption(i.name)}
         trailing={formatQty(i.quantity, i.unit)}
         muted={muted}
         check={{
@@ -302,9 +314,12 @@ export function ListDetail() {
           mode="edit"
           item={editing}
           units={unitSuggestions(data.items)}
+          pricing={view.pricing}
           onClose={() => setEditing(null)}
-          onSave={async (fields) => {
-            await updateItem(db, deps, editing, fields);
+          onSave={async (fields, price) => {
+            // The price and the item change commit together; an empty price field writes nothing.
+            const priced = price != null && view.storeId ? { householdId, storeId: view.storeId, name: fields.name, price, now: new Date().toISOString() } : null;
+            await saveWithPrice(db, deps, priced, (quiet) => updateItem(db, quiet, editing, fields));
             setEditing(null);
           }}
           onDelete={() => remove(editing)}
@@ -340,7 +355,7 @@ export function ListDetail() {
       {toasts.map((t, index) => (
         <UndoToast key={t.key} index={index} message={t.message} onUndo={t.undo} />
       ))}
-      <QuickAdd db={db} householdId={householdId} listId={listId} items={data.items} autoFocus={empty && !clearing} />
+      <QuickAdd db={db} householdId={householdId} listId={listId} items={data.items} pricing={view.pricing} storeId={view.storeId} autoFocus={empty && !clearing} />
     </div>
   );
 }
