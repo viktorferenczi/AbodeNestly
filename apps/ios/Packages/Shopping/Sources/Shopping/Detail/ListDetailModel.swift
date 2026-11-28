@@ -2,6 +2,7 @@ import Contract
 import Foundation
 import Observation
 import Sync
+import UIKit
 
 /// DESIGN C2 (SHOP-02 slice). Reads only the local database, so it works offline; an add goes through the outbox in
 /// one local transaction and then kicks sync. Web twin: `web/src/shopping/ListDetail.tsx`.
@@ -240,6 +241,28 @@ public final class ListDetailModel {
             device: device, householdId: householdId, lookup: lookup, isOnline: isOnline, store: store,
             add: { [weak self] name, barcode, beforeKick in await self?.addScanned(name: name, barcode: barcode, beforeKick: beforeKick) }
         )
+    }
+
+    /// The share sheet for this list (DESIGN C8, SHOP-13). `share` and `stop` are the API calls; after each success the
+    /// server's token (or `nil`) is written onto the local row, with no outbox entry because `share_token` is
+    /// server-owned, and sync is kicked.
+    public func makeShare(
+        webBase: URL, share: @escaping @Sendable (UUID) async -> Result<String, ShareFailure>,
+        stop: @escaping @Sendable (UUID) async -> Result<Void, ShareFailure>, isOnline: @escaping @MainActor () -> Bool,
+        copy: @escaping @MainActor (String) -> Void = { UIPasteboard.general.string = $0 }
+    ) -> ShareSheetModel {
+        let id: UUID = listId
+        return ShareSheetModel(
+            initialToken: snapshot.list?.shareToken, webBase: webBase, share: { await share(id) },
+            stop: { await stop(id) }, record: { [weak self] token in await self?.recordShare(token) },
+            isOnline: isOnline, copy: copy
+        )
+    }
+
+    private func recordShare(_ token: String?) async {
+        // A failed local write is harmless: the server holds the truth and the next pull brings the same value.
+        try? await database.setShareToken(listId: listId, token: token)
+        await kick()
     }
 
     /// Writes only the changed columns; nothing at all when nothing changed (AC3, AC4).

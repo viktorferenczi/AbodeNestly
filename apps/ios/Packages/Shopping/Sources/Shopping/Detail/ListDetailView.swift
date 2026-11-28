@@ -13,9 +13,12 @@ public struct ListDetailView: View {
     private let isOnline: Bool
     private let onManageStores: () -> Void
     private let makeScanner: (@MainActor () -> BarcodeScannerModel)?
+    private let makeShare: (@MainActor () -> ShareSheetModel)?
     @State private var checkedOpen: Bool
     /// The open scanner (SHOP-10), built when the button is tapped so each scan starts from a fresh state.
     @State private var scanner: BarcodeScannerModel?
+    /// The open share sheet (SHOP-13), built when "Share" is tapped so it starts from the list's current link.
+    @State private var sharing: ShareSheetModel?
     @State private var showStorePicker = false
     /// The "Add all to…" sheet of a template (SHOP-11).
     @State private var addingAll = false
@@ -28,11 +31,12 @@ public struct ListDetailView: View {
     /// `makeScanner` shows the "Scan barcode" button in the quick-add bar (SHOP-10); without it there is none.
     public init(
         model: ListDetailModel, title: String, isOnline: Bool, checkedExpanded: Bool = false, onManageStores: @escaping () -> Void = {},
-        makeScanner: (@MainActor () -> BarcodeScannerModel)? = nil
+        makeScanner: (@MainActor () -> BarcodeScannerModel)? = nil, makeShare: (@MainActor () -> ShareSheetModel)? = nil
     ) {
         self.model = model
         self.onManageStores = onManageStores
         self.makeScanner = makeScanner
+        self.makeShare = makeShare
         fallbackTitle = title
         self.isOnline = isOnline
         _checkedOpen = State(initialValue: checkedExpanded)
@@ -95,6 +99,11 @@ public struct ListDetailView: View {
                 BarcodeScannerView(model: scanner, onClose: { self.scanner = nil })
             }
         }
+        .sheet(isPresented: Binding(get: { sharing != nil }, set: { if !$0 { sharing = nil } })) {
+            if let sharing {
+                ShareSheetView(model: sharing, isOnline: isOnline, onClose: { self.sharing = nil })
+            }
+        }
         .toolbar {
             if !listActions.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -128,14 +137,19 @@ public struct ListDetailView: View {
         .accessibilityIdentifier("list.screen")
     }
 
-    /// Template: always the menu, "Add all to list" first (SHOP-11); otherwise only when something is checked (SHOP-04).
+    /// Always the menu, "Share" first (SHOP-13), then "Add all to list" on a template (SHOP-11) and "Clear checked" when
+    /// something is checked (SHOP-04). "Share" is left out only where nothing can build the sheet.
     private var listActions: [ListAction] {
-        Templates.actions(isTemplate: model.isTemplate, hasChecked: !model.checked.isEmpty)
+        let actions: [ListAction] = Templates.actions(isTemplate: model.isTemplate, hasChecked: !model.checked.isEmpty)
+        return makeShare == nil ? actions.filter { $0 != .share } : actions
     }
 
     @ViewBuilder
     private func actionButton(_ action: ListAction) -> some View {
         switch action {
+        case .share:
+            Button("Share") { sharing = makeShare?() }
+                .accessibilityIdentifier("list.actions.share")
         case .addAll:
             Button("Add all to list") { addingAll = true }
                 .accessibilityIdentifier("list.actions.addAll")

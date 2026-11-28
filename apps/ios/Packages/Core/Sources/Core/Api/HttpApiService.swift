@@ -330,6 +330,53 @@ public final class HttpApiService: ApiService {
         }
     }
 
+    public func shareList(listId: UUID) async -> Result<String, ApiFailure> {
+        // `ShareLinkResponse` is not in the generated Swift models (the generator emits only the entities), so the
+        // one-field body is decoded by hand.
+        struct Response: Decodable { let url: String }
+        do {
+            let (data, status) = try await post("lists/\(listId.uuidString.lowercased())/share", body: Data("{}".utf8))
+            guard (200..<300).contains(status) else {
+                return .failure(Self.shareFailure(status: status, code: Self.errorCode(in: data)))
+            }
+            guard let response = try? JSONDecoder().decode(Response.self, from: data) else { return .failure(.unknown) }
+            return .success(response.url)
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
+    public func stopSharing(listId: UUID) async -> Result<Void, ApiFailure> {
+        do {
+            let (data, status) = try await perform(
+                url: try apiURL("lists/\(listId.uuidString.lowercased())/share"), method: "DELETE",
+                headers: ["Accept": "application/json"]
+            )
+            if (200..<300).contains(status) { return .success(()) }
+            return .failure(Self.shareFailure(status: status, code: Self.errorCode(in: data)))
+        } catch {
+            return .failure(Self.failure(for: error))
+        }
+    }
+
+    /// The API's own error code wins; with no parseable body the status decides.
+    static func shareFailure(status: Int, code: String?) -> ApiFailure {
+        switch code {
+        case "module_disabled": return .moduleDisabled
+        case "forbidden": return .forbidden
+        case "not_found": return .notFound
+        case "validation": return .validation
+        case .some: return .unknown
+        case nil:
+            switch status {
+            case 403: return .forbidden
+            case 404: return .notFound
+            case 400: return .validation
+            default: return .unknown
+            }
+        }
+    }
+
     /// The API's own error code wins; with no parseable body the status decides. Only a 502 can pass by itself.
     static func productResult(status: Int, code: String?, data: Data) -> ProductLookupResult {
         if status == 200 {

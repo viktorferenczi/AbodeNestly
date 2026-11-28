@@ -500,14 +500,36 @@ private struct ListDetailScreen: View {
     var body: some View {
         let api = environment.api
         let network = environment.network
+        let webBase: URL = environment.config.webBaseURL
         ListDetailView(
             model: model, title: title, isOnline: environment.network.isOnline, onManageStores: onManageStores,
             makeScanner: { [model] in
                 model.makeScanner(
                     device: AVScannerDevice(), lookup: { await api.product(barcode: $0) }, isOnline: { network.isOnline }
                 )
+            },
+            makeShare: { [model] in
+                model.makeShare(
+                    webBase: webBase, share: { await shareResult(api, listId: $0) }, stop: { await stopResult(api, listId: $0) },
+                    isOnline: { network.isOnline }
+                )
             }
         )
+    }
+}
+
+/// SHOP-13: the API calls of the share sheet, with `ApiFailure` reduced to what the sheet tells apart.
+private func shareResult(_ api: any ApiService, listId: UUID) async -> Result<String, ShareFailure> {
+    switch await api.shareList(listId: listId) {
+    case .success(let url): return .success(url)
+    case .failure(let failure): return .failure(failure == .network ? .network : .failed)
+    }
+}
+
+private func stopResult(_ api: any ApiService, listId: UUID) async -> Result<Void, ShareFailure> {
+    switch await api.stopSharing(listId: listId) {
+    case .success: return .success(())
+    case .failure(let failure): return .failure(failure == .network ? .network : .failed)
     }
 }
 

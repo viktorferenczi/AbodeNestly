@@ -101,9 +101,9 @@ struct TemplatesLogicTests {
         #expect(Templates.targets(lists: []).isEmpty)
     }
 
-    @Test("SHOP-11: the List actions menu always offers Add all on a template, first; a normal list never does", arguments: [
-        (true, false, [ListAction.addAll]), (true, true, [ListAction.addAll, ListAction.clearChecked]),
-        (false, true, [ListAction.clearChecked]), (false, false, [ListAction]()),
+    @Test("SHOP-11/SHOP-13: the List actions menu always offers Share first, then Add all on a template; a normal list never offers Add all", arguments: [
+        (true, false, [ListAction.share, ListAction.addAll]), (true, true, [ListAction.share, ListAction.addAll, ListAction.clearChecked]),
+        (false, true, [ListAction.share, ListAction.clearChecked]), (false, false, [ListAction.share]),
     ])
     func actions(isTemplate: Bool, hasChecked: Bool, expected: [ListAction]) {
         #expect(Templates.actions(isTemplate: isTemplate, hasChecked: hasChecked) == expected)

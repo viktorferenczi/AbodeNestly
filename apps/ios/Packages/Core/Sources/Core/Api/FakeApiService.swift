@@ -21,6 +21,8 @@ public final class FakeApiService: ApiService, SyncTransport {
         case signAttachment(householdId: UUID, entity: String, entityId: UUID, filename: String, mime: String, size: Int)
         case upload(url: URL, byteCount: Int, mime: String)
         case product(barcode: String)
+        case shareList(listId: UUID)
+        case stopSharing(listId: UUID)
         case syncPush(SyncPushBody)
         case syncPull(householdId: String, since: Int, limit: Int)
         case refreshSession
@@ -47,6 +49,8 @@ public final class FakeApiService: ApiService, SyncTransport {
         var uploadResult: Result<Void, ApiFailure> = .success(())
         var productResult: ProductLookupResult = .notFound
         var productQueue: [ProductLookupResult] = []
+        var shareResult: Result<String, ApiFailure> = .failure(.unknown)
+        var stopResult: Result<Void, ApiFailure> = .success(())
         var signQueue: [Result<SignedUpload, ApiFailure>] = []
         /// Results for the next `/sync` calls, in order; with none queued a push applies everything and a pull is empty.
         var pushResults: [Result<SyncPushResult, SyncFailure>] = []
@@ -219,6 +223,21 @@ public final class FakeApiService: ApiService, SyncTransport {
         state.withLock { $0.calls.append(.product(barcode: barcode)) }
         await suspendIfHeld()
         return state.withLock { $0.productQueue.isEmpty ? $0.productResult : $0.productQueue.removeFirst() }
+    }
+
+    public func setShareResult(_ result: Result<String, ApiFailure>) { state.withLock { $0.shareResult = result } }
+    public func setStopResult(_ result: Result<Void, ApiFailure>) { state.withLock { $0.stopResult = result } }
+
+    public func shareList(listId: UUID) async -> Result<String, ApiFailure> {
+        state.withLock { $0.calls.append(.shareList(listId: listId)) }
+        await suspendIfHeld()
+        return state.withLock { $0.shareResult }
+    }
+
+    public func stopSharing(listId: UUID) async -> Result<Void, ApiFailure> {
+        state.withLock { $0.calls.append(.stopSharing(listId: listId)) }
+        await suspendIfHeld()
+        return state.withLock { $0.stopResult }
     }
 
     // MARK: /sync
