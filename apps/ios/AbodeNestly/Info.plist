@@ -18,6 +18,10 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>AbodeNestly uses the camera to scan product barcodes.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Voice add listens for the item you say.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Voice add listens for the item you say.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

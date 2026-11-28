@@ -508,6 +508,9 @@ private struct ListDetailScreen: View {
                     device: AVScannerDevice(), lookup: { await api.product(barcode: $0) }, isOnline: { network.isOnline }
                 )
             },
+            makeVoice: { [model] in
+                model.makeVoice(recognizer: AppleSpeechRecognizer(), isOnline: { network.isOnline })
+            },
             makeShare: { [model] in
                 model.makeShare(
                     webBase: webBase, share: { await shareResult(api, listId: $0) }, stop: { await stopResult(api, listId: $0) },
