@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { toAcceptFailure, toRemoveFailure, toProductFailure, toSignFailure, toSyncFailure } from './apiClient.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createHttpApiClient, toShareFailure, toAcceptFailure, toRemoveFailure, toProductFailure, toSignFailure, toSyncFailure } from './apiClient.ts';
 
 const body = (code: string) => ({ error: { code, message: 'x' } });
 
@@ -76,5 +76,43 @@ describe('SHOP-10: toProductFailure', () => {
     [500, body('internal'), 'unknown'],
   ])('%i %j → %s', (status, json, code) => {
     expect(toProductFailure(status, json)).toEqual({ code });
+  });
+});
+
+describe('SHOP-13: toShareFailure', () => {
+  it.each([
+    [403, body('module_disabled'), 'module_disabled'],
+    [404, body('not_found'), 'not_found'],
+    [404, null, 'not_found'],
+    [500, body('internal'), 'unknown'],
+    [502, null, 'unknown'],
+  ])('%s %j -> %s', (status, json, code) => {
+    expect(toShareFailure(status, json)).toEqual({ code });
+  });
+});
+
+describe('SHOP-13: getSharedList', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('sends no Authorization header and never reads the session', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ list: { name: 'G' }, items: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const supabase = { auth: { getSession: vi.fn() } } as never;
+    const result = await createHttpApiClient('https://api.test', supabase).getSharedList('tok');
+    expect(result).toEqual({ ok: true, value: { list: { name: 'G' }, items: [] } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://api.test/shared/tok');
+    expect(fetchMock.mock.calls[0]![1]).toBeUndefined();
+    expect((supabase as { auth: { getSession: unknown } }).auth.getSession).not.toHaveBeenCalled();
+  });
+
+  it('maps 404 to not_found, other statuses to unknown and a thrown fetch to network', async () => {
+    const client = createHttpApiClient('https://api.test', {} as never);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 404 })));
+    expect(await client.getSharedList('t')).toEqual({ ok: false, error: { code: 'not_found' } });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 500 })));
+    expect(await client.getSharedList('t')).toEqual({ ok: false, error: { code: 'unknown' } });
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('x')));
+    expect(await client.getSharedList('t')).toEqual({ ok: false, error: { code: 'network' } });
   });
 });

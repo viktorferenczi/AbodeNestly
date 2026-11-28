@@ -153,7 +153,8 @@ describe('SHOP-04: check off', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'List actions' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Clear checked' }));
     expect(screen.getByText('Cleared 1 item')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'List actions' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'List actions' }));
+    expect(screen.queryByRole('menuitem', { name: 'Clear checked' })).toBeNull();
   });
 
   it('toasts stack in creation order and Clear checked does not focus the add field', async () => {
@@ -166,11 +167,12 @@ describe('SHOP-04: check off', () => {
     expect(document.activeElement).not.toBe(screen.getByRole('combobox'));
   });
 
-  it('no checked items: no overflow menu', async () => {
+  it('no checked items: the overflow menu has no Clear checked (Share only, SHOP-13)', async () => {
     await seed([list('a', 'Groceries')], [item('1', 'a', 'Milk')]);
     await renderDetail();
     await screen.findByText('Milk');
-    expect(screen.queryByRole('button', { name: 'List actions' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'List actions' }));
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Share']);
   });
 
   it('unchecking from the Checked group writes at once, with no toast', async () => {

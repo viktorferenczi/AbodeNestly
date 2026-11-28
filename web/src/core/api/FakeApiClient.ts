@@ -3,6 +3,8 @@ import type {
   Invite,
   Product,
   Role,
+  ShareLinkResponse,
+  SharedListResponse,
   SignAttachmentRequest,
   SignAttachmentResponse,
   SyncPullResponse,
@@ -50,6 +52,12 @@ export class FakeApiClient implements ApiClient {
   };
   getProductCalls: string[] = [];
   getProductResult: ApiResult<Product> | ((barcode: string) => ApiResult<Product>) = { ok: false, error: { code: 'not_found' } };
+  shareCalls: string[] = [];
+  stopCalls: string[] = [];
+  sharedCalls: string[] = [];
+  shareResult: ApiResult<ShareLinkResponse> = { ok: false, error: { code: 'unknown' } };
+  stopResult: ApiResult<null> = { ok: true, value: null };
+  sharedResult: ApiResult<SharedListResponse> = { ok: false, error: { code: 'not_found' } };
   /** When true, calls return a promise that only settles via `resolvePending`. */
   pending = false;
   private waiting: Array<() => void> = [];
@@ -146,6 +154,21 @@ export class FakeApiClient implements ApiClient {
   getProduct(barcode: string) {
     this.getProductCalls.push(barcode);
     return this.respond(() => (typeof this.getProductResult === 'function' ? this.getProductResult(barcode) : this.getProductResult));
+  }
+
+  shareList(listId: string) {
+    this.shareCalls.push(listId);
+    return this.respond(() => this.shareResult);
+  }
+
+  stopSharing(listId: string) {
+    this.stopCalls.push(listId);
+    return this.respond(() => this.stopResult);
+  }
+
+  getSharedList(token: string) {
+    this.sharedCalls.push(token);
+    return this.respond(() => this.sharedResult);
   }
 
   resolvePending() {

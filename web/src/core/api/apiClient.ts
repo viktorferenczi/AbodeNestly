@@ -9,6 +9,8 @@ import type {
   Profile,
   Role,
   SignAttachmentRequest,
+  ShareLinkResponse,
+  SharedListResponse,
   SignAttachmentResponse,
   SyncPullResponse,
   SyncPushRequest,
@@ -60,6 +62,12 @@ export interface ApiClient {
   signAttachment(req: SignAttachmentRequest): Promise<ApiResult<SignAttachmentResponse>>;
   /** SHOP-10: GET /products/{barcode}. 404 and 400 → `not_found`; 502 (Open Food Facts down) → `retryable`; no network → `network`. */
   getProduct(barcode: string): Promise<ApiResult<Product>>;
+  /** SHOP-13: POST /lists/{id}/share. Mints a new token, so it also rotates an existing link. 403 `module_disabled` when Shopping is off. */
+  shareList(listId: string): Promise<ApiResult<ShareLinkResponse>>;
+  /** SHOP-13: DELETE /lists/{id}/share. The link stops working. */
+  stopSharing(listId: string): Promise<ApiResult<null>>;
+  /** SHOP-13: GET /shared/{token}. Public: no Authorization header is sent. 404 → `not_found` (unknown, revoked, deleted or module off). */
+  getSharedList(token: string): Promise<ApiResult<SharedListResponse>>;
 }
 
 /** PUTs the bytes to the signed `upload_url` (plain fetch, no bearer: the URL carries the token). */
@@ -128,6 +136,14 @@ export function toProductFailure(status: number, body: ApiError | null): ApiFail
   if (code === 'not_found' || status === 404) return { code: 'not_found' };
   if (code === 'invalid_barcode' || status === 400) return { code: 'not_found' };
   if (code === 'upstream_unavailable' || status === 502) return { code: 'retryable' };
+  return { code: 'unknown' };
+}
+
+/** Maps a share/stop-sharing error response to a failure; exported for the table test. */
+export function toShareFailure(status: number, body: ApiError | null): ApiFailure {
+  const code = body?.error?.code;
+  if (code === 'module_disabled') return { code: 'module_disabled' };
+  if (code === 'not_found' || status === 404) return { code: 'not_found' };
   return { code: 'unknown' };
 }
 
@@ -358,6 +374,27 @@ export function createHttpApiClient(baseUrl: string, supabase: SupabaseClient): 
     },
     getProduct(barcode) {
       return call<Product>('GET', `/products/${encodeURIComponent(barcode)}`, undefined, (s) => s === 200, toProductFailure);
+    },
+    shareList(listId) {
+      return call<ShareLinkResponse>('POST', `/lists/${encodeURIComponent(listId)}/share`, undefined, (s) => s === 200 || s === 201, toShareFailure);
+    },
+    async stopSharing(listId) {
+      const result = await call<null>('DELETE', `/lists/${encodeURIComponent(listId)}/share`, undefined, (s) => s === 204 || s === 200, toShareFailure);
+      return result.ok ? { ok: true, value: null } : result;
+    },
+    async getSharedList(token) {
+      // The token is the only credential, so no session is read and no header is sent.
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}/shared/${encodeURIComponent(token)}`);
+      } catch {
+        return { ok: false, error: { code: 'network' } };
+      }
+      if (response.status === 200) {
+        const json = await readJson(response);
+        return json ? { ok: true, value: json as SharedListResponse } : { ok: false, error: { code: 'unknown' } };
+      }
+      return { ok: false, error: { code: response.status === 404 ? 'not_found' : 'unknown' } };
     },
     acceptInvite(code) {
       return call<{ household_id: string }>(

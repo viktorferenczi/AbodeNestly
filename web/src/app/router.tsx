@@ -11,7 +11,7 @@ import { Welcome } from '../core/Welcome.tsx';
 import { Landing } from '../core/auth/Landing.tsx';
 import { RequireAuth } from '../core/auth/RequireAuth.tsx';
 import { SignIn } from '../core/auth/SignIn.tsx';
-import { ListDetail, Lists, Stores } from '../shopping/index.ts';
+import { ListDetail, Lists, SharedList, Stores } from '../shopping/index.ts';
 import { Placeholder } from './Placeholder.tsx';
 import { RequireModule } from './RequireModule.tsx';
 import { Shell } from './Shell.tsx';
@@ -26,6 +26,8 @@ export function createAppRouter() {
   return createBrowserRouter([
     { path: '/signin', element: <SignIn /> },
     { path: '/auth/callback', element: <Landing /> },
+    // SHOP-13: public, outside the auth gate and the Shell; the token is the only credential.
+    { path: '/shared/:token', element: <SharedList /> },
     {
       element: <RequireAuth />,
       children: [
