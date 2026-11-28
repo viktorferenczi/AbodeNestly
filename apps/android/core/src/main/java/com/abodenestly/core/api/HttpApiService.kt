@@ -246,6 +246,18 @@ class HttpApiService(
         ProductLookupResult.Failed
     }
 
+    override suspend fun shareList(listId: UUID): ApiResult<String> = guarded {
+        val reply = post(url { addPathSegment("lists"); addPathSegment(listId.toString()); addPathSegment("share") }, "{}")
+        if (reply.status != 200) return@guarded ApiResult.Failure(ApiFailure.Unknown)
+        runCatching { lenient.decodeFromString(ShareLinkBody.serializer(), reply.body).url }
+            .fold({ ApiResult.Success(it) }, { ApiResult.Failure(ApiFailure.Unknown) })
+    }
+
+    override suspend fun stopSharing(listId: UUID): ApiResult<Unit> = guarded {
+        val reply = perform(url { addPathSegment("lists"); addPathSegment(listId.toString()); addPathSegment("share") }, "DELETE", emptyMap())
+        if (reply.status == 204) ApiResult.Success(Unit) else ApiResult.Failure(ApiFailure.Unknown)
+    }
+
     // MARK: /sync (SHOP-08)
 
     override suspend fun push(body: SyncPushBody): SyncResult<SyncPushResult> = syncGuarded {
@@ -373,6 +385,10 @@ class HttpApiService(
         @SerialName("upload_url") val uploadUrl: String,
         @SerialName("storage_path") val storagePath: String,
     )
+
+    /** `POST /lists/{id}/share` response (`ShareLinkResponse`, which the generated `:contract` does not have). */
+    @Serializable
+    private data class ShareLinkBody(val url: String)
 
     @Serializable
     private data class Accepted(@Contextual @SerialName("household_id") val householdId: UUID)

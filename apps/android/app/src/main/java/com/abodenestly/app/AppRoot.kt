@@ -62,6 +62,7 @@ import com.abodenestly.core.home.HomeModules
 import com.abodenestly.core.home.HomeScreen
 import com.abodenestly.shopping.BarcodeDrainEffect
 import com.abodenestly.shopping.ShoppingTab
+import com.abodenestly.shopping.ShareSetup
 import com.abodenestly.shopping.rememberScannerSetup
 import com.abodenestly.sync.DatabaseRegistry
 import com.abodenestly.sync.RealtimeSubscribing
@@ -428,7 +429,7 @@ private fun Tabs(
             }
         } else if (selected == AppTab.Shopping && members != null) {
             // SHOP-01/02: the module owns its screens and its tag (`tab.shopping.content`). Module off: the tab is absent, so this never composes.
-            ShoppingTab(members, database, sync, onlineFlow, meId, Modifier.weight(1f), scanner = rememberScannerSetup(api::product))
+            ShoppingTab(members, database, sync, onlineFlow, meId, Modifier.weight(1f), scanner = rememberScannerSetup(api::product), share = remember(api, webBaseUrl) { ShareSetup.forApi(webBaseUrl, api) })
         } else {
             Box(Modifier.weight(1f).fillMaxSize().testTag("tab.${selected.key}.content"), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {

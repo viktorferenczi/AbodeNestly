@@ -9,6 +9,7 @@ import com.abodenestly.sync.ListRecord
 import com.abodenestly.sync.patch
 import com.abodenestly.sync.writeItem
 import com.abodenestly.sync.remove
+import com.abodenestly.sync.setShareToken
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -59,11 +60,16 @@ data class ListDetailUiState(
     val addAllOpen: Boolean = false,
     val addAllFailed: Boolean = false,
     val status: String? = null,
+    /** SHOP-13: the C8 share sheet is open. */
+    val shareOpen: Boolean = false,
 ) {
     val isGone: Boolean get() = loaded && detail.list == null
 
     /** The list's store when it points to a live store: what the chip shows and the picker starts on. */
     val currentStoreId: String? get() = detail.list?.storeId?.takeIf { id -> detail.stores.any { it.id == id } }
+
+    /** SHOP-13: "Share" is offered only once the list row has loaded, and not on a gone list (a toggle would rotate a live link). */
+    val canShare: Boolean get() = loaded && detail.list != null
 
     /** SHOP-11: the open list is a template. */
     val isTemplate: Boolean get() = detail.list?.isTemplate == true
@@ -160,6 +166,11 @@ sealed interface ListDetailEvent {
     /** SHOP-11: the sheet's pick: copies every live item onto this list in one transaction. */
     data class AddAll(val targetId: String) : ListDetailEvent
 
+    /** SHOP-13: the List actions entry "Share": opens the C8 sheet. */
+    data object OpenShare : ListDetailEvent
+
+    data object CloseShare : ListDetailEvent
+
     /** Leaving the screen or the app writes what is still waiting rather than dropping it. */
     data object Flush : ListDetailEvent
 }
@@ -252,6 +263,8 @@ class ListDetailViewModel(
             ListDetailEvent.OpenAddAll -> openAddAll()
             ListDetailEvent.CloseAddAll -> mutableState.update { it.copy(addAllOpen = false, addAllFailed = false) }
             is ListDetailEvent.AddAll -> addAll(event.targetId)
+            ListDetailEvent.OpenShare -> if (mutableState.value.canShare) mutableState.update { it.copy(shareOpen = true) }
+            ListDetailEvent.CloseShare -> mutableState.update { it.copy(shareOpen = false) }
             ListDetailEvent.Flush -> flush()
         }
     }
@@ -444,6 +457,55 @@ class ListDetailViewModel(
         add = { name, barcode, beforeKick -> addScanned(name, barcode, beforeKick) },
         scope = scannerScope,
     )
+
+    // --- Share sheet (SHOP-13) ---
+
+    /**
+     * The C8 share sheet for this list. [share] and [stop] are the API calls; after each success the server's token (or null)
+     * is written onto the local row, with no outbox entry because `share_token` is server-owned, and sync is kicked.
+     */
+    fun makeShare(
+        webBase: String,
+        share: suspend (String) -> com.abodenestly.core.api.ApiResult<String>,
+        stop: suspend (String) -> com.abodenestly.core.api.ApiResult<Unit>,
+        copy: (String) -> Unit,
+        copiedMillis: Long = SHARE_COPIED_MILLIS,
+    ): ShareSheetModel = ShareSheetModel(
+        initialToken = mutableState.value.detail.list?.shareToken,
+        webBase = webBase,
+        share = { share(listId) },
+        stop = { stop(listId) },
+        record = { token -> recordShare(token) },
+        isOnline = { mutableState.value.online },
+        copy = copy,
+        scope = scope,
+        copiedMillis = copiedMillis,
+        delayer = delayer,
+    )
+
+    private suspend fun recordShare(token: String?) {
+        val change: Int = shareChanges.incrementAndGet()
+        // A failed local write is harmless: the server holds the truth and the next pull brings the same value.
+        writeShareToken(token)
+        kick()
+        // The kick can join a pull whose page was read before this change committed, and that page writes the old token
+        // back. Write the server's answer again so it is the last local write, unless a newer share change (Stop sharing
+        // tapped while this kick ran) has written since: its answer is the one that stands.
+        if (shareChanges.get() == change) writeShareToken(token)
+    }
+
+    /** Counts recorded share changes, so a stale [recordShare] skips its write after the kick. */
+    private val shareChanges = java.util.concurrent.atomic.AtomicInteger(0)
+
+    private suspend fun writeShareToken(token: String?) {
+        try {
+            database.setShareToken(householdId, listId, token)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // See recordShare.
+        }
+    }
 
     // --- Item sheet (SHOP-03) ---
 

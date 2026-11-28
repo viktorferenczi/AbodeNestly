@@ -407,6 +407,10 @@ interface ShoppingListDao {
     @Query("SELECT * FROM shopping_list WHERE household_id = :householdId AND id = :id")
     fun observeList(householdId: String, id: String): Flow<ShoppingListEntity?>
 
+    /** SHOP-13: sets (or clears) the server-owned token on a live-or-deleted list row; returns how many rows it changed. */
+    @Query("UPDATE shopping_list SET share_token = :token WHERE household_id = :householdId AND id = :id")
+    suspend fun setShareToken(householdId: String, id: String, token: String?): Int
+
     /** The live items of one list. */
     @Query("SELECT * FROM list_item WHERE household_id = :householdId AND list_id = :listId AND deleted_at IS NULL")
     fun observeItems(householdId: String, listId: String): Flow<List<ListItemEntity>>

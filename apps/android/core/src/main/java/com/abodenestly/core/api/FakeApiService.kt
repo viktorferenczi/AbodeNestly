@@ -36,6 +36,8 @@ class FakeApiService : ApiService, SyncTransport {
         data class SignAttachment(val householdId: UUID, val entity: String, val entityId: UUID, val filename: String, val mime: String, val size: Int) : Call
         data class Upload(val url: String, val byteCount: Int, val mime: String) : Call
         data class Product(val barcode: String) : Call
+        data class ShareList(val listId: UUID) : Call
+        data class StopSharing(val listId: UUID) : Call
     }
 
     private val recorded = CopyOnWriteArrayList<Call>()
@@ -67,6 +69,9 @@ class FakeApiService : ApiService, SyncTransport {
     /** Queued results for `signAttachment`, consumed in order before falling back to [signResult]. */
     val signResults = ConcurrentLinkedQueue<ApiResult<SignedUpload>>()
     @Volatile var uploadResult: ApiResult<Unit> = ApiResult.Success(Unit)
+    /** SHOP-13: what `shareList` answers (the API's JSON-route URL by default) and what `stopSharing` answers. */
+    @Volatile var shareResult: ApiResult<String> = ApiResult.Success("https://api.test/shared/tok123")
+    @Volatile var stopSharingResult: ApiResult<Unit> = ApiResult.Success(Unit)
     /** Every `product` lookup answers this once [productResults] is drained. The API does not know the code by default. */
     @Volatile var productResult: ProductLookupResult = ProductLookupResult.NotFound
     /** Queued results for `product`, consumed in order before falling back to [productResult]. */
@@ -199,5 +204,17 @@ class FakeApiService : ApiService, SyncTransport {
         recorded += Call.Product(barcode)
         gate?.await()
         return productResults.poll() ?: productResult
+    }
+
+    override suspend fun shareList(listId: UUID): ApiResult<String> {
+        recorded += Call.ShareList(listId)
+        gate?.await()
+        return shareResult
+    }
+
+    override suspend fun stopSharing(listId: UUID): ApiResult<Unit> {
+        recorded += Call.StopSharing(listId)
+        gate?.await()
+        return stopSharingResult
     }
 }

@@ -116,4 +116,10 @@ interface ApiService {
 
     /** `GET /products/{barcode}` (SHOP-10). Never throws: a missing network is [ProductLookupResult.Offline]. */
     suspend fun product(barcode: String): ProductLookupResult
+
+    /** `POST /lists/{id}/share` (SHOP-13): the public URL of the read-only view. Creates the link or rotates it. */
+    suspend fun shareList(listId: UUID): ApiResult<String>
+
+    /** `DELETE /lists/{id}/share` (204, SHOP-13): the link stops working. */
+    suspend fun stopSharing(listId: UUID): ApiResult<Unit>
 }

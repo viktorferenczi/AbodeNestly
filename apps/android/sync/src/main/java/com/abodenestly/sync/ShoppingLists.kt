@@ -12,6 +12,8 @@ data class ListRecord(
     val isTemplate: Boolean,
     val archivedAt: String?,
     val createdAt: String?,
+    /** SHOP-13: the read-only link's token; server-owned, so only a pull or a successful share call changes it. */
+    val shareToken: String? = null,
 )
 
 /** A live store, for the chip and the picker. */

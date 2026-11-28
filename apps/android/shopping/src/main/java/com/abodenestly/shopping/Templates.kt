@@ -12,7 +12,7 @@ import java.time.Instant
 import java.util.UUID
 
 /** An entry of the C2 "List actions" menu. */
-enum class ListAction { AddAll, ClearChecked }
+enum class ListAction { Share, AddAll, ClearChecked }
 
 /** What "Add all to list" did. */
 sealed interface AddAllResult {
@@ -101,10 +101,12 @@ object Templates {
     }
 
     /**
-     * The List actions menu: on a template it is always there, with "Add all to list" first; "Clear checked" only when
-     * something is checked; a normal list never offers Add all.
+     * The List actions menu. "Share" (SHOP-13) is first when [canShare]: the list has loaded and is not gone, and the app can
+     * share. On a template "Add all to list" follows; "Clear checked" only when something is checked; a normal list never
+     * offers Add all.
      */
-    fun actions(isTemplate: Boolean, hasChecked: Boolean): List<ListAction> = buildList {
+    fun actions(isTemplate: Boolean, hasChecked: Boolean, canShare: Boolean = false): List<ListAction> = buildList {
+        if (canShare) add(ListAction.Share)
         if (isTemplate) add(ListAction.AddAll)
         if (hasChecked) add(ListAction.ClearChecked)
     }

@@ -98,6 +98,12 @@ jobs:
           distribution: temurin
           java-version: 17
           cache: gradle
+      # Robolectric downloads its android-all jars from Maven Central at test time, outside the Gradle cache; a
+      # dropped download fails every Robolectric test in a module. Keep them between runs.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ hashFiles('apps/android/gradle/libs.versions.toml') }}
       - name: module graph, lint, unit and component tests
         working-directory: apps/android
         run: ./gradlew checkModuleGraph lintDevDebug testDevDebugUnitTest

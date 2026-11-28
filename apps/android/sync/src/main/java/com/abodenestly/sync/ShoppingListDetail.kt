@@ -53,3 +53,11 @@ suspend fun DatabaseRegistry.listItemIdentity(householdId: UUID, id: String): Li
 /** The live items of one list, read once (SHOP-11 "Add all"). Throws [DatabaseNotOpenException] when [householdId] is not the open household. */
 suspend fun DatabaseRegistry.liveListItems(householdId: UUID, listId: String): List<ListItemRecord> =
     withOpenFor(householdId) { db -> db.shoppingLists().liveItems(householdId.toString(), listId).map { DatabaseRegistry.toItemRecord(it) } }
+
+/**
+ * SHOP-13: writes the server's share token (or null) straight onto the `shopping_list` row. No outbox entry: `share_token` is
+ * server-owned and never pushed. Returns false when there is no such row. Throws [DatabaseNotOpenException] when
+ * [householdId] is not the open household.
+ */
+suspend fun DatabaseRegistry.setShareToken(householdId: UUID, listId: String, token: String?): Boolean =
+    withOpenFor(householdId) { db -> db.shoppingLists().setShareToken(householdId.toString(), listId, token) > 0 }

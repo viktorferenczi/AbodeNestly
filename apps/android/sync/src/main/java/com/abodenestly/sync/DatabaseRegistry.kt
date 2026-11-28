@@ -537,7 +537,7 @@ open class DatabaseRegistry(
 
         fun toRecord(e: ShoppingListEntity) = ListRecord(
             id = e.id, name = e.name, storeId = e.storeId, isTemplate = e.isTemplate == true,
-            archivedAt = e.archivedAt, createdAt = e.createdAt,
+            archivedAt = e.archivedAt, createdAt = e.createdAt, shareToken = e.shareToken,
         )
 
         /** The server's default currency, shown until the household row has been pulled (web and iOS do the same). */
