@@ -300,7 +300,7 @@ export function ListDetail() {
             ) : null}
           </div>
         </div>
-        {empty && !clearing && !pending.length ? <p className={styles.hint}>Add your first item</p> : null}
+        {empty && !clearing && !pending.length ? <p className={styles.hint}>Try: 2 l milk</p> : null}
         {allChecked ? (
           <div className={styles.done}>
             <p className={styles.hint}>All done</p>

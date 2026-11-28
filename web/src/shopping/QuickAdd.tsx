@@ -4,6 +4,7 @@ import { useAuth } from '../core/auth/AuthProvider.tsx';
 import { useSync } from '../sync/SyncEngine.ts';
 import type { HouseholdDb } from '../sync/db.ts';
 import { QuickAddBar } from '../ui/QuickAddBar.tsx';
+import { VoiceAdd } from './VoiceAdd.tsx';
 import { BarcodeScanner } from './BarcodeScanner.tsx';
 import { addItem, historyOf, suggest } from './QuickAdd.ts';
 import { createItem, unitSuggestions } from './ItemSheet.ts';
@@ -25,6 +26,8 @@ export function QuickAdd({ db, householdId, listId, items, autoFocus, pricing, s
   // The Details button opens the item sheet prefilled with the typed text (SHOP-03).
   const [details, setDetails] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [listening, setListening] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
 
   const history = useMemo(() => historyOf(items), [items]);
   const suggestions = useMemo(() => suggest(history, value, { listId }), [history, value, listId]);
@@ -49,8 +52,23 @@ export function QuickAdd({ db, householdId, listId, items, autoFocus, pricing, s
           Couldn't add that item. Try again.
         </p>
       ) : null}
-      <QuickAddBar value={value} onChange={setValue} suggestions={suggestions} onPick={(l) => void add(l)} onSubmit={(t) => void add(t)} autoFocus={autoFocus} onDetails={setDetails} onScan={() => setScanning(true)} />
+      <QuickAddBar value={value} onChange={setValue} suggestions={suggestions} onPick={(l) => void add(l)} onSubmit={(t) => void add(t)} autoFocus={autoFocus} onDetails={setDetails} onScan={() => setScanning(true)} onVoice={() => setListening(true)} inputRef={field} />
       {scanning ? <BarcodeScanner db={db} deps={deps} householdId={householdId} listId={listId} userId={session?.user.id ?? null} onClose={() => setScanning(false)} /> : null}
+      {listening ? (
+        <VoiceAdd
+          db={db}
+          deps={deps}
+          householdId={householdId}
+          listId={listId}
+          userId={session?.user.id ?? null}
+          onClose={() => setListening(false)}
+          onTypeInstead={() => {
+            setListening(false);
+            // The sheet hands focus back to the mic button as it unmounts; the field takes it after that.
+            setTimeout(() => field.current?.focus(), 0);
+          }}
+        />
+      ) : null}
       {details !== null ? (
         <ItemSheet
           mode="new"

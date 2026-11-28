@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import styles from './QuickAddBar.module.css';
 
 export type QuickAddSuggestion = { key: string; label: string };
@@ -17,13 +17,18 @@ type Props = {
   onDetails?: (text: string) => void;
   /** Shows a Scan barcode button (SHOP-10); the caller opens the scanner. */
   onScan?: () => void;
+  /** Shows a Voice add button (SHOP-14); the caller opens the voice sheet. */
+  onVoice?: () => void;
+  /** Lets the caller focus the field (the voice sheet's "Type instead"). */
+  inputRef?: RefObject<HTMLInputElement | null>;
 };
 
 // DESIGN A6 QuickAddBar: field, Add button and an autocomplete listbox above it (ARIA combobox pattern).
-// The mic button arrives with SHOP-14; the barcode button is SHOP-10.
-export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, placeholder = 'Add an item', autoFocus, onDetails, onScan }: Props) {
+// The barcode button is SHOP-10, the mic button SHOP-14.
+export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, placeholder = 'Add an item', autoFocus, onDetails, onScan, onVoice, inputRef }: Props) {
   const listId = useId();
-  const input = useRef<HTMLInputElement>(null);
+  const own = useRef<HTMLInputElement>(null);
+  const input = inputRef ?? own;
   const [active, setActive] = useState(-1);
   const [closed, setClosed] = useState(false);
   const open = !closed && suggestions.length > 0;
@@ -106,6 +111,14 @@ export function QuickAddBar({ value, onChange, suggestions, onPick, onSubmit, pl
           <button type="button" className={styles.scan} aria-label="Scan barcode" onClick={onScan}>
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M4 7v10M7 7v10M11 7v10M14 7v10M18 7v10M20 7v10" />
+            </svg>
+          </button>
+        ) : null}
+        {onVoice ? (
+          <button type="button" className={styles.scan} aria-label="Voice add" onClick={onVoice}>
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
             </svg>
           </button>
         ) : null}
