@@ -12,10 +12,14 @@ public struct ListRecord: Sendable, Equatable, Identifiable {
     public var archivedAt: String?
     /// Millisecond UTC text, or `nil` for a row from before the server stamped it.
     public var createdAt: String?
+    /// The server-owned `share_token` (SHOP-13): set while the list has a live link. Only the list detail reads it.
+    public var shareToken: String?
 
     public init(
-        id: UUID, name: String, storeId: UUID? = nil, isTemplate: Bool = false, archivedAt: String? = nil, createdAt: String? = nil
+        id: UUID, name: String, storeId: UUID? = nil, isTemplate: Bool = false, archivedAt: String? = nil, createdAt: String? = nil,
+        shareToken: String? = nil
     ) {
+        self.shareToken = shareToken
         self.id = id
         self.name = name
         self.storeId = storeId

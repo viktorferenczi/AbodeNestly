@@ -98,15 +98,17 @@ public enum AddAllResult: Equatable, Sendable {
 
 /// An entry of the C2 "List actions" menu.
 public enum ListAction: Hashable, Sendable {
+    /// SHOP-13: opens the share sheet (C8).
+    case share
     case addAll
     case clearChecked
 }
 
 extension Templates {
-    /// The List actions menu: on a template it is always there, with "Add all to list" first; "Clear checked" only when
-    /// something is checked; a normal list never offers Add all.
+    /// The List actions menu is always there: "Share" first (SHOP-13, templates too), then on a template "Add all to list"
+    /// (SHOP-11); "Clear checked" only when something is checked; a normal list never offers Add all.
     public static func actions(isTemplate: Bool, hasChecked: Bool) -> [ListAction] {
-        var actions: [ListAction] = []
+        var actions: [ListAction] = [.share]
         if isTemplate { actions.append(.addAll) }
         if hasChecked { actions.append(.clearChecked) }
         return actions

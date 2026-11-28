@@ -2,6 +2,7 @@ import Contract
 import Foundation
 import Observation
 import Sync
+import UIKit
 
 /// DESIGN C2 (SHOP-02 slice). Reads only the local database, so it works offline; an add goes through the outbox in
 /// one local transaction and then kicks sync. Web twin: `web/src/shopping/ListDetail.tsx`.
@@ -65,6 +66,9 @@ public final class ListDetailModel {
     public var targets: [ListRecord] { Templates.targets(lists: lists) }
 
     public var isGone: Bool { loaded && snapshot.list == nil }
+    /// "Share" is offered only once the list row is here (SHOP-13): before the first observation, or on a gone list,
+    /// the sheet would start off and a toggle would rotate a link that is already live.
+    public var canShare: Bool { loaded && snapshot.list != nil }
     public var suggestions: [Suggestion] { QuickAdd.suggest(history: snapshot.history, query: query, listId: listId) }
 
     /// Oldest first, so a new item lands at the bottom; the id breaks ties so the order never flickers.
@@ -240,6 +244,31 @@ public final class ListDetailModel {
             device: device, householdId: householdId, lookup: lookup, isOnline: isOnline, store: store,
             add: { [weak self] name, barcode, beforeKick in await self?.addScanned(name: name, barcode: barcode, beforeKick: beforeKick) }
         )
+    }
+
+    /// The share sheet for this list (DESIGN C8, SHOP-13). `share` and `stop` are the API calls; after each success the
+    /// server's token (or `nil`) is written onto the local row, with no outbox entry because `share_token` is
+    /// server-owned, and sync is kicked.
+    public func makeShare(
+        webBase: URL, share: @escaping @Sendable (UUID) async -> Result<String, ShareFailure>,
+        stop: @escaping @Sendable (UUID) async -> Result<Void, ShareFailure>, isOnline: @escaping @MainActor () -> Bool,
+        copy: @escaping @MainActor (String) -> Void = { UIPasteboard.general.string = $0 }
+    ) -> ShareSheetModel {
+        let id: UUID = listId
+        return ShareSheetModel(
+            initialToken: snapshot.list?.shareToken, webBase: webBase, share: { await share(id) },
+            stop: { await stop(id) }, record: { [weak self] token in await self?.recordShare(token) },
+            isOnline: isOnline, copy: copy
+        )
+    }
+
+    private func recordShare(_ token: String?) async {
+        // A failed local write is harmless: the server holds the truth and the next pull brings the same value.
+        try? await database.setShareToken(listId: listId, token: token)
+        await kick()
+        // The kick can join a pull whose page was read before this change committed, and that page writes the old
+        // token back. Write the server's answer again so it is the last local write.
+        try? await database.setShareToken(listId: listId, token: token)
     }
 
     /// Writes only the changed columns; nothing at all when nothing changed (AC3, AC4).

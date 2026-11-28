@@ -111,4 +111,10 @@ public protocol ApiService: Sendable {
     /// `GET /products/{barcode}` (SHOP-10). 404 and 400 → `.notFound`; no network or 502 → `.offline`; any other
     /// failure → `.failed` (mirrors web `toProductFailure`).
     func product(barcode: String) async -> ProductLookupResult
+    /// `POST /lists/{id}/share` (SHOP-13): creates or rotates the read-only link and returns the URL the API gives, which is
+    /// its own JSON route (`ShareLinkResponse.url`; that schema is not in the generated Swift models, so the string is
+    /// returned as is). 403 → `.forbidden`, 404 → `.notFound`, 400 → `.validation`, `module_disabled` → `.moduleDisabled`.
+    func shareList(listId: UUID) async -> Result<String, ApiFailure>
+    /// `DELETE /lists/{id}/share` (204): the current link stops working. Same failure mapping as `shareList`.
+    func stopSharing(listId: UUID) async -> Result<Void, ApiFailure>
 }

@@ -67,7 +67,7 @@ struct TemplatesViewTests {
         let view = try detail(h)
         _ = try view.find(viewWithAccessibilityIdentifier: "list.template")
         _ = try view.find(text: "Template")
-        #expect(Templates.actions(isTemplate: h.model.isTemplate, hasChecked: !h.model.checked.isEmpty) == [.addAll])
+        #expect(Templates.actions(isTemplate: h.model.isTemplate, hasChecked: !h.model.checked.isEmpty) == [.share, .addAll])
     }
 
     @Test("SHOP-11: a normal list has no caption and its menu has no Add all")
@@ -77,7 +77,7 @@ struct TemplatesViewTests {
         let view = try ListDetailView(model: d.model, title: "Groceries", isOnline: true).inspect()
         #expect(!has(view, "list.template"))
         #expect(!d.model.isTemplate)
-        #expect(Templates.actions(isTemplate: d.model.isTemplate, hasChecked: !d.model.checked.isEmpty) == [.clearChecked])
+        #expect(Templates.actions(isTemplate: d.model.isTemplate, hasChecked: !d.model.checked.isEmpty) == [.share, .clearChecked])
     }
 
     @Test("SHOP-11: AC2 picking Groceries copies the items, updates its count and shows the status message")

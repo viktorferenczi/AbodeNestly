@@ -67,6 +67,18 @@ public struct ListDetailSnapshot: Sendable, Equatable {
 }
 
 extension HouseholdDatabase {
+    /// SHOP-13: writes the server's `share_token` (or `nil` once sharing stopped) straight onto the local list row. It is
+    /// server-owned (SPEC §6.2), so there is no outbox entry; the next pull would bring the same value. Throws when the
+    /// household is not open or the row is not here.
+    public func setShareToken(listId: UUID, token: String?) throws {
+        guard let pool else { throw HouseholdDatabaseError.notOpen }
+        let rowId: String = listId.uuidString.lowercased()
+        try pool.write { db in
+            try db.execute(sql: "UPDATE shopping_list SET share_token = ? WHERE id = ?", arguments: [token, rowId])
+            guard db.changesCount > 0 else { throw SyncWriteError.rowNotFound }
+        }
+    }
+
     /// The stored state of one item, read straight from the database (not the observed snapshot, which can lag a sync
     /// apply). `nil` when there is no such row.
     public func listItemState(id: UUID) throws -> (checked: Bool, deletedAt: String?)? {
@@ -131,7 +143,7 @@ extension HouseholdDatabase {
             let listRow = try Row.fetchOne(
                 db,
                 sql: """
-                SELECT id, name, store_id, is_template, archived_at, created_at FROM shopping_list
+                SELECT id, name, store_id, is_template, archived_at, created_at, share_token FROM shopping_list
                 WHERE household_id = ? AND id = ? AND deleted_at IS NULL
                 """,
                 arguments: [key, listKey]
@@ -142,7 +154,7 @@ extension HouseholdDatabase {
                 let template: Bool? = row["is_template"]
                 return ListRecord(
                     id: id, name: row["name"], storeId: storeId.flatMap { UUID(uuidString: $0) }, isTemplate: template ?? false,
-                    archivedAt: row["archived_at"], createdAt: row["created_at"]
+                    archivedAt: row["archived_at"], createdAt: row["created_at"], shareToken: row["share_token"]
                 )
             }
             let stores = try Row.fetchAll(
