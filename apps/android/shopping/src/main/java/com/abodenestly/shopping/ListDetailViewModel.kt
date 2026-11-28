@@ -458,6 +458,39 @@ class ListDetailViewModel(
         scope = scannerScope,
     )
 
+    /**
+     * SHOP-14: the voice sheet's Add. Stores the name with the spoken quantity and unit through the outbox, like a Quick add,
+     * and kicks sync. Returns the new item's id, or null when it could not be stored (no list yet, a blank name, a failed
+     * write); the sheet then shows its error and stays open. The write finishes even if the sheet closes meanwhile.
+     */
+    suspend fun addSpoken(name: String, quantity: Double?, unit: String?): String? {
+        val current = mutableState.value
+        if (!current.loaded || current.detail.list == null) return null
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return null
+        val id = newId()
+        val at = now()
+        return withContext(NonCancellable) {
+            try {
+                addItem(database, householdId, QuickAdd.row(id, listId, trimmed, userId, at, quantity = quantity, unit = unit), at)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@withContext null
+            }
+            kick()
+            id
+        }
+    }
+
+    /** The voice sheet for this list (DESIGN C6): its adds go through [addSpoken]; offline is read from this screen's connectivity. */
+    fun makeVoice(device: SpeechRecognizerDevice, locale: java.util.Locale = java.util.Locale.getDefault()): VoiceAddModel = VoiceAddModel(
+        device = device,
+        isOnline = { mutableState.value.online },
+        locale = locale,
+        add = { name, quantity, unit -> addSpoken(name, quantity, unit) != null },
+    )
+
     // --- Share sheet (SHOP-13) ---
 
     /**

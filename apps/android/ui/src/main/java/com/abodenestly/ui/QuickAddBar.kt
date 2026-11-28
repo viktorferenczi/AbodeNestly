@@ -36,8 +36,8 @@ import androidx.compose.ui.unit.dp
  * autocomplete [suggestions] stacked above it (each a pair of `name_key` and the label it shows). Presentational: the
  * caller owns the text and the matching. Tapping a suggestion calls [onPick]; Done on the keyboard and the Add button
  * both call [onSubmit], so they add exactly the typed text. [onDetails], when given, adds a Details button that hands the typed
- * text to the caller (the C3 sheet for a new item). [onScan], when given, adds the "Scan barcode" button (SHOP-10, opens C7).
- * No mic button until SHOP-14.
+ * text to the caller (the C3 sheet for a new item). [onScan], when given, adds the "Scan barcode" button (SHOP-10, opens C7);
+ * [onVoice], when given, adds the "Voice add" mic button (SHOP-14, opens C6) beside it. Without a hook there is no button.
  */
 @Composable
 fun QuickAddBar(
@@ -51,6 +51,7 @@ fun QuickAddBar(
     focusRequester: FocusRequester? = null,
     onDetails: ((String) -> Unit)? = null,
     onScan: (() -> Unit)? = null,
+    onVoice: (() -> Unit)? = null,
 ) {
     val tokens = LocalTokens.current
     Column(modifier.fillMaxWidth().background(tokens.surface)) {
@@ -89,6 +90,11 @@ fun QuickAddBar(
             if (onScan != null) {
                 IconButton(onClick = onScan, modifier = Modifier.defaultMinSize(minWidth = Tokens.MinTouchTarget, minHeight = Tokens.MinTouchTarget).testTag("quickadd.scan")) {
                     Icon(BarcodeIcon, contentDescription = "Scan barcode", tint = tokens.accent)
+                }
+            }
+            if (onVoice != null) {
+                IconButton(onClick = onVoice, modifier = Modifier.defaultMinSize(minWidth = Tokens.MinTouchTarget, minHeight = Tokens.MinTouchTarget).testTag("quickadd.voice")) {
+                    Icon(MicIcon, contentDescription = "Voice add", tint = tokens.accent)
                 }
             }
             if (onDetails != null) {

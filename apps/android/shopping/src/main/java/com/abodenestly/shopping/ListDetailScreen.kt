@@ -87,8 +87,10 @@ fun ListDetailScreen(
     scanner: ScannerSetup? = null,
     /** SHOP-13: the share link's origin and API calls; `null` hides "Share" from the List actions menu. */
     share: ShareSetup? = null,
+    /** SHOP-14: the microphone and recognizer; `null` hides the bar's mic button. */
+    voice: VoiceSetup? = null,
 ) {
-    ListDetailScreenHost(viewModel, onBack, modifier, onManageStores, scanner, share = share) { isNew, initial, history, failed, onSave, onDelete, onClose ->
+    ListDetailScreenHost(viewModel, onBack, modifier, onManageStores, scanner, share = share, voice = voice) { isNew, initial, history, failed, onSave, onDelete, onClose ->
         ItemSheet(isNew, initial, history, failed, onSave, onDelete, onClose)
     }
 }
@@ -101,6 +103,8 @@ internal fun ListDetailScreenHost(
     onManageStores: () -> Unit = {},
     scanner: ScannerSetup? = null,
     share: ShareSetup? = null,
+    voice: VoiceSetup? = null,
+    voiceSheet: VoiceSlot = { model, onClose, onTypeInstead -> VoiceAddSheet(model, onClose, onTypeInstead) },
     shareSheet: ShareSlot = { model, online, onClose -> ShareSheet(model, online, onClose) },
     picker: StorePickerSlot = { stores, current, failed, onCreate, onSave, onManage, onClose ->
         StorePickerSheet(stores, current, failed, onCreate, onSave, onManage, onClose)
@@ -118,7 +122,28 @@ internal fun ListDetailScreenHost(
     DisposableEffect(viewModel) { onDispose { if (activity?.isChangingConfigurations != true) viewModel.onEvent(ListDetailEvent.Flush) } }
     // SHOP-10: the scanner is a full-screen modal over the list; what is typed in the bar is left alone.
     var scanning by rememberSaveable { mutableStateOf(false) }
-    ListDetailContent(ui, viewModel::onEvent, onBack, modifier, onScan = if (scanner != null) ({ scanning = true }) else null, canShare = share != null)
+    // SHOP-14: the voice sheet. "Type instead" closes it and, once it has gone, focuses the Quick add field.
+    var voiceOpen by rememberSaveable { mutableStateOf(false) }
+    var typeInstead by remember { mutableStateOf(false) }
+    val barFocus = remember { FocusRequester() }
+    LaunchedEffect(voiceOpen, typeInstead) {
+        if (!voiceOpen && typeInstead) {
+            typeInstead = false
+            barFocus.tryFocus()
+        }
+    }
+    ListDetailContent(
+        ui, viewModel::onEvent, onBack, modifier,
+        onScan = if (scanner != null) ({ scanning = true }) else null,
+        canShare = share != null,
+        onVoice = if (voice != null) ({ voiceOpen = true }) else null,
+        focus = barFocus,
+    )
+    if (voiceOpen && voice != null) {
+        val device = voice.device()
+        val model = remember { viewModel.makeVoice(device) }
+        voiceSheet(model, { voiceOpen = false }, { typeInstead = true; voiceOpen = false })
+    }
     if (scanning && scanner != null) {
         val device = scanner.device()
         val scannerScope = rememberCoroutineScope()
@@ -193,9 +218,12 @@ internal fun ListDetailContent(
     onScan: (() -> Unit)? = null,
     /** SHOP-13: the app can share; "Share" is then the menu's first entry once the list has loaded. */
     canShare: Boolean = false,
+    /** SHOP-14: opens the voice sheet; `null` hides the mic button. */
+    onVoice: (() -> Unit)? = null,
+    /** The Quick add field's focus; the host passes its own so "Type instead" can reach it. */
+    focus: FocusRequester = remember { FocusRequester() },
 ) {
     val tokens = LocalTokens.current
-    val focus = remember { FocusRequester() }
     var checkedOpen by rememberSaveable { mutableStateOf(false) }
     var actionsOpen by remember { mutableStateOf(false) }
     val unchecked = ui.unchecked
@@ -284,7 +312,7 @@ internal fun ListDetailContent(
                 )
             }
             isEmpty -> Box(Modifier.weight(1f).fillMaxWidth().padding(Tokens.ScreenPadding), contentAlignment = Alignment.Center) {
-                Text("Add your first item", style = MaterialTheme.typography.bodyLarge, color = tokens.text2, modifier = Modifier.testTag("list.empty"))
+                Text("Try: 2 l milk", style = MaterialTheme.typography.bodyLarge, color = tokens.text2, modifier = Modifier.testTag("list.empty"))
             }
             else -> LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("list.items")) {
                 if (ui.allChecked) {
@@ -368,6 +396,7 @@ internal fun ListDetailContent(
                 focusRequester = focus,
                 onDetails = { onEvent(ListDetailEvent.OpenNew(it)) },
                 onScan = onScan,
+                onVoice = onVoice,
                 modifier = Modifier.imePadding(),
             )
         }

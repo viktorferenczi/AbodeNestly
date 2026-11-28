@@ -103,7 +103,7 @@ class QuickAddComposeTest {
     fun `empty shows the hint, a focused bar and Add off`() {
         show()
         await("list.empty")
-        rule.onNodeWithText("Add your first item").assertIsDisplayed()
+        rule.onNodeWithText("Try: 2 l milk").assertIsDisplayed()
         rule.onNodeWithTag("list.title").assertIsDisplayed()
         rule.onNodeWithTag("quickadd.field").assertIsDisplayed()
         rule.onNodeWithTag("quickadd.add").assertIsNotEnabled()
