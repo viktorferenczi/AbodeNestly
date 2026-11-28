@@ -46,7 +46,8 @@ import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
-private const val LONG_NAME = "Extra virgin cold pressed organic olive oil from the sunny hills of Tuscany in a large glass bottle"
+// Lower case after the first letter: the parser lower-cases what was said and capitalises only the first letter.
+private const val LONG_NAME = "Extra virgin cold pressed organic olive oil from the sunny hills of tuscany in a large glass bottle"
 
 /**
  * One case per State and Interaction of DESIGN C6 for Android (TESTING §7), on a real Room file and a fake recognizer:
