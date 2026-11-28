@@ -20,6 +20,16 @@ public enum SyncTables {
         "id", "household_id", "created_at", "updated_at", "sync_seq", "name_key", "share_token",
     ]
 
+    /// Tables whose `name_key` is a real, client-sent column (the item_price key); elsewhere the server derives it.
+    static let clientNameKeyTables: Set<String> = ["item_price"]
+
+    /// The fields of a write for `table` that may go to the server: `fields` minus the columns the server owns.
+    static func sendable(table: String, fields: [String: JSONValue]) -> [String: JSONValue] {
+        var dropped: Set<String> = serverOwned
+        if clientNameKeyTables.contains(table) { dropped.remove("name_key") }
+        return fields.filter { !dropped.contains($0.key) }
+    }
+
     /// Tables a pull must never write to.
     static let localOnly: Set<String> = ["outbox", "outbox_failed", "meta", "attachment_outbox"]
 }
@@ -88,7 +98,7 @@ extension HouseholdDatabase {
     public func upsert(table: String, row: [String: JSONValue], now: Date = Date()) throws {
         let pool = try requirePool()
         guard let household = handle?.householdId else { throw HouseholdDatabaseError.notOpen }
-        let prepared = try Self.prepareUpsert(row: row, household: household)
+        let prepared = try Self.prepareUpsert(table: table, row: row, household: household)
         try pool.write { db in
             try Self.requireTable(db, table)
             try Self.writeAndQueue(db, table: table, prepared: prepared, now: now)
@@ -102,7 +112,7 @@ extension HouseholdDatabase {
         let pool = try requirePool()
         guard let household = handle?.householdId else { throw HouseholdDatabaseError.notOpen }
         var prepared: [PreparedUpsert] = []
-        for row in rows { prepared.append(try Self.prepareUpsert(row: row, household: household)) }
+        for row in rows { prepared.append(try Self.prepareUpsert(table: table, row: row, household: household)) }
         try pool.write { db in
             try Self.requireTable(db, table)
             for item in prepared { try Self.writeAndQueue(db, table: table, prepared: item, now: now) }
@@ -110,11 +120,11 @@ extension HouseholdDatabase {
     }
 
     /// The row to store locally (household filled in) and the fields to queue (server-owned columns removed).
-    private static func prepareUpsert(row: [String: JSONValue], household: UUID) throws -> PreparedUpsert {
+    private static func prepareUpsert(table: String, row: [String: JSONValue], household: UUID) throws -> PreparedUpsert {
         guard case .string(let rowId)? = row["id"] else { throw SyncWriteError.invalidRow }
         var local = row
         if local["household_id"] == nil { local["household_id"] = .string(household.uuidString.lowercased()) }
-        let data = row.filter { !SyncTables.serverOwned.contains($0.key) }
+        let data: [String: JSONValue] = SyncTables.sendable(table: table, fields: row)
         return PreparedUpsert(rowId: rowId, local: local, data: data)
     }
 
@@ -131,7 +141,7 @@ extension HouseholdDatabase {
     ) throws {
         let pool = try requirePool()
         guard handle?.householdId != nil else { throw HouseholdDatabaseError.notOpen }
-        let data = fields.filter { !SyncTables.serverOwned.contains($0.key) }
+        let data: [String: JSONValue] = SyncTables.sendable(table: table, fields: fields)
         guard !data.isEmpty else { throw SyncWriteError.invalidRow }
         let rowId = id.uuidString.lowercased()
         try pool.write { db in

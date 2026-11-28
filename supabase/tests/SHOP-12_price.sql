@@ -1,7 +1,7 @@
 -- SHOP-12-db: item_price rows per (store, name_key), written directly by a member as a synced client does.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(16);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-0000000000a1', 'a1@example.com', 'authenticated', 'authenticated'),
@@ -79,6 +79,17 @@ reset role;
 select ok(exists (select 1 from pg_publication_tables
   where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'item_price'),
   'SHOP-12: item_price is in the realtime publication');
+
+-- Purge (SPEC §5): a price soft-deleted more than 30 days ago is removed, a recent one stays.
+-- Run as the table owner, like the cron job; the function is not executable by API roles.
+insert into public.item_price (id, household_id, store_id, name_key, price, deleted_at) values
+  ('00000000-0000-0000-0000-00000000b031', current_setting('test.home')::uuid, current_setting('test.s1')::uuid, 'old', 1, now() - interval '31 days'),
+  ('00000000-0000-0000-0000-00000000b029', current_setting('test.home')::uuid, current_setting('test.s1')::uuid, 'recent', 1, now() - interval '29 days');
+select lives_ok($$select public.purge_soft_deleted()$$, 'SHOP-12: purge_soft_deleted() runs with item_price present');
+select results_eq($$select id::text from public.item_price where id in
+  ('00000000-0000-0000-0000-00000000b031', '00000000-0000-0000-0000-00000000b029')$$,
+  $$values ('00000000-0000-0000-0000-00000000b029')$$,
+  'SHOP-12: a price deleted 31 days ago is purged, one deleted 29 days ago remains');
 
 select * from finish();
 rollback;

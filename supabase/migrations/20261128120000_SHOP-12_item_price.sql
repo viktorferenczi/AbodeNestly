@@ -38,3 +38,18 @@ call setup_scoped('item_price');
 create index item_price_last_idx on item_price (store_id, name_key, seen_at desc) where deleted_at is null;
 
 call publish_realtime('item_price');
+
+-- SPEC §5: soft-deleted household rows are purged after 30 days. Same function as CORE-10 with
+-- 'item_price' added; it comes before 'store' because its composite FK points at store.
+create or replace function purge_soft_deleted() returns void
+language plpgsql security definer set search_path = public as $$
+declare t text;
+begin
+  foreach t in array array['list_item','shopping_list','pantry_item','maint_log','maint_task','asset',
+                           'item_price','store','location','category','recipe','contractor','house','attachment']
+  loop
+    continue when to_regclass(t) is null;
+    execute format('delete from %I where deleted_at < now() - interval ''30 days''', t);
+  end loop;
+end $$;
+revoke execute on function purge_soft_deleted() from public, anon, authenticated, service_role;

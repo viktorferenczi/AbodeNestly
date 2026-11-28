@@ -2064,7 +2064,7 @@ Shopping off (X7): the Shopping tab is hidden and a shopping-table mutation is r
 
 ## Data and contract
 Tables: item_price  Endpoints: none  Types: ItemPrice
-Schema change: yes — supabase/migrations/20261108110700_SHOP-12_item_price.sql  Contract change: no
+Schema change: yes — supabase/migrations/20261128120000_SHOP-12_item_price.sql  Contract change: no
 
 ## Tests required
 Unit: n/a (database behaviour is asserted in pgTAP, TESTING §2)

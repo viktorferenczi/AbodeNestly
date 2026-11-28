@@ -59,7 +59,7 @@ describe('SHOP-09: subscribeHouseholdRealtime', () => {
     );
     // Exactly the tables the migrations publish: binding an unpublished one fails the whole join.
     expect([...realtimeTables(ON)].sort()).toEqual(
-      ['activity', 'attachment', 'invite', 'list_item', 'location', 'notification_pref', 'shopping_list', 'store', 'store_item_order'],
+      ['activity', 'attachment', 'invite', 'item_price', 'list_item', 'location', 'notification_pref', 'shopping_list', 'store', 'store_item_order'],
     );
   });
 

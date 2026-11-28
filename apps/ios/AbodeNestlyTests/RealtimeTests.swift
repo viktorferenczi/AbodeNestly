@@ -29,7 +29,7 @@ struct RealtimeTests {
         await task.value
     }
 
-    @Test("SHOP-09: the subscription covers exactly the nine published tables, for the open household")
+    @Test("SHOP-09: the subscription covers exactly the ten published tables, for the open household")
     func allTables() async {
         let realtime = FakeRealtime()
         let task = Task { await HouseholdRealtime.run(realtime: realtime, householdId: household, modules: allOn, sync: FakeSync()) }
@@ -38,9 +38,9 @@ struct RealtimeTests {
         #expect(subscription?.householdId == household)
         #expect(Set(subscription?.tables ?? []) == [
             "location", "invite", "activity", "attachment", "notification_pref",
-            "store", "shopping_list", "list_item", "store_item_order",
+            "store", "shopping_list", "list_item", "store_item_order", "item_price",
         ])
-        #expect(subscription?.tables.count == 9)
+        #expect(subscription?.tables.count == 10)
         task.cancel()
         await task.value
     }

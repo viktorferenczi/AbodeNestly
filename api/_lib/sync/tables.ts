@@ -40,6 +40,7 @@ export const SYNC_TABLES: Readonly<Record<string, SyncTableDef>> = {
       'manual_position', 'source', 'pantry_item_id', 'maint_task_id', 'created_by', 'deleted_at',
     ],
   },
+  // Clients must send name_key for this table only (no name column; a trigger normalises it).
   item_price: {
     scope: 'household_id',
     push: true,

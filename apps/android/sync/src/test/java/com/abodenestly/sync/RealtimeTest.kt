@@ -56,17 +56,17 @@ class RealtimeTest {
     }
 
     @Test
-    fun `the subscription is for the household and carries exactly the nine published tables when every module is on`() = runBlocking<Unit> {
+    fun `the subscription is for the household and carries exactly the ten published tables when every module is on`() = runBlocking<Unit> {
         val job = start { }
         awaitUntil { realtime.active == 1 }
 
         val call = realtime.calls.single()
         assertEquals(household.toString(), call.householdId)
         assertEquals(
-            setOf("location", "invite", "activity", "attachment", "notification_pref", "store", "shopping_list", "list_item", "store_item_order"),
+            setOf("location", "invite", "activity", "attachment", "notification_pref", "store", "shopping_list", "list_item", "store_item_order", "item_price"),
             call.tables.toSet(),
         )
-        assertEquals(9, call.tables.size)
+        assertEquals(10, call.tables.size)
         job.cancelAndJoin()
     }
 
