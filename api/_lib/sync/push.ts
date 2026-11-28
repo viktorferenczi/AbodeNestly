@@ -26,7 +26,8 @@ export function classifyError(e: unknown): { reason: Reason; detail: string } | 
 }
 
 // Upsert merge: only the columns present in `data` are written on conflict. Server-owned columns
-// are dropped; any other key outside the table's column list is a validation error.
+// are dropped unless the table lists them explicitly (item_price.name_key, which a trigger normalises);
+// any other key outside the table's column list is a validation error.
 export function buildUpsert(
   table: string,
   columns: readonly string[],
@@ -36,7 +37,7 @@ export function buildUpsert(
 ): { sql: string; values: unknown[] } {
   const keys: string[] = [];
   for (const key of Object.keys(data)) {
-    if (SERVER_OWNED.has(key)) continue;
+    if (SERVER_OWNED.has(key) && !columns.includes(key)) continue;
     if (!columns.includes(key)) throw new Reject('validation', `Unknown column ${key} for ${table}`);
     keys.push(key);
   }
