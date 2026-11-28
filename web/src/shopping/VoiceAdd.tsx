@@ -36,6 +36,7 @@ export function VoiceAdd({ db, deps, householdId, listId, userId, onClose, onTyp
   const [transcript, setTranscript] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   // One recognition per attempt; leaving (close, unmount, Try again) stops it.
   useEffect(() => {
@@ -52,7 +53,7 @@ export function VoiceAdd({ db, deps, householdId, listId, userId, onClose, onTyp
       setPhase({ kind: 'unsupported' });
       return;
     }
-    void recognizer.permission().then((state) => {
+    const begin = (state: 'granted' | 'denied' | 'prompt') => {
       if (cancelled) return;
       if (state === 'denied') return settle({ kind: 'permission-denied' });
       stop = recognizer.start(
@@ -70,7 +71,9 @@ export function VoiceAdd({ db, deps, householdId, listId, userId, onClose, onTyp
         },
         { offline },
       );
-    });
+    };
+    // A permission query that fails must not leave the sheet on "Listening…".
+    recognizer.permission().then(begin, () => settle({ kind: 'not-heard' }));
     return () => {
       cancelled = true;
       stop?.();
@@ -80,16 +83,20 @@ export function VoiceAdd({ db, deps, householdId, listId, userId, onClose, onTyp
   const tryAgain = () => {
     setTranscript('');
     setFailed(false);
+    setBusy(false);
     setPhase({ kind: 'listening' });
     setAttempt((a) => a + 1);
   };
 
   const add = async (item: SpokenItem) => {
+    if (busy) return;
+    setBusy(true);
     try {
       await addItem(db, deps, { householdId, listId, userId, name: item.name, quantity: item.quantity, unit: item.unit });
       onClose();
     } catch {
       setFailed(true);
+      setBusy(false);
     }
   };
 
@@ -136,7 +143,7 @@ export function VoiceAdd({ db, deps, householdId, listId, userId, onClose, onTyp
             <button type="button" className={styles.secondary} onClick={tryAgain}>
               Try again
             </button>
-            <button type="button" className={styles.primary} onClick={() => void add(item)}>
+            <button type="button" className={styles.primary} disabled={busy} onClick={() => void add(item)}>
               Add
             </button>
           </div>

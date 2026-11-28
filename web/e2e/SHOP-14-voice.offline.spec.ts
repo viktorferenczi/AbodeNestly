@@ -34,7 +34,14 @@ test.describe('SHOP-14: voice add, offline', () => {
         interimResults = false;
         continuous = false;
         maxAlternatives = 1;
-        processLocally = false;
+        #local = false;
+        // On the prototype, as in Chromium, so the app's `'processLocally' in prototype` check sees it.
+        get processLocally() {
+          return this.#local;
+        }
+        set processLocally(v: boolean) {
+          this.#local = v;
+        }
         onresult: ((e: unknown) => void) | null = null;
         onerror: ((e: unknown) => void) | null = null;
         onend: (() => void) | null = null;

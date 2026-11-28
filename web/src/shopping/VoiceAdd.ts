@@ -47,7 +47,7 @@ export function parseSpoken(text: string, locale?: string): SpokenItem | null {
       // "half a kilo", "half a lemon": the filler article goes with the quantity.
       if ((words[0] === 'a' || words[0] === 'an') && words.length > 1) words.shift();
       rest = words.join(' ');
-    } else if (first !== undefined && first in NUMBER_WORDS && words.length > 1) {
+    } else if (first !== undefined && Object.hasOwn(NUMBER_WORDS, first) && words.length > 1) {
       quantity = NUMBER_WORDS[first]!;
       rest = words.slice(1).join(' ');
     }
@@ -56,7 +56,7 @@ export function parseSpoken(text: string, locale?: string): SpokenItem | null {
   let unit: string | null = null;
   if (quantity !== null) {
     const words = rest.split(' ').filter(Boolean);
-    const mapped = words[0] !== undefined ? UNIT_WORDS[words[0]] : undefined;
+    const mapped = words[0] !== undefined && Object.hasOwn(UNIT_WORDS, words[0]) ? UNIT_WORDS[words[0]] : undefined;
     if (mapped !== undefined && UNIT_PRESETS.includes(mapped)) {
       unit = mapped;
       words.shift();

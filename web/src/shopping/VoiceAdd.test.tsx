@@ -79,13 +79,25 @@ class FakeRecognizer implements VoiceRecognizer {
   local = false;
   state: 'granted' | 'denied' | 'prompt' = 'prompt';
   starts: { offline: boolean }[] = [];
+  startThrows: Error | null = null;
+  permissionFails = false;
   stops = 0;
   private handlers: VoiceHandlers | null = null;
   supported = () => this.isSupported;
   canProcessLocally = () => this.local;
-  permission = async () => this.state;
+  permission = async () => {
+    if (this.permissionFails) throw new Error('no permissions API');
+    return this.state;
+  };
   start(handlers: VoiceHandlers, opts: { offline: boolean }) {
     this.handlers = handlers;
+    if (this.startThrows) {
+      // The real adapter reports a throwing start() as an error plus an end.
+      const n = this.startThrows.name;
+      handlers.onError(n === 'NotAllowedError' || n === 'SecurityError' ? 'not-allowed' : 'other');
+      handlers.onEnd();
+      return () => undefined;
+    }
     this.starts.push(opts);
     return () => void (this.stops += 1);
   }
@@ -267,5 +279,37 @@ describe('SHOP-14: voice add', () => {
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(rec.stops).toBe(1);
+  });
+
+  it('a start() that throws NotAllowedError shows permission-denied', async () => {
+    rec.startThrows = Object.assign(new Error('blocked'), { name: 'NotAllowedError' });
+    await openVoice();
+    expect(await dialog().findByText(/Microphone access is off/)).toBeTruthy();
+  });
+
+  it('a start() that throws another error shows "Didn\'t catch that."', async () => {
+    rec.startThrows = new Error('already started');
+    await openVoice();
+    expect(await dialog().findByText("Didn't catch that.")).toBeTruthy();
+  });
+
+  it('a rejected permission query settles instead of sticking on Listening', async () => {
+    rec.permissionFails = true;
+    await openVoice();
+    expect(await dialog().findByText("Didn't catch that.")).toBeTruthy();
+    expect(rec.starts).toHaveLength(0);
+  });
+
+  it('a double tap on Add writes exactly one list_item upsert', async () => {
+    await openVoice();
+    await waitFor(() => expect(rec.starts).toHaveLength(1));
+    rec.say('2 litres milk');
+    const add = await dialog().findByRole('button', { name: 'Add' });
+    fireEvent.click(add);
+    fireEvent.click(add);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const { items, out } = await stored();
+    expect(items).toHaveLength(1);
+    expect(out).toHaveLength(1);
   });
 });

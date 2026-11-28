@@ -63,22 +63,35 @@ export const browserVoiceRecognizer: VoiceRecognizer = {
       handlers.onEnd();
       return () => undefined;
     }
-    const rec = new C();
-    rec.lang = navigator.language;
-    rec.interimResults = true;
-    rec.continuous = false;
-    rec.maxAlternatives = 1;
-    if (opts.offline) rec.processLocally = true;
-    rec.onresult = (e) => {
-      const results = Array.from(e.results);
-      handlers.onTranscript(results.map((r) => r[0].transcript).join(' ').trim(), results[results.length - 1]?.isFinal === true);
+    const fail = (e: unknown) => {
+      const n = e instanceof Error ? e.name : '';
+      handlers.onError(n === 'NotAllowedError' || n === 'SecurityError' ? 'not-allowed' : 'other');
+      handlers.onEnd();
     };
-    rec.onerror = (e) => handlers.onError(e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'not-allowed' : e.error === 'no-speech' ? 'no-speech' : 'other');
-    rec.onend = () => handlers.onEnd();
-    rec.start();
+    let rec: Recognition;
+    try {
+      rec = new C();
+      rec.lang = navigator.language;
+      rec.interimResults = true;
+      rec.continuous = false;
+      rec.maxAlternatives = 1;
+      if (opts.offline) rec.processLocally = true;
+      rec.onresult = (e) => {
+        const results = Array.from(e.results);
+        handlers.onTranscript(results.map((r) => r[0].transcript).join(' ').trim(), results[results.length - 1]?.isFinal === true);
+      };
+      rec.onerror = (e) => handlers.onError(e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'not-allowed' : e.error === 'no-speech' ? 'no-speech' : 'other');
+      rec.onend = () => handlers.onEnd();
+      rec.start();
+    } catch (e) {
+      // start() throws when the recognizer is already running or the page may not use the microphone.
+      fail(e);
+      return () => undefined;
+    }
+    const started = rec;
     return () => {
-      rec.onresult = rec.onerror = rec.onend = null;
-      rec.abort();
+      started.onresult = started.onerror = started.onend = null;
+      started.abort();
     };
   },
 };
