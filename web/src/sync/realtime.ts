@@ -3,12 +3,12 @@ import type { Modules } from '../core/household/HouseholdProvider.tsx';
 /**
  * The tables the migrations have added to the `supabase_realtime` publication, by the module that owns them. Binding a
  * table that is not published makes the whole join fail (`CHANNEL_ERROR`), so a table joins this list in the same
- * change that publishes it (`docs/schema.sql` shows the end state, which also has household, member, item_price and
+ * change that publishes it (`docs/schema.sql` shows the end state, which also has household, member and
  * the pantry and maintenance tables). Every table here carries `household_id`.
  */
 export const REALTIME_TABLES: Record<'core' | 'shopping' | 'pantry' | 'maintenance', readonly string[]> = {
   core: ['location', 'invite', 'activity', 'attachment', 'notification_pref'],
-  shopping: ['store', 'shopping_list', 'list_item', 'store_item_order'],
+  shopping: ['store', 'shopping_list', 'list_item', 'store_item_order', 'item_price'],
   pantry: [],
   maintenance: [],
 };

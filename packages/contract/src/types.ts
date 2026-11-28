@@ -53,6 +53,13 @@ export interface ListItem extends Synced {
   created_by: UUID | null;
 }
 
+export interface ItemPrice extends Synced {
+  store_id: UUID;
+  name_key: string; // client-written, normalised by the database to match ListItem.name_key
+  price: number;
+  seen_at: ISODateTime;
+}
+
 // ---------- core ----------
 export interface Profile {
   id: UUID;

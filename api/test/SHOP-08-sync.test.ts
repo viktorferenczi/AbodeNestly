@@ -138,6 +138,22 @@ describe('buildUpsert', () => {
   });
 });
 
+describe('buildUpsert name_key', () => {
+  const evil = { id: 'evil', household_id: 'evil', sync_seq: 9, name_key: 'whole milk', price: 1.2 };
+
+  it('keeps name_key for item_price, which lists it, and still drops the other server-owned keys', () => {
+    const { sql, values } = buildUpsert('item_price', ['store_id', 'name_key', 'price', 'seen_at', 'deleted_at'], HID, id(5), evil);
+    expect(values).toEqual([id(5), HID, 'whole milk', 1.2]);
+    expect(sql).toContain('name_key = excluded.name_key');
+    expect(sql).not.toMatch(/sync_seq/);
+  });
+
+  it('still drops name_key for list_item, which does not list it', () => {
+    const { values } = buildUpsert('list_item', ['name', 'checked'], HID, id(5), { id: 'evil', household_id: 'evil', sync_seq: 9, name_key: 'whole milk', name: 'Milk' });
+    expect(values).toEqual([id(5), HID, 'Milk']);
+  });
+});
+
 describe('buildUpsert deleted_at', () => {
   it('stores server time for a non-null client value and keeps an existing tombstone', () => {
     const { sql, values } = buildUpsert('store', ['name', 'deleted_at'], HID, id(5), {
@@ -153,7 +169,7 @@ describe('buildUpsert deleted_at', () => {
 describe('pullChanges', () => {
   it('builds one ordered union over the allow-listed tables', () => {
     const sql = buildPullSql();
-    expect(sql.match(/union all/g)).toHaveLength(9);
+    expect(sql.match(/union all/g)).toHaveLength(10);
     expect(sql).toContain('from household r where r.id = $1');
     expect(sql).toContain('from list_item r where r.household_id = $1');
     expect(sql.trimEnd().endsWith('order by seq limit $3')).toBe(true);

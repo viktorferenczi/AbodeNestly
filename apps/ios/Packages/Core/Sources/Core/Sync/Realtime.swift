@@ -7,7 +7,7 @@ import Sync
 /// Web twin: `REALTIME_TABLES` in `web/src/sync/realtime.ts`.
 public enum RealtimeTables {
     public static let core = ["location", "invite", "activity", "attachment", "notification_pref"]
-    public static let shopping = ["store", "shopping_list", "list_item", "store_item_order"]
+    public static let shopping = ["store", "shopping_list", "list_item", "store_item_order", "item_price"]
     /// Empty until a migration publishes a pantry table; it joins in that change.
     public static let pantry: [String] = []
     /// Empty until a migration publishes a maintenance table; it joins in that change.

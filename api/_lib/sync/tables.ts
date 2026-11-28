@@ -5,7 +5,7 @@ type PullOnly = { scope: 'id' | 'household_id'; push: false };
 type Pushable = { scope: 'household_id'; push: true; columns: readonly string[] };
 export type SyncTableDef = PullOnly | Pushable;
 
-// Dropped silently from an upsert: the server owns them (SPEC §6.2). `id` comes from `row_id` and
+// Dropped silently from an upsert unless the table's `columns` names the key: the server owns them (SPEC §6.2). `id` comes from `row_id` and
 // `household_id` is forced to the request's; the rest are written by defaults, triggers or the share endpoints.
 export const SERVER_OWNED: ReadonlySet<string> = new Set([
   'id',
@@ -39,6 +39,12 @@ export const SYNC_TABLES: Readonly<Record<string, SyncTableDef>> = {
       'list_id', 'name', 'quantity', 'unit', 'note', 'barcode', 'checked', 'checked_at', 'checked_by',
       'manual_position', 'source', 'pantry_item_id', 'maint_task_id', 'created_by', 'deleted_at',
     ],
+  },
+  // Clients must send name_key for this table only (no name column; a trigger normalises it).
+  item_price: {
+    scope: 'household_id',
+    push: true,
+    columns: ['store_id', 'name_key', 'price', 'seen_at', 'deleted_at'],
   },
   location: { scope: 'household_id', push: true, columns: ['name', 'kind', 'deleted_at'] },
 };

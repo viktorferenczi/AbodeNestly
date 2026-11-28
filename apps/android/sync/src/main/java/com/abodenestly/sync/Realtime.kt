@@ -13,7 +13,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 object RealtimeTables {
     val core = listOf("location", "invite", "activity", "attachment", "notification_pref")
-    val shopping = listOf("store", "shopping_list", "list_item", "store_item_order")
+    val shopping = listOf("store", "shopping_list", "list_item", "store_item_order", "item_price")
 
     /** Empty until a migration publishes a pantry table; it joins in that change. */
     val pantry: List<String> = emptyList()

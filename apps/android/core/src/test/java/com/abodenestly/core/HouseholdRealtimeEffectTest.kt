@@ -58,7 +58,7 @@ class HouseholdRealtimeEffectTest {
     fun `it subscribes to the open household with the tables of its modules`() {
         show()
         awaitActive(first, RealtimeTables.tables(true, true, true))
-        assertEquals(9, realtime.activeCalls.single().tables.size)
+        assertEquals(10, realtime.activeCalls.single().tables.size)
     }
 
     @Test

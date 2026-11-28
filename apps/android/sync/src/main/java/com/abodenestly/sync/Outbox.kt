@@ -28,6 +28,16 @@ internal val WRITABLE_TABLES: Set<String> = PUSHABLE_TABLES + setOf("pantry_item
 /** Columns the server owns; they never go out in `data` (SPEC §6.2). */
 internal val SERVER_OWNED_KEYS: Set<String> = setOf("id", "household_id", "created_at", "updated_at", "sync_seq", "name_key", "share_token")
 
+/** Tables whose `name_key` is a real, client-sent column (the item_price key); elsewhere the server derives it. Mirrors push.ts. */
+internal val CLIENT_NAME_KEY_TABLES: Set<String> = setOf("item_price")
+
+/** The fields of a write for [table] that may go to the server: [fields] minus the columns the server owns. */
+internal fun sendableFields(table: String, fields: JsonObject): JsonObject {
+    val dropped: Set<String> =
+        if (table in CLIENT_NAME_KEY_TABLES) SERVER_OWNED_KEYS - "name_key" else SERVER_OWNED_KEYS
+    return fields.without(dropped)
+}
+
 /** The chip's numbers: queued writes the server accepts, and failed ones. */
 data class SyncCounts(val pending: Int, val failed: Int)
 
@@ -72,7 +82,7 @@ private fun rowIdOf(row: JsonObject): String =
 /** The one write both [upsert] and [upsertAll] make; the caller owns the transaction. */
 private fun storeUpsert(raw: SupportSQLiteDatabase, table: String, householdId: UUID, rowId: String, row: JsonObject, now: Instant) {
     // Queue first: a local row that cannot be stored (NOT NULL) must take the queued mutation back with it.
-    queue(raw, table, "upsert", rowId, row.without(SERVER_OWNED_KEYS), now)
+    queue(raw, table, "upsert", rowId, sendableFields(table, row), now)
     writeLocal(raw, table, householdId, rowId, row)
 }
 
@@ -90,7 +100,7 @@ suspend fun DatabaseRegistry.patch(householdId: UUID, table: String, id: String,
             if (hasLocalTable(raw, table) && !rowExists(raw, table, id)) return@Callable Unit
             if (cv.size() > 0) raw.update(table, SQLiteDatabase.CONFLICT_NONE, cv, "id = ?", arrayOf(id))
             // Nothing left after dropping server-owned columns (SPEC §6.2): nothing to send.
-            val sendable = fields.without(SERVER_OWNED_KEYS)
+            val sendable = sendableFields(table, fields)
             if (!localOnly && sendable.isNotEmpty()) queue(raw, table, "upsert", id, sendable, now)
             Unit
         })
