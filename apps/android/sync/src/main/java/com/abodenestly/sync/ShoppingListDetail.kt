@@ -38,6 +38,9 @@ data class ListDetail(
     val stores: List<StoreRecord> = emptyList(),
     val items: List<ListItemRecord> = emptyList(),
     val history: List<ListItemRecord> = emptyList(),
+    /** SHOP-12: the household's live price observations and the currency to show them in. */
+    val prices: List<ItemPriceRecord> = emptyList(),
+    val currency: String = DatabaseRegistry.DEFAULT_CURRENCY,
 )
 
 /** What a rename must check before it overwrites a row: whether it still exists and what it is called now. */

@@ -293,6 +293,25 @@ data class StoreItemOrderEntity(
     @ColumnInfo(name = "sync_seq") val syncSeq: Long? = null,
 )
 
+/**
+ * One observed price of an item at a store (SHOP-12; SPEC §8 `ItemPrice`). [price] is TEXT: the canonical plain decimal
+ * digits ("1.1", never a binary float), converted to and from `BigDecimal` at the edge (AGENTS.md §4). Stamps are
+ * fixed-width UTC text, so comparing the text compares the time.
+ */
+@Entity(tableName = "item_price", indices = [Index(value = ["store_id", "name_key"]), Index(value = ["household_id"])])
+data class ItemPriceEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "household_id") val householdId: String,
+    @ColumnInfo(name = "store_id") val storeId: String,
+    @ColumnInfo(name = "name_key") val nameKey: String,
+    val price: String,
+    @ColumnInfo(name = "seen_at") val seenAt: String,
+    @ColumnInfo(name = "deleted_at") val deletedAt: String? = null,
+    @ColumnInfo(name = "created_at") val createdAt: String? = null,
+    @ColumnInfo(name = "updated_at") val updatedAt: String? = null,
+    @ColumnInfo(name = "sync_seq") val syncSeq: Long? = null,
+)
+
 @Dao
 interface MetaDao {
     @Query("SELECT value FROM meta WHERE `key` = :key")
@@ -395,6 +414,14 @@ interface ShoppingListDao {
     /** The live items of one list, read once (SHOP-11 copies them). */
     @Query("SELECT * FROM list_item WHERE household_id = :householdId AND list_id = :listId AND deleted_at IS NULL")
     suspend fun liveItems(householdId: String, listId: String): List<ListItemEntity>
+
+    /** SHOP-12: the household's live price observations, re-emitted on any change so a price written offline shows at once. */
+    @Query("SELECT * FROM item_price WHERE household_id = :householdId AND deleted_at IS NULL")
+    fun observePrices(householdId: String): Flow<List<ItemPriceEntity>>
+
+    /** SHOP-12: the household's currency (CORE-05); null until the household row has been pulled. */
+    @Query("SELECT currency FROM household WHERE id = :householdId")
+    fun observeCurrency(householdId: String): Flow<String?>
 
     /** The household's item history for autocomplete: live rows, and rows checked before they were cleared or deleted. */
     @Query("SELECT * FROM list_item WHERE household_id = :householdId AND (deleted_at IS NULL OR checked = 1)")
@@ -694,14 +721,33 @@ val MIGRATION_5_6_SQL = listOf(
     "UPDATE `meta` SET `value` = '0' WHERE `key` = 'cursor'",
 )
 
+/**
+ * v7 (SHOP-12): adds the pulled `item_price` table and resets the pull cursor (same rule as v6), so the prices already
+ * on the server are pulled. Twin: web and iOS v7.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_6_7_SQL.forEach(db::execSQL)
+    }
+}
+
+// Same statements Room exports in schemas/…/7.json.
+val MIGRATION_6_7_SQL = listOf(
+    "CREATE TABLE IF NOT EXISTS `item_price` (`id` TEXT NOT NULL, `household_id` TEXT NOT NULL, `store_id` TEXT NOT NULL, `name_key` TEXT NOT NULL, `price` TEXT NOT NULL, `seen_at` TEXT NOT NULL, `deleted_at` TEXT, `created_at` TEXT, `updated_at` TEXT, `sync_seq` INTEGER, PRIMARY KEY(`id`))",
+    "CREATE INDEX IF NOT EXISTS `index_item_price_store_id_name_key` ON `item_price` (`store_id`, `name_key`)",
+    "CREATE INDEX IF NOT EXISTS `index_item_price_household_id` ON `item_price` (`household_id`)",
+    "UPDATE `meta` SET `value` = '0' WHERE `key` = 'cursor'",
+)
+
 /** One Room database per household (SPEC §6.1): own rows, own outbox, own pull cursor. */
 @Database(
     entities = [MetaEntity::class, OutboxEntity::class, ShoppingListEntity::class, ActivityEntity::class,
         ListItemEntity::class, PantryItemEntity::class, RecipeEntity::class, AssetEntity::class, MaintTaskEntity::class, StoreEntity::class, LocationEntity::class, ContractorEntity::class,
         AttachmentEntity::class, AttachmentOutboxEntity::class, NotificationPrefEntity::class,
         OutboxFailedEntity::class, HouseholdEntity::class, MemberEntity::class, InviteEntity::class, StoreItemOrderEntity::class,
+        ItemPriceEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class HouseholdDatabase : RoomDatabase() {

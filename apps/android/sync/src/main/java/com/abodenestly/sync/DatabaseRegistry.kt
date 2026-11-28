@@ -467,7 +467,8 @@ open class DatabaseRegistry(
         else {
             val hid = householdId.toString()
             val dao = db.shoppingLists()
-            combine(dao.observeList(hid, listId), dao.observeItems(hid, listId), dao.observeHistory(hid), dao.observeStores(hid)) { list, items, history, stores ->
+            val prices = combine(dao.observePrices(hid), dao.observeCurrency(hid)) { rows, currency -> rows to currency }
+            combine(dao.observeList(hid, listId), dao.observeItems(hid, listId), dao.observeHistory(hid), dao.observeStores(hid), prices) { list, items, history, stores, (priceRows, currency) ->
                 val live = list?.takeIf { it.deletedAt == null }
                 ListDetail(
                     list = live?.let(::toRecord),
@@ -475,6 +476,8 @@ open class DatabaseRegistry(
                     stores = stores.map { StoreRecord(it.id, it.name) },
                     items = items.map(::toItemRecord),
                     history = history.map(::toItemRecord),
+                    prices = priceRows.mapNotNull(::toPriceRecord),
+                    currency = currency?.takeIf { it.isNotBlank() } ?: DEFAULT_CURRENCY,
                 )
             }
                 // The database may close under the collector during a switch.
@@ -520,7 +523,7 @@ open class DatabaseRegistry(
 
     internal companion object {
         const val CURSOR = "cursor"
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
         const val FEED_ROWS = 100
         const val RESTORE_DATA = """{"deleted_at":null}"""
 
@@ -536,6 +539,15 @@ open class DatabaseRegistry(
             id = e.id, name = e.name, storeId = e.storeId, isTemplate = e.isTemplate == true,
             archivedAt = e.archivedAt, createdAt = e.createdAt,
         )
+
+        /** The server's default currency, shown until the household row has been pulled (web and iOS do the same). */
+        const val DEFAULT_CURRENCY = "EUR"
+
+        /** A price row as the lookup reads it; a row whose text is not a decimal is skipped rather than shown wrong. */
+        fun toPriceRecord(e: ItemPriceEntity): ItemPriceRecord? {
+            val price = e.price.toBigDecimalOrNull() ?: return null
+            return ItemPriceRecord(e.id, e.storeId, e.nameKey, price, e.seenAt, e.createdAt, e.deletedAt)
+        }
 
         fun toItemRecord(e: ListItemEntity) = ListItemRecord(
             id = e.id, listId = e.listId, name = e.name, nameKey = e.nameKey, checked = e.checked == true,

@@ -48,7 +48,7 @@ syncEngine.kick()
 ```
 - The write API lives in `sync/Outbox.kt` (extensions of `DatabaseRegistry`). It validates the table against the SPEC §6.2 set (names go into SQL), strips server-owned keys (`id`, `household_id`, `created_at`, `updated_at`, `sync_seq`, `name_key`, `share_token`) from `data`, and throws `DatabaseNotOpenException` for another household. Callers kick.
 - Pantry quantity: optimistic local update + `delta` mutation, never a direct write.
-- Only `store`, `shopping_list`, `list_item` and `location` are pushed today (`PUSHABLE_TABLES`); other queued rows (e.g. `notification_pref`) stay queued and are not counted by the chip.
+- Only `store`, `shopping_list`, `list_item`, `location` and `item_price` are pushed today (`PUSHABLE_TABLES`); other queued rows (e.g. `notification_pref`) stay queued and are not counted by the chip.
 - Core settings (create household, invites, modules, members) call the API directly; show "needs connection" when offline.
 
 ## Sync engine
