@@ -27,11 +27,11 @@ struct PriceOfflineTests {
         await h.settle { model.unchecked.count == 1 && model.priceStore != nil }
 
         let item = try #require(model.unchecked.first)
-        #expect(await model.save(item, ItemFields(name: "Milk", price: 1.2)))
+        #expect(await model.save(item, ItemFields(name: "Milk", price: dec("1.2"))))
         #expect(await engine.currentPhase == .offline)
         await h.settle { model.priceCaption(for: item) != nil }
         let caption: String = try #require(model.priceCaption(for: item))
-        #expect(caption == Price.caption(LastBought(price: 1.2, seenAt: "", storeName: "Test Market"), currency: "EUR"))
+        #expect(caption == Price.caption(LastBought(price: dec("1.2"), seenAt: "", storeName: "Test Market"), currency: "EUR"))
         let queued = try await priceOutbox(h.db)
         #expect(queued.count == 1)
 

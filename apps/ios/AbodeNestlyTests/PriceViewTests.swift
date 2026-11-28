@@ -35,7 +35,7 @@ private func seededHarness(withStore: Bool = true) async throws -> DetailHarness
     let h = try await DetailHarness(seed: { db, list in
         if withStore { try await seedPriceList(db, list: list) }
         try await seedItem(db, list: list, name: "Milk")
-        try await seedPrice(db, key: "milk", price: 1.2, seenAt: "2026-11-03T12:00:00.000Z")
+        try await seedPrice(db, key: "milk", price: dec("1.2"), seenAt: "2026-11-03T12:00:00.000Z")
     })
     await h.settle { h.model.unchecked.count == 1 && h.model.priceSnapshot.prices.count == 1 && (!withStore || h.model.priceStore != nil) }
     return h

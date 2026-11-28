@@ -461,6 +461,8 @@ extension JSONValue {
         case .string(let text): (key.hasSuffix("_at") ? HouseholdDatabase.normalized(timestamp: text) : text).databaseValue
         case .int(let value): value.databaseValue
         case .double(let value): value.databaseValue
+        // Stored as the canonical decimal text, so the amount survives exactly (no REAL rounding).
+        case .decimal(let value): ItemPriceText.canonical(value).databaseValue
         case .bool(let value): (value ? 1 : 0).databaseValue
         case .null: .null
         case .array, .dictionary:

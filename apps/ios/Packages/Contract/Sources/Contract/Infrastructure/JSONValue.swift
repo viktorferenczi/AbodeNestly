@@ -11,6 +11,8 @@ public enum JSONValue: Sendable, Codable, Hashable {
     case string(String)
     case int(Int)
     case double(Double)
+    /// An exact decimal (money). Encodes as the JSON number of its decimal digits, never through a binary Double.
+    case decimal(Decimal)
     case bool(Bool)
     case array([JSONValue])
     case dictionary([String: JSONValue])
@@ -49,6 +51,8 @@ public enum JSONValue: Sendable, Codable, Hashable {
         case .int(let value):
             try container.encode(value)
         case .double(let value):
+            try container.encode(value)
+        case .decimal(let value):
             try container.encode(value)
         case .bool(let value):
             try container.encode(value)

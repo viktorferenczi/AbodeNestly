@@ -5,19 +5,19 @@ import Sync
 /// What the price field holds: nothing, a valid amount, or text that is not a price.
 public enum PriceParse: Equatable, Sendable {
     case empty
-    case value(Double)
+    case value(Decimal)
     case invalid
 }
 
 /// The newest observation that answers a lookup: what the row caption and the sheet line show.
 public struct LastBought: Equatable, Sendable {
-    public var price: Double
+    public var price: Decimal
     /// Millisecond UTC text.
     public var seenAt: String
     /// The store's name while that store is live; `nil` once it is deleted.
     public var storeName: String?
 
-    public init(price: Double, seenAt: String, storeName: String?) {
+    public init(price: Decimal, seenAt: String, storeName: String?) {
         self.price = price
         self.seenAt = seenAt
         self.storeName = storeName
@@ -45,7 +45,8 @@ public enum Price {
         if whole.isEmpty { return .invalid }
         if sawMark && (fraction.isEmpty || fraction.count > 2) { return .invalid }
         let canonical: String = sawMark ? whole + "." + fraction : whole
-        guard let value = Double(canonical) else { return .invalid }
+        // From the digit string, not a Double, so 1.10 and 0.3 stay exact.
+        guard let value = Decimal(string: canonical, locale: Locale(identifier: "en_US_POSIX")) else { return .invalid }
         return .value(value)
     }
 
@@ -96,10 +97,9 @@ public enum Price {
         return LastBought(price: found.price, seenAt: found.seenAt, storeName: storeName)
     }
 
-    /// "€1.20" in the household currency. The amount goes through its decimal text so 1.2 is not shown as 1.2000000000000002.
-    public static func formatMoney(_ amount: Double, currency: String, locale: Locale = .current) -> String {
-        let decimal: Decimal = Decimal(string: String(amount), locale: Locale(identifier: "en_US_POSIX")) ?? Decimal(amount)
-        return decimal.formatted(.currency(code: currency).locale(locale))
+    /// "€1.20" in the household currency.
+    public static func formatMoney(_ amount: Decimal, currency: String, locale: Locale = .current) -> String {
+        amount.formatted(.currency(code: currency).locale(locale))
     }
 
     /// C2 caption: "€1.20 · Test Market"; a deleted store leaves just the price.
@@ -132,13 +132,13 @@ public enum Price {
     /// One new observation (each price is kept, SPEC §8 ItemPrice): the row stored locally and queued. `name_key` is the
     /// one server-owned-looking column the client sends for this table.
     public static func row(
-        id: UUID, householdId: UUID, storeId: UUID, name: String, price: Double, now: Date
+        id: UUID, householdId: UUID, storeId: UUID, name: String, price: Decimal, now: Date
     ) -> [String: JSONValue] {
         let stamp: String = now.formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true, timeZone: .gmt))
         return [
             "id": .string(id.uuidString.lowercased()), "household_id": .string(householdId.uuidString.lowercased()),
             "store_id": .string(storeId.uuidString.lowercased()), "name_key": .string(NameKey.make(name)),
-            "price": .double(price), "seen_at": .string(stamp), "deleted_at": .null,
+            "price": .decimal(price), "seen_at": .string(stamp), "deleted_at": .null,
             "created_at": .string(stamp), "updated_at": .string(stamp), "sync_seq": .int(0),
         ]
     }

@@ -7,19 +7,32 @@ public struct ItemPriceRecord: Sendable, Equatable, Identifiable {
     public var storeId: UUID
     /// The normalised item name (`NameKey`), as the server stores it.
     public var nameKey: String
-    public var price: Double
+    public var price: Decimal
     /// Millisecond UTC text.
     public var seenAt: String
     /// Millisecond UTC text, or `nil` for a row from before the server stamped it.
     public var createdAt: String?
 
-    public init(id: UUID, storeId: UUID, nameKey: String, price: Double, seenAt: String, createdAt: String? = nil) {
+    public init(id: UUID, storeId: UUID, nameKey: String, price: Decimal, seenAt: String, createdAt: String? = nil) {
         self.id = id
         self.storeId = storeId
         self.nameKey = nameKey
         self.price = price
         self.seenAt = seenAt
         self.createdAt = createdAt
+    }
+}
+
+/// The one text form of a money amount in the local database: plain decimal digits, "." as the mark, locale-free.
+enum ItemPriceText {
+    private static let posix = Locale(identifier: "en_US_POSIX")
+
+    static func canonical(_ value: Decimal) -> String {
+        NSDecimalNumber(decimal: value).description(withLocale: posix)
+    }
+
+    static func decimal(_ text: String) -> Decimal? {
+        Decimal(string: text, locale: posix)
     }
 }
 
@@ -56,7 +69,8 @@ extension HouseholdDatabase {
                 let storeText: String = row["store_id"]
                 guard let id = UUID(uuidString: idText), let storeId = UUID(uuidString: storeText) else { continue }
                 let nameKey: String = row["name_key"]
-                let price: Double = row["price"]
+                let priceText: String = row["price"]
+                guard let price = ItemPriceText.decimal(priceText) else { continue }
                 let seenAt: String = row["seen_at"]
                 let createdAt: String? = row["created_at"]
                 prices.append(ItemPriceRecord(id: id, storeId: storeId, nameKey: nameKey, price: price, seenAt: seenAt, createdAt: createdAt))

@@ -32,9 +32,9 @@ public struct ItemFields: Equatable, Sendable {
     public var unit: String?
     public var note: String?
     /// A price to record for this save (SHOP-12); `nil` when the field was left empty, so nothing is recorded.
-    public var price: Double?
+    public var price: Decimal?
 
-    public init(name: String, quantity: Double? = nil, unit: String? = nil, note: String? = nil, price: Double? = nil) {
+    public init(name: String, quantity: Double? = nil, unit: String? = nil, note: String? = nil, price: Decimal? = nil) {
         self.name = name
         self.quantity = quantity
         self.unit = unit
@@ -64,7 +64,7 @@ public enum ItemSheetLogic {
     public static func fields(_ form: ItemForm) -> ItemFields? {
         let name = form.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, case .valid(let quantity) = QuantityText.parse(form.quantityText) else { return nil }
-        var price: Double?
+        var price: Decimal?
         switch Price.parse(form.priceText) {
         case .empty: price = nil
         case .value(let amount): price = amount

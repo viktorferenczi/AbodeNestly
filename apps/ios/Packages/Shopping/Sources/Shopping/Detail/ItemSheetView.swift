@@ -10,8 +10,8 @@ final class ItemFormBox {
     init(_ form: ItemForm) { self.form = form }
 }
 
-/// DESIGN C3 (SHOP-03 and SHOP-12 slices): name, quantity with the stepper, unit with suggestion chips, note, the price
-/// at the list's store and the "Last bought" line; Delete when editing.
+/// DESIGN C3 (SHOP-03 and SHOP-12 slices): name, quantity with the stepper, unit with suggestion chips, note, then the
+/// price at the list's store, the "Last bought" line and any save failure; Delete when editing.
 /// Swiping the sheet down is Cancel. Web twin: `web/src/shopping/ItemSheet.tsx`.
 struct ItemSheetView: View {
     let state: ItemSheetState
@@ -98,6 +98,11 @@ struct ItemSheetView: View {
                         }
                     }
                 }
+                Section("Note") {
+                    TextField("Note", text: $box.form.note, axis: .vertical)
+                        .lineLimit(2...4)
+                        .accessibilityIdentifier("item.note")
+                }
                 if let priceStoreName {
                     Section("Price") {
                         TextField("Price at \(priceStoreName)", text: $box.form.priceText)
@@ -126,11 +131,6 @@ struct ItemSheetView: View {
                             .foregroundStyle(Tokens.danger)
                             .accessibilityIdentifier("item.saveError")
                     }
-                }
-                Section("Note") {
-                    TextField("Note", text: $box.form.note, axis: .vertical)
-                        .lineLimit(2...4)
-                        .accessibilityIdentifier("item.note")
                 }
                 if case .edit(let item) = state {
                     Section {

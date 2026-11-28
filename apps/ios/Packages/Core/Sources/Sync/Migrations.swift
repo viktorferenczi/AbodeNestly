@@ -212,7 +212,8 @@ enum Migrations {
                 t.column("household_id", .text).notNull()
                 t.column("store_id", .text).notNull()
                 t.column("name_key", .text).notNull()
-                t.column("price", .double).notNull()
+                // TEXT, not REAL: money is exact (AGENTS.md §4); the canonical decimal string, e.g. "1.1".
+                t.column("price", .text).notNull()
                 t.column("seen_at", .text).notNull()
                 t.column("created_at", .text)
                 t.column("updated_at", .text)

@@ -7,6 +7,11 @@ import Testing
 private let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
 private let gb = Locale(identifier: "en_GB")
 
+/// A money amount from its decimal text. A bare literal like `1.2` would go through a binary Double.
+func dec(_ text: String) -> Decimal {
+    Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")) ?? 0
+}
+
 /// The store the price tests shop at.
 let priceStoreId = UUID(uuidString: "11111111-1111-4111-8111-111111111111") ?? UUID()
 
@@ -18,12 +23,12 @@ func seedPriceList(_ db: HouseholdDatabase, list: UUID, store: UUID = priceStore
 
 /// One `item_price` observation, written the way a synced row arrives.
 func seedPrice(
-    _ db: HouseholdDatabase, store: UUID = priceStoreId, key: String, price: Double, seenAt: String,
+    _ db: HouseholdDatabase, store: UUID = priceStoreId, key: String, price: Decimal, seenAt: String,
     created: String = "2026-11-01T10:00:00.000Z", deleted: Bool = false
 ) async throws {
     try await db.upsert(table: "item_price", row: [
         "id": .string(UUID().uuidString.lowercased()), "store_id": .string(store.uuidString.lowercased()),
-        "name_key": .string(key), "price": .double(price), "seen_at": .string(seenAt),
+        "name_key": .string(key), "price": .decimal(price), "seen_at": .string(seenAt),
         "deleted_at": deleted ? .string("2026-11-02T10:00:00.000Z") : .null,
         "created_at": .string(created), "updated_at": .string(created), "sync_seq": .int(1),
     ])
@@ -39,15 +44,15 @@ func priceData(_ json: String) throws -> [String: JSONValue] {
 }
 
 private func record(
-    store: UUID = priceStoreId, key: String = "milk", price: Double, seenAt: String, created: String? = nil,
+    store: UUID = priceStoreId, key: String = "milk", price: Decimal, seenAt: String, created: String? = nil,
     id: UUID = UUID()
 ) -> ItemPriceRecord {
     ItemPriceRecord(id: id, storeId: store, nameKey: key, price: price, seenAt: seenAt, createdAt: created)
 }
 
 private let parseCases: [(String, PriceParse)] = [
-    ("", .empty), ("   ", .empty), ("1.20", .value(1.2)), ("1,5", .value(1.5)), ("0", .value(0)), (" 3 ", .value(3)),
-    ("12", .value(12)), ("0.99", .value(0.99)),
+    ("", .empty), ("   ", .empty), ("1.20", .value(dec("1.2"))), ("1,5", .value(dec("1.5"))), ("0", .value(dec("0"))), (" 3 ", .value(dec("3"))),
+    ("12", .value(dec("12"))), ("0.99", .value(dec("0.99"))),
     ("-1", .invalid), ("1.234", .invalid), ("abc", .invalid), ("1.", .invalid), (".5", .invalid), ("1,2,3", .invalid),
     ("1.2.3", .invalid), ("€1", .invalid),
 ]
@@ -61,28 +66,28 @@ struct PriceLogicTests {
 
     @Test("SHOP-12: lastPrice takes the newest seen_at, then the newest created_at, then the id")
     func newest() {
-        let old = record(price: 1.0, seenAt: "2026-11-01T10:00:00.000Z")
-        let new = record(price: 2.0, seenAt: "2026-11-03T10:00:00.000Z")
-        #expect(Price.lastPrice(prices: [old, new], storeId: priceStoreId, key: "milk")?.price == 2.0)
-        #expect(Price.lastPrice(prices: [new, old], storeId: priceStoreId, key: "milk")?.price == 2.0)
+        let old = record(price: dec("1.0"), seenAt: "2026-11-01T10:00:00.000Z")
+        let new = record(price: dec("2.0"), seenAt: "2026-11-03T10:00:00.000Z")
+        #expect(Price.lastPrice(prices: [old, new], storeId: priceStoreId, key: "milk")?.price == dec("2.0"))
+        #expect(Price.lastPrice(prices: [new, old], storeId: priceStoreId, key: "milk")?.price == dec("2.0"))
 
-        let early = record(price: 1.0, seenAt: "2026-11-03T10:00:00.000Z", created: "2026-11-03T10:00:01.000Z")
-        let late = record(price: 2.0, seenAt: "2026-11-03T10:00:00.000Z", created: "2026-11-03T10:00:02.000Z")
-        #expect(Price.lastPrice(prices: [late, early], storeId: priceStoreId, key: "milk")?.price == 2.0)
+        let early = record(price: dec("1.0"), seenAt: "2026-11-03T10:00:00.000Z", created: "2026-11-03T10:00:01.000Z")
+        let late = record(price: dec("2.0"), seenAt: "2026-11-03T10:00:00.000Z", created: "2026-11-03T10:00:02.000Z")
+        #expect(Price.lastPrice(prices: [late, early], storeId: priceStoreId, key: "milk")?.price == dec("2.0"))
 
-        let low = record(price: 1.0, seenAt: "2026-11-03T10:00:00.000Z", created: "x", id: UUID(uuidString: "00000000-0000-4000-8000-000000000001") ?? UUID())
-        let high = record(price: 2.0, seenAt: "2026-11-03T10:00:00.000Z", created: "x", id: UUID(uuidString: "00000000-0000-4000-8000-000000000002") ?? UUID())
-        #expect(Price.lastPrice(prices: [high, low], storeId: priceStoreId, key: "milk")?.price == 2.0)
+        let low = record(price: dec("1.0"), seenAt: "2026-11-03T10:00:00.000Z", created: "x", id: UUID(uuidString: "00000000-0000-4000-8000-000000000001") ?? UUID())
+        let high = record(price: dec("2.0"), seenAt: "2026-11-03T10:00:00.000Z", created: "x", id: UUID(uuidString: "00000000-0000-4000-8000-000000000002") ?? UUID())
+        #expect(Price.lastPrice(prices: [high, low], storeId: priceStoreId, key: "milk")?.price == dec("2.0"))
     }
 
     @Test("SHOP-12: lastPrice answers for its store and name only; lastPriceAnywhere ignores the store")
     func scope() {
         let other = UUID()
-        let here = record(price: 1.0, seenAt: "2026-11-01T10:00:00.000Z")
-        let there = record(store: other, price: 3.0, seenAt: "2026-11-05T10:00:00.000Z")
-        let bread = record(key: "bread", price: 9.0, seenAt: "2026-11-06T10:00:00.000Z")
-        #expect(Price.lastPrice(prices: [here, there, bread], storeId: priceStoreId, key: "milk")?.price == 1.0)
-        #expect(Price.lastPriceAnywhere(prices: [here, there, bread], key: "milk")?.price == 3.0)
+        let here = record(price: dec("1.0"), seenAt: "2026-11-01T10:00:00.000Z")
+        let there = record(store: other, price: dec("3.0"), seenAt: "2026-11-05T10:00:00.000Z")
+        let bread = record(key: "bread", price: dec("9.0"), seenAt: "2026-11-06T10:00:00.000Z")
+        #expect(Price.lastPrice(prices: [here, there, bread], storeId: priceStoreId, key: "milk")?.price == dec("1.0"))
+        #expect(Price.lastPriceAnywhere(prices: [here, there, bread], key: "milk")?.price == dec("3.0"))
         #expect(Price.lastPrice(prices: [], storeId: priceStoreId, key: "milk") == nil)
         #expect(Price.lastPriceAnywhere(prices: [here], key: "eggs") == nil)
     }
@@ -92,20 +97,20 @@ struct PriceLogicTests {
         let other = UUID()
         let stores = [StoreRecord(id: priceStoreId, name: "Test Market"), StoreRecord(id: other, name: "Corner Shop")]
         let prices = [
-            record(price: 1.0, seenAt: "2026-11-01T10:00:00.000Z"),
-            record(store: other, price: 3.0, seenAt: "2026-11-05T10:00:00.000Z"),
+            record(price: dec("1.0"), seenAt: "2026-11-01T10:00:00.000Z"),
+            record(store: other, price: dec("3.0"), seenAt: "2026-11-05T10:00:00.000Z"),
         ]
         let atStore = Price.lastBought(name: "  MILK ", prices: prices, stores: stores, listStoreId: priceStoreId)
-        #expect(atStore == LastBought(price: 1.0, seenAt: "2026-11-01T10:00:00.000Z", storeName: "Test Market"))
+        #expect(atStore == LastBought(price: dec("1.0"), seenAt: "2026-11-01T10:00:00.000Z", storeName: "Test Market"))
         let anywhere = Price.lastBought(name: "milk", prices: prices, stores: stores, listStoreId: nil)
-        #expect(anywhere == LastBought(price: 3.0, seenAt: "2026-11-05T10:00:00.000Z", storeName: "Corner Shop"))
+        #expect(anywhere == LastBought(price: dec("3.0"), seenAt: "2026-11-05T10:00:00.000Z", storeName: "Corner Shop"))
         #expect(Price.lastBought(name: "   ", prices: prices, stores: stores, listStoreId: nil) == nil)
         #expect(Price.lastBought(name: "eggs", prices: prices, stores: stores, listStoreId: nil) == nil)
     }
 
     @Test("SHOP-12: AC2 the caption is the price and the store name; a deleted store leaves just the price")
     func caption() {
-        let last = LastBought(price: 1.2, seenAt: "2026-11-03T12:00:00.000Z", storeName: "Test Market")
+        let last = LastBought(price: dec("1.2"), seenAt: "2026-11-03T12:00:00.000Z", storeName: "Test Market")
         #expect(Price.caption(last, currency: "EUR", locale: gb) == "€1.20 · Test Market")
         var gone = last
         gone.storeName = nil
@@ -113,14 +118,14 @@ struct PriceLogicTests {
         #expect(Price.caption(last, currency: "GBP", locale: gb) == "£1.20 · Test Market")
         // The store is no longer live: the lookup finds the price and leaves the name out.
         let deleted = Price.lastBought(
-            name: "milk", prices: [record(price: 1.2, seenAt: "2026-11-03T12:00:00.000Z")], stores: [], listStoreId: nil
+            name: "milk", prices: [record(price: dec("1.2"), seenAt: "2026-11-03T12:00:00.000Z")], stores: [], listStoreId: nil
         )
         #expect(deleted?.storeName == nil)
     }
 
     @Test("SHOP-12: the Last bought line has the day, the price and the store")
     func line() {
-        let last = LastBought(price: 1.2, seenAt: "2026-11-03T12:00:00.000Z", storeName: "Test Market")
+        let last = LastBought(price: dec("1.2"), seenAt: "2026-11-03T12:00:00.000Z", storeName: "Test Market")
         #expect(Price.lastBoughtLine(last, currency: "EUR", locale: gb, timeZone: .gmt) == "Last bought: 3 Nov, €1.20 at Test Market")
         var gone = last
         gone.storeName = nil
@@ -129,7 +134,7 @@ struct PriceLogicTests {
 
     @Test("SHOP-12: the sheet form turns the price text into a price; a bad price blocks the save")
     func formPrice() {
-        #expect(ItemSheetLogic.fields(ItemForm(name: "Milk", priceText: "1,5"))?.price == 1.5)
+        #expect(ItemSheetLogic.fields(ItemForm(name: "Milk", priceText: "1,5"))?.price == dec("1.5"))
         #expect(ItemSheetLogic.fields(ItemForm(name: "Milk"))?.price == nil)
         #expect(ItemSheetLogic.fields(ItemForm(name: "Milk", priceText: "abc")) == nil)
         #expect(ItemSheetLogic.priceInvalid(ItemForm(name: "Milk", priceText: "-1")))
@@ -140,10 +145,10 @@ struct PriceLogicTests {
     func row() {
         let id = UUID()
         let household = UUID()
-        let row = Price.row(id: id, householdId: household, storeId: priceStoreId, name: "  Whole  Milk", price: 1.2, now: fixedNow)
+        let row = Price.row(id: id, householdId: household, storeId: priceStoreId, name: "  Whole  Milk", price: dec("1.2"), now: fixedNow)
         #expect(row["name_key"] == .string("whole milk"))
         #expect(row["store_id"] == .string(priceStoreId.uuidString.lowercased()))
-        #expect(row["price"] == .double(1.2))
+        #expect(row["price"] == .decimal(dec("1.2")))
         #expect(row["seen_at"] == .string("2027-01-15T08:00:00.000Z"))
         #expect(row["id"] == .string(id.uuidString.lowercased()))
     }
@@ -169,7 +174,7 @@ struct PriceWriteTests {
     @Test("SHOP-12: AC1 a new item saved with a price queues one item_price upsert for that store and name")
     func newWithPrice() async throws {
         let h = try await harness()
-        #expect(await h.model.create(ItemFields(name: "  Whole  Milk", price: 1.2)))
+        #expect(await h.model.create(ItemFields(name: "  Whole  Milk", price: dec("1.2"))))
         let queued = try await priceOutbox(h.db)
         #expect(queued.count == 1)
         #expect(queued.first?.op == "upsert")
@@ -190,7 +195,7 @@ struct PriceWriteTests {
     func editWithPrice() async throws {
         let h = try await harness()
         let item = try #require(h.model.unchecked.first)
-        #expect(await h.model.save(item, ItemFields(name: "Milk", quantity: 2, price: 0.99)))
+        #expect(await h.model.save(item, ItemFields(name: "Milk", quantity: 2, price: dec("0.99"))))
         let items = try await h.outbox()
         #expect(items.count == 1)
         #expect(try priceData(try #require(items.first).data).keys.sorted() == ["quantity"])
@@ -200,11 +205,29 @@ struct PriceWriteTests {
         #expect(await h.kickCount == 1)
     }
 
+    @Test("SHOP-12: 1.10 and 0.3 stay exact from the typed text to the local row and the queued data", arguments: [
+        ("1.10", "1.1", "\"price\":1.1"), ("0,3", "0.3", "\"price\":0.3"), ("19.99", "19.99", "\"price\":19.99"),
+    ])
+    func exactRoundTrip(typed: String, stored: String, wire: String) async throws {
+        let h = try await harness()
+        let fields = try #require(ItemSheetLogic.fields(ItemForm(name: "Milk", priceText: typed)))
+        #expect(fields.price == dec(stored))
+        #expect(await h.model.create(fields))
+        let local = try await h.db.queryForTesting("SELECT price FROM item_price")
+        #expect(local == [["price": stored]])
+        let queued = try await priceOutbox(h.db)
+        let data = try #require(queued.first).data
+        #expect(data.contains(wire + ",") || data.contains(wire + "}"))
+        // Read back through the observation the caption uses: the same Decimal, not a nearby Double.
+        await h.settle { h.model.priceSnapshot.prices.count == 1 }
+        #expect(h.model.priceSnapshot.prices.first?.price == dec(stored))
+    }
+
     @Test("SHOP-12: a price-only save writes the price and no item change")
     func priceOnly() async throws {
         let h = try await harness()
         let item = try #require(h.model.unchecked.first)
-        #expect(await h.model.save(item, ItemFields(name: "Milk", price: 1.5)))
+        #expect(await h.model.save(item, ItemFields(name: "Milk", price: dec("1.5"))))
         #expect(try await h.outbox().isEmpty)
         #expect(try await priceOutbox(h.db).count == 1)
         #expect(await h.kickCount == 1)
@@ -224,7 +247,7 @@ struct PriceWriteTests {
     func noStore() async throws {
         let h = try await harness(withStore: false)
         #expect(h.model.priceStore == nil)
-        #expect(await h.model.create(ItemFields(name: "Eggs", price: 2)))
+        #expect(await h.model.create(ItemFields(name: "Eggs", price: dec("2"))))
         #expect(try await priceOutbox(h.db).isEmpty)
     }
 
@@ -239,16 +262,16 @@ struct PriceWriteTests {
     @Test("SHOP-12: each save keeps its own observation and the caption shows the newest")
     func newestWins() async throws {
         let h = try await harness()
-        try await seedPrice(h.db, key: "milk", price: 1.0, seenAt: "2026-11-01T10:00:00.000Z")
-        try await seedPrice(h.db, key: "milk", price: 9.0, seenAt: "2026-11-02T10:00:00.000Z", deleted: true)
+        try await seedPrice(h.db, key: "milk", price: dec("1.0"), seenAt: "2026-11-01T10:00:00.000Z")
+        try await seedPrice(h.db, key: "milk", price: dec("9.0"), seenAt: "2026-11-02T10:00:00.000Z", deleted: true)
         await h.settle { h.model.priceSnapshot.prices.count == 1 }
         let item = try #require(h.model.unchecked.first)
         #expect(h.model.priceCaption(for: item) == Price.caption(
-            LastBought(price: 1.0, seenAt: "2026-11-01T10:00:00.000Z", storeName: "Test Market"), currency: "EUR"
+            LastBought(price: dec("1.0"), seenAt: "2026-11-01T10:00:00.000Z", storeName: "Test Market"), currency: "EUR"
         ))
-        #expect(await h.model.save(item, ItemFields(name: "Milk", price: 1.4)))
+        #expect(await h.model.save(item, ItemFields(name: "Milk", price: dec("1.4"))))
         await h.settle { h.model.priceSnapshot.prices.count == 2 }
-        #expect(h.model.lastBought("milk")?.price == 1.4)
+        #expect(h.model.lastBought("milk")?.price == dec("1.4"))
     }
 
     @Test("SHOP-12: the household currency comes from the local household row, EUR until then")
