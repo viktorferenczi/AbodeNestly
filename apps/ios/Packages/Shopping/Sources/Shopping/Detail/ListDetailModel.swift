@@ -22,6 +22,8 @@ public final class ListDetailModel {
     public private(set) var pendingActions: [PendingAction] = []
     /// The household's lists, for "Add all to…" (SHOP-11).
     public private(set) var lists: [ListRecord] = []
+    /// The household's live prices and its currency (SHOP-12), read from the local table so a price written offline shows at once.
+    public private(set) var priceSnapshot = ItemPriceSnapshot()
     /// A plain status line (no Undo) that clears by itself: the result of "Add all to list".
     public private(set) var status: String?
 
@@ -91,7 +93,11 @@ public final class ListDetailModel {
     /// Follows the local rows until the view goes away or the household's database closes.
     public func start() async {
         let watcher = Task { await self.followLists() }
-        defer { watcher.cancel() }
+        let priceWatcher = Task { await self.followPrices() }
+        defer {
+            watcher.cancel()
+            priceWatcher.cancel()
+        }
         for await snapshot in await database.observeListDetail(householdId: householdId, listId: listId) {
             self.snapshot = snapshot
             loaded = true
@@ -106,6 +112,42 @@ public final class ListDetailModel {
         for await snapshot in await database.observeShoppingLists(householdId: householdId) {
             lists = snapshot.lists
         }
+    }
+
+    private func followPrices() async {
+        for await snapshot in await database.observeItemPrices(householdId: householdId) {
+            priceSnapshot = snapshot
+        }
+    }
+
+    /// The list's store while it is live: the price field is offered only with one (SHOP-12, AC3). A deleted store is none.
+    public var priceStore: StoreRecord? {
+        guard let storeId = snapshot.list?.storeId else { return nil }
+        for store in snapshot.stores where store.id == storeId { return store }
+        return nil
+    }
+
+    /// The last price of `name` by the C2 rule: at the list's store, or at any store when the list has none.
+    public func lastBought(_ name: String) -> LastBought? {
+        Price.lastBought(name: name, prices: priceSnapshot.prices, stores: snapshot.stores, listStoreId: priceStore?.id)
+    }
+
+    /// C2 caption under a row's name, e.g. "€1.20 · Test Market"; `nil` when there is no price.
+    public func priceCaption(for item: ListItemRecord) -> String? {
+        guard let last = lastBought(item.name) else { return nil }
+        return Price.caption(last, currency: priceSnapshot.currency)
+    }
+
+    /// C3 line for the name typed so far, e.g. "Last bought: 3 Nov, €1.20 at Test Market".
+    public func lastBoughtLine(for name: String) -> String? {
+        guard let last = lastBought(name) else { return nil }
+        return Price.lastBoughtLine(last, currency: priceSnapshot.currency)
+    }
+
+    /// The `item_price` row for a save that carries a price, or `nil` (no price, or the list has no live store).
+    private func priceRow(_ fields: ItemFields) -> [String: JSONValue]? {
+        guard let amount = fields.price, let store = priceStore else { return nil }
+        return Price.row(id: makeId(), householdId: householdId, storeId: store.id, name: fields.name, price: amount, now: now())
     }
 
     /// SHOP-11: copies every live item of this template onto `target` in one local transaction, then kicks sync once
@@ -155,7 +197,8 @@ public final class ListDetailModel {
             quantity: fields.quantity, unit: fields.unit, note: fields.note
         )
         do {
-            try await database.upsert(table: "list_item", row: row, now: now())
+            // The price rides in the same local transaction as the item (SHOP-12).
+            try await database.writeItem(change: .upsert(row: row), price: priceRow(fields), now: now())
             writeFailed = false
         } catch {
             writeFailed = true
@@ -203,9 +246,13 @@ public final class ListDetailModel {
     @discardableResult
     public func save(_ item: ListItemRecord, _ fields: ItemFields) async -> Bool {
         let changes = ItemSheetLogic.changes(before: item, after: fields)
-        guard !changes.fields.isEmpty else { return true }
+        let price: [String: JSONValue]? = priceRow(fields)
+        // A price-only save still writes (and the sheet closes); nothing at all when neither changed.
+        guard !changes.fields.isEmpty || price != nil else { return true }
+        var change: ItemChange?
+        if !changes.fields.isEmpty { change = .patch(id: item.id, fields: changes.fields, localOnly: changes.localOnly) }
         do {
-            try await database.patch(table: "list_item", id: item.id, fields: changes.fields, localOnly: changes.localOnly, now: now())
+            try await database.writeItem(change: change, price: price, now: now())
             writeFailed = false
         } catch {
             writeFailed = true

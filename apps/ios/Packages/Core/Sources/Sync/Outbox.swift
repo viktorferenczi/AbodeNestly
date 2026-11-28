@@ -5,8 +5,8 @@ import GRDB
 /// Which tables the sync loop sends and which columns it never sends.
 public enum SyncTables {
     /// Tables the server accepts mutations for (api/_lib/sync/tables.ts). Rows queued for other tables wait, unsent and
-    /// uncounted, until their `-api` story adds them to both lists.
-    public static let pushable = ["store", "shopping_list", "list_item", "location"]
+    /// uncounted, until their `-api` story adds them to both lists. `item_price` joined with SHOP-12.
+    public static let pushable = ["store", "shopping_list", "list_item", "location", "item_price"]
 
     /// Every table SPEC §6.2 names; the closed set a write may target (table names go into SQL text).
     static let known: Set<String> = [
@@ -82,6 +82,12 @@ struct QueuedMutation: Equatable {
     var mutation: SyncMutation
 }
 
+/// The list item half of `HouseholdDatabase.writeItem`: a new row, or only the changed columns of an existing one.
+public enum ItemChange: Sendable {
+    case upsert(row: [String: JSONValue])
+    case patch(id: UUID, fields: [String: JSONValue], localOnly: [String: JSONValue])
+}
+
 /// An upsert ready to store: see `HouseholdDatabase.prepareUpsert`.
 struct PreparedUpsert: Sendable {
     var rowId: String
@@ -131,6 +137,52 @@ extension HouseholdDatabase {
     private static func writeAndQueue(_ db: Database, table: String, prepared: PreparedUpsert, now: Date) throws {
         try writeRow(db, table: table, row: prepared.local)
         try queue(db, table: table, op: "upsert", rowId: prepared.rowId, data: prepared.data, now: now)
+    }
+
+    /// SHOP-12: an item change and the price saved with it, in one transaction so the price never exists without the
+    /// item write (or the other way round). Either part may be absent; a patch with nothing to write is invalid. The
+    /// caller kicks sync once afterwards.
+    public func writeItem(change: ItemChange?, price: [String: JSONValue]?, now: Date = Date()) throws {
+        let pool = try requirePool()
+        guard let household = handle?.householdId else { throw HouseholdDatabaseError.notOpen }
+        var itemUpsert: PreparedUpsert?
+        var patchId: String?
+        var patchData: [String: JSONValue] = [:]
+        var patchLocal: [String: JSONValue] = [:]
+        switch change {
+        case .upsert(let row)?:
+            itemUpsert = try Self.prepareUpsert(table: "list_item", row: row, household: household)
+        case .patch(let id, let fields, let localOnly)?:
+            patchData = SyncTables.sendable(table: "list_item", fields: fields)
+            guard !patchData.isEmpty else { throw SyncWriteError.invalidRow }
+            patchId = id.uuidString.lowercased()
+            patchLocal = patchData.merging(localOnly) { _, new in new }
+        case nil:
+            break
+        }
+        var priceUpsert: PreparedUpsert?
+        if let price { priceUpsert = try Self.prepareUpsert(table: "item_price", row: price, household: household) }
+        // Immutable copies: the write closure is sendable and must not capture the variables above.
+        let newItem: PreparedUpsert? = itemUpsert
+        let newPrice: PreparedUpsert? = priceUpsert
+        let patchRowId: String? = patchId
+        let patchFields: [String: JSONValue] = patchData
+        let patchValues: [String: JSONValue] = patchLocal
+        try pool.write { db in
+            if let newItem {
+                try Self.requireTable(db, "list_item")
+                try Self.writeAndQueue(db, table: "list_item", prepared: newItem, now: now)
+            }
+            if let patchRowId {
+                try Self.requireTable(db, "list_item")
+                try Self.update(db, table: "list_item", rowId: patchRowId, values: patchValues)
+                try Self.queue(db, table: "list_item", op: "upsert", rowId: patchRowId, data: patchFields, now: now)
+            }
+            if let newPrice {
+                try Self.requireTable(db, "item_price")
+                try Self.writeAndQueue(db, table: "item_price", prepared: newPrice, now: now)
+            }
+        }
     }
 
     /// Updates only `fields` locally and queues just those columns, so a concurrent edit of another column on another

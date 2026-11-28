@@ -88,7 +88,9 @@ describe('SHOP-02: list detail with quick add', () => {
     await seed([list('a', 'Groceries')]);
     await renderDetail();
     expect(await screen.findByText('Add your first item')).toBeTruthy();
-    expect(document.activeElement).toBe(await box());
+    // The bar takes focus in an effect after the hint renders, so wait for it rather than reading it once.
+    const input = await box();
+    await waitFor(() => expect(document.activeElement).toBe(input));
   });
 
   it('populated: rows show names, the store chip and a read-only Checked section', async () => {

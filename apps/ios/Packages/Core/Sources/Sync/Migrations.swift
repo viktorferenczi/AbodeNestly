@@ -203,6 +203,28 @@ enum Migrations {
             try db.execute(sql: "UPDATE meta SET value = '0' WHERE key = 'cursor'")
         }
 
+        // SHOP-12: the server's `item_price` columns, so a price is stored and queued offline and the caption reads it
+        // locally. Nullable stamps like v6 (a row is written before the server stamps it). The (store, name key) index
+        // serves the last-price lookup; the cursor reset follows the v6 rule, or prices below the old cursor never arrive.
+        migrator.registerMigration("v7") { db in
+            try db.create(table: "item_price") { t in
+                t.primaryKey("id", .text)
+                t.column("household_id", .text).notNull()
+                t.column("store_id", .text).notNull()
+                t.column("name_key", .text).notNull()
+                // TEXT, not REAL: money is exact (AGENTS.md §4); the canonical decimal string, e.g. "1.1".
+                t.column("price", .text).notNull()
+                t.column("seen_at", .text).notNull()
+                t.column("created_at", .text)
+                t.column("updated_at", .text)
+                t.column("deleted_at", .text)
+                t.column("sync_seq", .integer)
+            }
+            try db.execute(sql: "CREATE INDEX item_price_store_key_idx ON item_price (store_id, name_key)")
+            try db.execute(sql: "CREATE INDEX item_price_household_idx ON item_price (household_id)")
+            try db.execute(sql: "UPDATE meta SET value = '0' WHERE key = 'cursor'")
+        }
+
         return migrator
     }
 }

@@ -60,6 +60,7 @@ public struct ListDetailView: View {
         .sheet(item: $model.editing) { state in
             ItemSheetView(
                 state: state, unitSuggestions: ItemSheetLogic.unitSuggestions(history: model.snapshot.history),
+                priceStoreName: model.priceStore?.name, lastBoughtLine: { model.lastBoughtLine(for: $0) },
                 onSave: { fields in
                     switch state {
                     case .new: await model.create(fields)
@@ -254,7 +255,7 @@ public struct ListDetailView: View {
                 let pending = model.isPendingCheck(item.id)
                 ItemRow(
                     item: item, idPrefix: "list.row", color: pending ? Tokens.text2 : Tokens.text, ticked: pending, strikethrough: pending,
-                    onOpen: { model.open(item) }, onToggle: { pending ? model.undoCheck(item.id) : model.check(item) }
+                    priceCaption: model.priceCaption(for: item), onOpen: { model.open(item) }, onToggle: { pending ? model.undoCheck(item.id) : model.check(item) }
                 )
             }
             if !model.checked.isEmpty {
@@ -263,7 +264,7 @@ public struct ListDetailView: View {
                         ForEach(model.checked) { item in
                             ItemRow(
                                 item: item, idPrefix: "list.checked.row", color: Tokens.text2, ticked: true, strikethrough: false,
-                                onOpen: { model.open(item) }, onToggle: { Task { await model.uncheck(item) } }
+                                priceCaption: model.priceCaption(for: item), onOpen: { model.open(item) }, onToggle: { Task { await model.uncheck(item) } }
                             )
                         }
                     } label: {
@@ -287,6 +288,8 @@ private struct ItemRow: View {
     let color: Color
     let ticked: Bool
     let strikethrough: Bool
+    /// The last price under the name, "€1.20 · Test Market" (SHOP-12); `nil` shows nothing.
+    let priceCaption: String?
     let onOpen: () -> Void
     let onToggle: () -> Void
 
@@ -315,6 +318,13 @@ private struct ItemRow: View {
                                 .lineLimit(1)
                                 .accessibilityIdentifier("\(idPrefix).\(item.name).note")
                         }
+                        if let priceCaption {
+                            Text(priceCaption)
+                                .font(.caption)
+                                .foregroundStyle(Tokens.text2)
+                                .lineLimit(1)
+                                .accessibilityIdentifier("\(idPrefix).\(item.name).price")
+                        }
                     }
                     Spacer(minLength: 8)
                     if !qty.isEmpty {
@@ -328,7 +338,7 @@ private struct ItemRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            // Reads as "Milk, 2 l, lactose free"; the checkbox stays its own element beside it.
+            // Reads as "Milk, 2 l, lactose free, €1.20 · Test Market"; the checkbox stays its own element beside it.
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("\(idPrefix).\(item.name)")
         }
