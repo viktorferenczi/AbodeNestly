@@ -2,7 +2,7 @@ import SwiftUI
 import Sync
 import UI
 
-/// DESIGN C2, the SHOP-02 slice. States: empty ("Add your first item", the field focused), populated, offline (a note;
+/// DESIGN C2, the SHOP-02 slice. States: empty ("Try: 2 l milk", the field focused), populated, offline (a note;
 /// adding works the same), gone ("This list is gone"). Rows show quantity, unit and note and open the item sheet
 /// (SHOP-03-ios), checked rows too. SHOP-04-ios adds the checkbox beside each row (undoable for 5 s, written when the
 /// window ends), the all-checked state and "Clear checked". The global top bar stays above, so the title is the
@@ -13,10 +13,15 @@ public struct ListDetailView: View {
     private let isOnline: Bool
     private let onManageStores: () -> Void
     private let makeScanner: (@MainActor () -> BarcodeScannerModel)?
+    private let makeVoice: (@MainActor () -> VoiceAddModel)?
     private let makeShare: (@MainActor () -> ShareSheetModel)?
     @State private var checkedOpen: Bool
     /// The open scanner (SHOP-10), built when the button is tapped so each scan starts from a fresh state.
     @State private var scanner: BarcodeScannerModel?
+    /// The open voice sheet (SHOP-14), built when the mic is tapped so each run starts from a fresh state.
+    @State private var voice: VoiceAddModel?
+    /// "Type instead" closed the voice sheet; the Quick add field takes focus once it has finished dismissing.
+    @State private var focusAfterVoice = false
     /// The open share sheet (SHOP-13), built when "Share" is tapped so it starts from the list's current link.
     @State private var sharing: ShareSheetModel?
     @State private var showStorePicker = false
@@ -28,15 +33,17 @@ public struct ListDetailView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     /// `checkedExpanded` starts the Checked group open (tests; the person opens it by tapping its header).
-    /// `makeScanner` shows the "Scan barcode" button in the quick-add bar (SHOP-10); without it there is none.
+    /// `makeScanner` shows the "Scan barcode" button in the quick-add bar (SHOP-10), `makeVoice` the "Voice add" mic (SHOP-14); without them there is none.
     public init(
         model: ListDetailModel, title: String, isOnline: Bool, checkedExpanded: Bool = false, onManageStores: @escaping () -> Void = {},
-        makeScanner: (@MainActor () -> BarcodeScannerModel)? = nil, makeShare: (@MainActor () -> ShareSheetModel)? = nil
+        makeScanner: (@MainActor () -> BarcodeScannerModel)? = nil, makeShare: (@MainActor () -> ShareSheetModel)? = nil,
+        makeVoice: (@MainActor () -> VoiceAddModel)? = nil
     ) {
         self.model = model
         self.onManageStores = onManageStores
         self.makeScanner = makeScanner
         self.makeShare = makeShare
+        self.makeVoice = makeVoice
         fallbackTitle = title
         self.isOnline = isOnline
         _checkedOpen = State(initialValue: checkedExpanded)
@@ -97,6 +104,26 @@ public struct ListDetailView: View {
         .fullScreenCover(isPresented: Binding(get: { scanner != nil }, set: { if !$0 { scanner = nil } })) {
             if let scanner {
                 BarcodeScannerView(model: scanner, onClose: { self.scanner = nil })
+            }
+        }
+        .sheet(isPresented: Binding(get: { voice != nil }, set: { if !$0 { voice = nil } }), onDismiss: {
+            // A focus request made while the sheet is still going away is dropped, so it waits for the dismissal.
+            guard focusAfterVoice else { return }
+            focusAfterVoice = false
+            fieldFocused = true
+        }) {
+            if let voice {
+                VoiceAddView(
+                    model: voice, onClose: { self.voice = nil },
+                    onTypeInstead: {
+                        focusAfterVoice = true
+                        self.voice = nil
+                    },
+                    openSettings: {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    }
+                )
+                .presentationDetents([.medium])
             }
         }
         .sheet(isPresented: Binding(get: { sharing != nil }, set: { if !$0 { sharing = nil } })) {
@@ -238,12 +265,13 @@ public struct ListDetailView: View {
                 }
             },
             onDetails: { model.openNew(prefill: $0) },
-            onScan: makeScanner.map { make in { scanner = make() } }
+            onScan: makeScanner.map { make in { scanner = make() } },
+            onVoice: makeVoice.map { make in { voice = make() } }
         )
     }
 
     private var emptyState: some View {
-        Text("Add your first item")
+        Text("Try: 2 l milk")
             .foregroundStyle(Tokens.text2)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityIdentifier("list.empty")

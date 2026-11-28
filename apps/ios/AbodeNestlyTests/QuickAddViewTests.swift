@@ -21,7 +21,7 @@ struct QuickAddViewTests {
     func empty() async throws {
         let h = try await DetailHarness()
         #expect(has(h, "list.empty"))
-        _ = try inspect(h).find(text: "Add your first item")
+        _ = try inspect(h).find(text: "Try: 2 l milk")
         #expect(has(h, "quickadd.field"))
     }
 

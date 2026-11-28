@@ -246,6 +246,40 @@ public final class ListDetailModel {
         )
     }
 
+    /// SHOP-14: adds a spoken item with its quantity and unit and returns its id (`nil` when it could not be stored). Like
+    /// `addScanned` it leaves what is typed in the quick-add field alone; the write is a queued `list_item` row (SPEC §6.5).
+    public func addSpoken(name: String, quantity: Double?, unit: String?) async -> UUID? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let id = makeId()
+        let stamp = now().formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true, timeZone: .gmt))
+        let row = QuickAdd.row(
+            id: id, householdId: householdId, listId: listId, name: trimmed, userId: userId, now: stamp,
+            quantity: quantity, unit: unit
+        )
+        do {
+            try await database.upsert(table: "list_item", row: row, now: now())
+            writeFailed = false
+        } catch {
+            writeFailed = true
+            return nil
+        }
+        await kick()
+        return id
+    }
+
+    /// The voice sheet for this list (DESIGN C6): its adds go through `addSpoken`.
+    public func makeVoice(
+        recognizer: any SpeechRecognizer, isOnline: @escaping @MainActor () -> Bool, locale: Locale = .current
+    ) -> VoiceAddModel {
+        VoiceAddModel(
+            recognizer: recognizer, isOnline: isOnline, locale: locale,
+            add: { [weak self] name, quantity, unit in
+                await self?.addSpoken(name: name, quantity: quantity, unit: unit) != nil
+            }
+        )
+    }
+
     /// The share sheet for this list (DESIGN C8, SHOP-13). `share` and `stop` are the API calls; after each success the
     /// server's token (or `nil`) is written onto the local row, with no outbox entry because `share_token` is
     /// server-owned, and sync is kicked.

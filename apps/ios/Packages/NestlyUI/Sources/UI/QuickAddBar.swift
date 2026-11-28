@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// DESIGN A6 QuickAddBar: a text field with an Add button and the autocomplete lines above it. Presentational, so
-/// pantry can reuse it. The barcode button shows when `onScan` is given (SHOP-10); no mic button until SHOP-14.
+/// pantry can reuse it. The barcode button shows when `onScan` is given (SHOP-10), the mic button when `onVoice` is (SHOP-14).
 public struct QuickAddBar: View {
     public struct Suggestion: Identifiable, Equatable, Sendable {
         public var id: String
@@ -21,16 +21,18 @@ public struct QuickAddBar: View {
     private let onSubmit: () -> Void
     private let onDetails: ((String) -> Void)?
     private let onScan: (() -> Void)?
+    private let onVoice: (() -> Void)?
 
     /// `onDetails` shows a "Details" button that hands over the typed text (SHOP-03: opens the item sheet). `onScan`
-    /// shows a "Scan barcode" button (SHOP-10: opens the scanner).
+    /// shows a "Scan barcode" button (SHOP-10: opens the scanner). `onVoice` shows a "Voice add" button (SHOP-14).
     public init(
         text: Binding<String>, suggestions: [Suggestion], placeholder: String, focused: FocusState<Bool>.Binding,
         onPick: @escaping (Suggestion) -> Void, onSubmit: @escaping () -> Void, onDetails: ((String) -> Void)? = nil,
-        onScan: (() -> Void)? = nil
+        onScan: (() -> Void)? = nil, onVoice: (() -> Void)? = nil
     ) {
         self.onDetails = onDetails
         self.onScan = onScan
+        self.onVoice = onVoice
         _text = text
         self.suggestions = suggestions
         self.placeholder = placeholder
@@ -79,6 +81,13 @@ public struct QuickAddBar: View {
                         .frame(minWidth: Tokens.minTouchTarget, minHeight: Tokens.minTouchTarget)
                         .accessibilityLabel("Scan barcode")
                         .accessibilityIdentifier("quickadd.scan")
+                }
+                if let onVoice {
+                    Button(action: onVoice) { Image(systemName: "mic") }
+                        .tint(Tokens.accent)
+                        .frame(minWidth: Tokens.minTouchTarget, minHeight: Tokens.minTouchTarget)
+                        .accessibilityLabel("Voice add")
+                        .accessibilityIdentifier("quickadd.voice")
                 }
                 if let onDetails {
                     Button { onDetails(text) } label: { Image(systemName: "slider.horizontal.3") }
