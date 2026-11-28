@@ -42,16 +42,38 @@ data class FailedChange(val seq: Long, val table: String, val op: String, val ro
  */
 suspend fun DatabaseRegistry.upsert(householdId: UUID, table: String, row: JsonObject, now: Instant = Instant.now()) {
     requireWritable(table)
-    val rowId = (row["id"] as? JsonPrimitive)?.contentOrNull ?: throw IllegalArgumentException("A row needs an id")
+    val rowId = rowIdOf(row)
+    withOpenFor(householdId) { db ->
+        db.runInTransaction(Callable {
+            storeUpsert(db.openHelper.writableDatabase, table, householdId, rowId, row, now)
+        })
+    }
+}
+
+/**
+ * [upsert] for many rows of one table in a single transaction (SHOP-11 "Add all"): every local row and every queued
+ * mutation is stored, or, when one fails, none is. An empty list does nothing. Callers kick sync once afterwards.
+ */
+suspend fun DatabaseRegistry.upsertAll(householdId: UUID, table: String, rows: List<JsonObject>, now: Instant = Instant.now()) {
+    requireWritable(table)
+    if (rows.isEmpty()) return
+    val ids = rows.map(::rowIdOf)
     withOpenFor(householdId) { db ->
         db.runInTransaction(Callable {
             val raw = db.openHelper.writableDatabase
-            // Queue first: a local row that cannot be stored (NOT NULL) must take the queued mutation back with it.
-            queue(raw, table, "upsert", rowId, row.without(SERVER_OWNED_KEYS), now)
-            writeLocal(raw, table, householdId, rowId, row)
-            Unit
+            rows.forEachIndexed { i, row -> storeUpsert(raw, table, householdId, ids[i], row, now) }
         })
     }
+}
+
+private fun rowIdOf(row: JsonObject): String =
+    (row["id"] as? JsonPrimitive)?.contentOrNull ?: throw IllegalArgumentException("A row needs an id")
+
+/** The one write both [upsert] and [upsertAll] make; the caller owns the transaction. */
+private fun storeUpsert(raw: SupportSQLiteDatabase, table: String, householdId: UUID, rowId: String, row: JsonObject, now: Instant) {
+    // Queue first: a local row that cannot be stored (NOT NULL) must take the queued mutation back with it.
+    queue(raw, table, "upsert", rowId, row.without(SERVER_OWNED_KEYS), now)
+    writeLocal(raw, table, householdId, rowId, row)
 }
 
 /**

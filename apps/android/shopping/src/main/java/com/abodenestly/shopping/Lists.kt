@@ -85,6 +85,8 @@ suspend fun createList(
     storeId: String?,
     now: Instant,
     id: String = UUID.randomUUID().toString(),
+    /** SHOP-11: a template files under Templates and offers Add all to list. */
+    isTemplate: Boolean = false,
 ): String {
     val stamp = syncStamp(now)
     database.upsert(
@@ -93,7 +95,7 @@ suspend fun createList(
             put("id", JsonPrimitive(id))
             put("name", JsonPrimitive(name.trim()))
             put("store_id", storeId?.let { JsonPrimitive(it) } ?: JsonNull)
-            put("is_template", JsonPrimitive(false))
+            put("is_template", JsonPrimitive(isTemplate))
             put("archived_at", JsonNull)
             put("deleted_at", JsonNull)
             put("created_at", JsonPrimitive(stamp))

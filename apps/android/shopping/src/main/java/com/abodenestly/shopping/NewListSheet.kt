@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -20,6 +21,7 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -29,11 +31,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -44,10 +48,10 @@ import com.abodenestly.sync.StoreRecord
 import com.abodenestly.ui.LocalTokens
 import com.abodenestly.ui.Tokens
 
-/** DESIGN C1 sheet: name and store. The Template switch waits for SHOP-11. */
+/** DESIGN C1 sheet: name, store and (SHOP-11) the Template switch, off by default. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NewListSheet(stores: List<StoreRecord>, failed: Boolean, onSave: (name: String, storeId: String?) -> Unit, onClose: () -> Unit) {
+fun NewListSheet(stores: List<StoreRecord>, failed: Boolean, onSave: (name: String, storeId: String?, isTemplate: Boolean) -> Unit, onClose: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onClose, sheetState = sheetState, containerColor = LocalTokens.current.bg) {
         NewListSheetContent(stores, failed, onSave, onClose)
@@ -64,12 +68,13 @@ fun NewListSheet(stores: List<StoreRecord>, failed: Boolean, onSave: (name: Stri
 internal fun NewListSheetContent(
     stores: List<StoreRecord>,
     failed: Boolean,
-    onSave: (name: String, storeId: String?) -> Unit,
+    onSave: (name: String, storeId: String?, isTemplate: Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
     val tokens = LocalTokens.current
     var name by rememberSaveable { mutableStateOf("") }
     var storeId by rememberSaveable { mutableStateOf<String?>(null) }
+    var isTemplate by rememberSaveable { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     // A store deleted while the sheet is open drops out of the picker, and the choice falls back to "No store".
     val chosen = stores.firstOrNull { it.id == storeId }
@@ -80,7 +85,7 @@ internal fun NewListSheetContent(
     fun save() {
         if (!valid || saving) return
         saving = true
-        onSave(name, chosen?.id)
+        onSave(name, chosen?.id, isTemplate)
     }
 
     Column(
@@ -133,6 +138,16 @@ internal fun NewListSheetContent(
                     }
                 }
             }
+        }
+        // The whole row toggles, so the target is the full width and TalkBack reads one switch named "Template".
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = Tokens.MinTouchTarget)
+                .toggleable(value = isTemplate, role = Role.Switch, onValueChange = { isTemplate = it })
+                .testTag("newlist.template"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Template", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = tokens.text)
+            Switch(checked = isTemplate, onCheckedChange = null)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(

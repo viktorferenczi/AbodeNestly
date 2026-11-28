@@ -56,7 +56,7 @@ sealed interface ListsEvent {
     data class Delete(val row: ListRowModel) : ListsEvent
     data class Restore(val row: ListRowModel) : ListsEvent
     data class Undo(val id: String) : ListsEvent
-    data class Create(val name: String, val storeId: String?) : ListsEvent
+    data class Create(val name: String, val storeId: String?, val isTemplate: Boolean = false) : ListsEvent
     data object OpenedHandled : ListsEvent
 
     /** Leaving the screen or the app writes what is still waiting rather than dropping it. */
@@ -107,20 +107,20 @@ class ListsViewModel(
             is ListsEvent.Undo -> undo(event.id)
             // Restore of an archived list: written at once (no toast), only the changed column queued.
             is ListsEvent.Restore -> scope.launch { write { restoreList(database, householdId, event.row.id, now()) } }
-            is ListsEvent.Create -> create(event.name, event.storeId)
+            is ListsEvent.Create -> create(event.name, event.storeId, event.isTemplate)
             ListsEvent.OpenedHandled -> mutableState.update { it.copy(opened = null) }
             ListsEvent.Flush -> flush()
         }
     }
 
-    private fun create(name: String, storeId: String?) {
+    private fun create(name: String, storeId: String?, isTemplate: Boolean) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         scope.launch {
             mutableState.update { it.copy(error = null, createFailed = false) }
             val id = newId()
             // AC5, AC6: the list exists locally and in the outbox before the screen is told to open it.
-            val saved = write { createList(database, householdId, trimmed, storeId, now(), id) }
+            val saved = write { createList(database, householdId, trimmed, storeId, now(), id, isTemplate) }
             mutableState.update { if (saved) it.copy(opened = id) else it.copy(createFailed = true) }
         }
     }

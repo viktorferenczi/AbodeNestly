@@ -97,6 +97,7 @@ internal fun ListDetailScreenHost(
     picker: StorePickerSlot = { stores, current, failed, onCreate, onSave, onManage, onClose ->
         StorePickerSheet(stores, current, failed, onCreate, onSave, onManage, onClose)
     },
+    addAllSheet: AddAllSlot = { targets, failed, onPick, onClose -> AddAllSheet(targets, failed, onPick, onClose) },
     sheet: ItemSheetSlot,
 ) {
     val ui by viewModel.state.collectAsState()
@@ -128,6 +129,15 @@ internal fun ListDetailScreenHost(
                 onManageStores()
             },
             { viewModel.onEvent(ListDetailEvent.ClosePicker) },
+        )
+    }
+    // SHOP-11: the template's "Add all to…" sheet.
+    if (ui.addAllOpen && ui.isTemplate) {
+        addAllSheet(
+            ui.targets,
+            ui.addAllFailed,
+            { target -> viewModel.onEvent(ListDetailEvent.AddAll(target.id)) },
+            { viewModel.onEvent(ListDetailEvent.CloseAddAll) },
         )
     }
     val open = ui.sheet
@@ -184,23 +194,47 @@ internal fun ListDetailContent(
                         list.name, style = MaterialTheme.typography.headlineSmall, color = tokens.text,
                         modifier = Modifier.weight(1f).testTag("list.title").semantics { heading() },
                     )
-                    // Only Clear checked lives here until Share, Template and Archive land, so only when something is checked.
-                    if (checked.isNotEmpty()) {
+                    // A template always has the menu, Add all first; otherwise only Clear checked lives here, and only when something is checked.
+                    val actions = Templates.actions(ui.isTemplate, checked.isNotEmpty())
+                    if (actions.isNotEmpty()) {
                         Box {
                             IconButton(onClick = { actionsOpen = true }, modifier = Modifier.testTag("list.actions")) {
                                 Icon(Icons.Filled.MoreVert, contentDescription = "List actions", tint = tokens.accent)
                             }
                             DropdownMenu(expanded = actionsOpen, onDismissRequest = { actionsOpen = false }) {
-                                DropdownMenuItem(
-                                    text = { Text("Clear checked") },
-                                    onClick = { actionsOpen = false; onEvent(ListDetailEvent.ClearChecked) },
-                                    modifier = Modifier.testTag("list.actions.clearChecked"),
-                                )
+                                actions.forEach { action ->
+                                    when (action) {
+                                        ListAction.AddAll -> DropdownMenuItem(
+                                            text = { Text("Add all to list") },
+                                            onClick = { actionsOpen = false; onEvent(ListDetailEvent.OpenAddAll) },
+                                            modifier = Modifier.testTag("list.actions.addAll"),
+                                        )
+                                        ListAction.ClearChecked -> DropdownMenuItem(
+                                            text = { Text("Clear checked") },
+                                            onClick = { actionsOpen = false; onEvent(ListDetailEvent.ClearChecked) },
+                                            modifier = Modifier.testTag("list.actions.clearChecked"),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
+                if (ui.isTemplate) {
+                    Text(
+                        "Template", style = MaterialTheme.typography.labelLarge, color = tokens.text2,
+                        modifier = Modifier.testTag("list.templateCaption"),
+                    )
+                }
                 StoreChip(ui.detail.storeName) { onEvent(ListDetailEvent.OpenPicker) }
+            }
+            // SHOP-11: a plain status line, announced to TalkBack; it clears itself and has no Undo.
+            ui.status?.let {
+                Text(
+                    it, color = tokens.text2, style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("list.status")
+                        .semantics { liveRegion = LiveRegionMode.Polite },
+                )
             }
             ui.error?.let {
                 Text(

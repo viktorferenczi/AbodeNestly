@@ -21,6 +21,8 @@ data class ListItemRecord(
     val note: String? = null,
     /** SHOP-04: when it was checked off (UTC stamp); null while unchecked or for a row checked before the stamp existed. */
     val checkedAt: String? = null,
+    /** SHOP-11: copied with the item when a template is added to a list. */
+    val barcode: String? = null,
 )
 
 /**
@@ -44,3 +46,7 @@ data class ListItemIdentity(val name: String, val deletedAt: String?)
 /** The stored `list_item` row's identity, or null when there is none. Throws [DatabaseNotOpenException] when [householdId] is not the open household. */
 suspend fun DatabaseRegistry.listItemIdentity(householdId: UUID, id: String): ListItemIdentity? =
     withOpenFor(householdId) { db -> db.search().listItem(householdId.toString(), id)?.let { ListItemIdentity(it.name, it.deletedAt) } }
+
+/** The live items of one list, read once (SHOP-11 "Add all"). Throws [DatabaseNotOpenException] when [householdId] is not the open household. */
+suspend fun DatabaseRegistry.liveListItems(householdId: UUID, listId: String): List<ListItemRecord> =
+    withOpenFor(householdId) { db -> db.shoppingLists().liveItems(householdId.toString(), listId).map { DatabaseRegistry.toItemRecord(it) } }

@@ -540,7 +540,7 @@ open class DatabaseRegistry(
         fun toItemRecord(e: ListItemEntity) = ListItemRecord(
             id = e.id, listId = e.listId, name = e.name, nameKey = e.nameKey, checked = e.checked == true,
             deletedAt = e.deletedAt, createdAt = e.createdAt, quantity = e.quantity, unit = e.unit, note = e.note,
-            checkedAt = e.checkedAt,
+            checkedAt = e.checkedAt, barcode = e.barcode,
         )
 
         fun toEntity(a: Activity) = ActivityEntity(

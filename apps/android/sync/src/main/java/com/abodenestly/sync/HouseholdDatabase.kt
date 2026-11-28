@@ -392,6 +392,10 @@ interface ShoppingListDao {
     @Query("SELECT * FROM list_item WHERE household_id = :householdId AND list_id = :listId AND deleted_at IS NULL")
     fun observeItems(householdId: String, listId: String): Flow<List<ListItemEntity>>
 
+    /** The live items of one list, read once (SHOP-11 copies them). */
+    @Query("SELECT * FROM list_item WHERE household_id = :householdId AND list_id = :listId AND deleted_at IS NULL")
+    suspend fun liveItems(householdId: String, listId: String): List<ListItemEntity>
+
     /** The household's item history for autocomplete: live rows, and rows checked before they were cleared or deleted. */
     @Query("SELECT * FROM list_item WHERE household_id = :householdId AND (deleted_at IS NULL OR checked = 1)")
     fun observeHistory(householdId: String): Flow<List<ListItemEntity>>

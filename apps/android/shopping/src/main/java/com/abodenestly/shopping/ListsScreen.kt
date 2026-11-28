@@ -72,7 +72,7 @@ import com.abodenestly.ui.UndoToast
 internal typealias NewListSheetSlot = @Composable (
     stores: List<StoreRecord>,
     failed: Boolean,
-    onSave: (name: String, storeId: String?) -> Unit,
+    onSave: (name: String, storeId: String?, isTemplate: Boolean) -> Unit,
     onClose: () -> Unit,
 ) -> Unit
 
@@ -111,7 +111,7 @@ internal fun ListsScreenHost(
         open(id)
     }
     ListsContent(ui, viewModel::onEvent, onOpen = { open(it.id) }, onNewList = { showSheet = true }, onOpenStores = onOpenStores, modifier = modifier)
-    if (showSheet) sheet(ui.stores, ui.createFailed, { name, storeId -> viewModel.onEvent(ListsEvent.Create(name, storeId)) }, { showSheet = false })
+    if (showSheet) sheet(ui.stores, ui.createFailed, { name, storeId, isTemplate -> viewModel.onEvent(ListsEvent.Create(name, storeId, isTemplate)) }, { showSheet = false })
 }
 
 /** DESIGN C1 states: `empty`, `populated`, `offline`. Pure of the view model, so component tests drive it with plain state. */
