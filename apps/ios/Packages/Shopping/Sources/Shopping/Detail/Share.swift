@@ -25,6 +25,8 @@ public enum Share {
     /// the JSON route, a different origin, so only its last path segment is taken, percent-decoded.
     public static func token(fromURL url: String) -> String? {
         guard let components = URLComponents(string: url) else { return nil }
+        // Only an absolute path counts: newer Foundation encodes "not a url" into a relative path rather than failing.
+        guard components.percentEncodedPath.hasPrefix("/") else { return nil }
         let segments: [String] = components.percentEncodedPath.split(separator: "/").map(String.init)
         guard let last = segments.last, let decoded = last.removingPercentEncoding, !decoded.isEmpty else { return nil }
         return decoded
