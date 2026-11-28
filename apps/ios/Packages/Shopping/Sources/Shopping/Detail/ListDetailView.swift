@@ -138,10 +138,11 @@ public struct ListDetailView: View {
     }
 
     /// Always the menu, "Share" first (SHOP-13), then "Add all to list" on a template (SHOP-11) and "Clear checked" when
-    /// something is checked (SHOP-04). "Share" is left out only where nothing can build the sheet.
+    /// something is checked (SHOP-04). "Share" is left out where nothing can build the sheet, and until the list row is
+    /// here (not loaded yet, or gone).
     private var listActions: [ListAction] {
         let actions: [ListAction] = Templates.actions(isTemplate: model.isTemplate, hasChecked: !model.checked.isEmpty)
-        return makeShare == nil ? actions.filter { $0 != .share } : actions
+        return makeShare == nil || !model.canShare ? actions.filter { $0 != .share } : actions
     }
 
     @ViewBuilder

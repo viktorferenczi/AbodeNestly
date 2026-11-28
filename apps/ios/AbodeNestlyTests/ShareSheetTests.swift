@@ -20,11 +20,13 @@ final class ShareHarness {
 
     final class CopiedValues { var values: [String] = [] }
 
-    init(token: String? = nil, online: Bool = true) async throws {
+    init(
+        token: String? = nil, online: Bool = true, afterKick: (@Sendable (HouseholdDatabase, UUID) async -> Void)? = nil
+    ) async throws {
         let seed: (HouseholdDatabase, UUID) async throws -> Void = { db, list in
             if let token { try await db.setShareToken(listId: list, token: token) }
         }
-        let detail = try await DetailHarness(seed: seed)
+        let detail = try await DetailHarness(seed: seed, afterKick: afterKick)
         await detail.settle { detail.model.snapshot.list?.shareToken == token }
         let api = FakeApiService()
         let network = NetworkMonitor(isOnline: online)
@@ -159,6 +161,23 @@ struct ShareSheetTests {
         #expect(await h.detail.kickCount == 1)
         await h.detail.settle { h.detail.model.snapshot.list?.shareToken == "tok123" }
         #expect(h.detail.model.snapshot.list?.shareToken == "tok123")
+    }
+
+    @Test("SHOP-13: a pull that writes the old token during the kick does not have the last word")
+    func stalePullDuringKick() async throws {
+        // A page read before the POST committed writes share_token = NULL back while the kick runs.
+        let h = try await ShareHarness(afterKick: { db, list in try? await db.setShareToken(listId: list, token: nil) })
+        h.api.setShareResult(.success("http://api.test/shared/tok123"))
+        await h.sheet.setOn(true)
+        #expect(await h.detail.kickCount == 1)
+        #expect(try await h.localToken() == "tok123")
+    }
+
+    @Test("SHOP-13: a pull that writes the old token back after Stop sharing does not have the last word")
+    func stalePullDuringStop() async throws {
+        let h = try await ShareHarness(token: "tok123", afterKick: { db, list in try? await db.setShareToken(listId: list, token: "tok123") })
+        await h.sheet.turnOff()
+        #expect(try await h.localToken() == nil)
     }
 
     @Test("SHOP-13: AC3 Stop sharing DELETEs, the switch goes off and the local token is cleared with no outbox row and one kick")

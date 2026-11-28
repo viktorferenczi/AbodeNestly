@@ -66,6 +66,9 @@ public final class ListDetailModel {
     public var targets: [ListRecord] { Templates.targets(lists: lists) }
 
     public var isGone: Bool { loaded && snapshot.list == nil }
+    /// "Share" is offered only once the list row is here (SHOP-13): before the first observation, or on a gone list,
+    /// the sheet would start off and a toggle would rotate a link that is already live.
+    public var canShare: Bool { loaded && snapshot.list != nil }
     public var suggestions: [Suggestion] { QuickAdd.suggest(history: snapshot.history, query: query, listId: listId) }
 
     /// Oldest first, so a new item lands at the bottom; the id breaks ties so the order never flickers.
@@ -263,6 +266,9 @@ public final class ListDetailModel {
         // A failed local write is harmless: the server holds the truth and the next pull brings the same value.
         try? await database.setShareToken(listId: listId, token: token)
         await kick()
+        // The kick can join a pull whose page was read before this change committed, and that page writes the old
+        // token back. Write the server's answer again so it is the last local write.
+        try? await database.setShareToken(listId: listId, token: token)
     }
 
     /// Writes only the changed columns; nothing at all when nothing changed (AC3, AC4).

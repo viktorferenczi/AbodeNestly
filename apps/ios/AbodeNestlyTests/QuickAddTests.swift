@@ -31,7 +31,7 @@ final class DetailHarness {
 
     init(
         seed: (HouseholdDatabase, UUID) async throws -> Void = { _, _ in }, makeId: @escaping @MainActor () -> UUID = { UUID() },
-        undoWindow: Duration = .seconds(5)
+        undoWindow: Duration = .seconds(5), afterKick: (@Sendable (HouseholdDatabase, UUID) async -> Void)? = nil
     ) async throws {
         let db = try await openSyncDatabase(household)
         self.db = db
@@ -39,8 +39,14 @@ final class DetailHarness {
         try await seed(db, list)
         seededOutbox = try await db.outboxForTesting().filter { $0.table == "list_item" }.count
         let kicks = kicks
+        let listId: UUID = list
         model = ListDetailModel(
-            householdId: household, listId: list, userId: user, database: db, kick: { await kicks.add() }, now: { fixedNow }, makeId: makeId,
+            householdId: household, listId: list, userId: user, database: db,
+            kick: {
+                await kicks.add()
+                await afterKick?(db, listId)
+            },
+            now: { fixedNow }, makeId: makeId,
             undoWindow: undoWindow
         )
         let model = model

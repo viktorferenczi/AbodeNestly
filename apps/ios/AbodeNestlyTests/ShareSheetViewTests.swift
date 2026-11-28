@@ -146,4 +146,18 @@ struct ShareSheetViewTests {
         #expect(Templates.actions(isTemplate: h.detail.model.isTemplate, hasChecked: !h.detail.model.checked.isEmpty) == [.share])
         #expect(Templates.actions(isTemplate: true, hasChecked: false).first == .share)
     }
+
+    @Test("SHOP-13: Share is offered only once the list row is here, not before the first load and not on a gone list")
+    func shareNeedsTheList() async throws {
+        let h = try await ShareHarness()
+        #expect(h.detail.model.canShare)
+        let missing = ListDetailModel(
+            householdId: h.detail.household, listId: UUID(), userId: h.detail.user, database: h.detail.db, kick: {}
+        )
+        #expect(!missing.loaded && !missing.canShare)
+        let follower = Task { await missing.start() }
+        defer { follower.cancel() }
+        await h.detail.settle { missing.loaded }
+        #expect(missing.isGone && !missing.canShare)
+    }
 }
