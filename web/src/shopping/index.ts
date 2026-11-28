@@ -2,3 +2,4 @@
 export { Lists } from './Lists.tsx';
 export { ListDetail } from './ListDetail.tsx';
 export { Stores } from './Stores.tsx';
+export { SharedList } from './shared/SharedList.tsx';

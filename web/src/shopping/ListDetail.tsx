@@ -19,11 +19,13 @@ import { createStore, setListStore } from './Stores.ts';
 import { drainLookups } from './Barcode.ts';
 import { QuickAdd } from './QuickAdd.tsx';
 import { AddAllSheet } from './AddAllSheet.tsx';
+import { ShareSheet } from './ShareSheet.tsx';
+import { recordShare } from './ShareSheet.ts';
 import { addAllToList, targetLists } from './Templates.ts';
 import styles from './ListDetail.module.css';
 
 // DESIGN C2: name, store chip, item rows with a checkbox (qty, unit, note; tap opens the item sheet), a Checked section, Clear checked and the quick add bar.
-// Sorting and the other overflow actions belong to SHOP-06/07.
+// Sorting and the other overflow actions belong to SHOP-06/07. Share (SHOP-13) opens C8 from the overflow menu.
 export function ListDetail() {
   const { listId = '' } = useParams();
   const { status, db, household, modules } = useHousehold();
@@ -64,6 +66,7 @@ export function ListDetail() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   const [addingAll, setAddingAll] = useState(false);
+  const [sharing, setSharing] = useState(false);
   // SHOP-11: a plain message after Add all (no Undo); it clears itself.
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -250,43 +253,52 @@ export function ListDetail() {
           <button type="button" className={view.storeName ? styles.chip : `${styles.chip} ${styles.chipEmpty}`} aria-label={view.storeName ? `Store: ${view.storeName}` : undefined} onClick={() => setPicking(true)}>
             {view.storeName ?? 'Add store'}
           </button>
-          {view.checked.length > 0 || isTemplate ? (
-            <div
-              className={styles.menuWrap}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setMenuOpen(false);
-              }}
-              onBlur={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget)) setMenuOpen(false);
-              }}
-            >
-              <button type="button" className={styles.more} aria-label="List actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
-                ⋯
-              </button>
-              {menuOpen ? (
-                <div className={styles.menu} role="menu">
-                  {isTemplate ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={styles.menuItem}
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setAddingAll(true);
-                      }}
-                    >
-                      Add all to list
-                    </button>
-                  ) : null}
-                  {view.checked.length > 0 ? (
-                    <button type="button" role="menuitem" className={styles.menuItem} onClick={clearAll}>
-                      Clear checked
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          <div
+            className={styles.menuWrap}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setMenuOpen(false);
+            }}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget)) setMenuOpen(false);
+            }}
+          >
+            <button type="button" className={styles.more} aria-label="List actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
+              ⋯
+            </button>
+            {menuOpen ? (
+              <div className={styles.menu} role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setSharing(true);
+                  }}
+                >
+                  Share
+                </button>
+                {isTemplate ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={styles.menuItem}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setAddingAll(true);
+                    }}
+                  >
+                    Add all to list
+                  </button>
+                ) : null}
+                {view.checked.length > 0 ? (
+                  <button type="button" role="menuitem" className={styles.menuItem} onClick={clearAll}>
+                    Clear checked
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
         {empty && !clearing && !pending.length ? <p className={styles.hint}>Add your first item</p> : null}
         {allChecked ? (
@@ -334,6 +346,7 @@ export function ListDetail() {
           onCreate={(name) => createStore(db, deps, { householdId, name })}
         />
       ) : null}
+      {sharing ? <ShareSheet listId={listId} token={data.list.share_token} onChanged={(token) => void recordShare(db, listId, token).then(() => sync.kick())} onClose={() => setSharing(false)} /> : null}
       {addingAll ? (
         <AddAllSheet
           lists={targetLists(data.lists).filter((l) => l.household_id === householdId)}
