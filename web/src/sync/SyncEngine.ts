@@ -18,7 +18,7 @@ export interface SyncEngine {
 }
 
 /** Tables the server accepts mutations for (api/_lib/sync/tables.ts). Other queued rows wait until their `-api` story adds them to both lists. */
-export const PUSHABLE: ReadonlySet<string> = new Set(['store', 'shopping_list', 'list_item', 'location']);
+export const PUSHABLE: ReadonlySet<string> = new Set(['store', 'shopping_list', 'list_item', 'location', 'item_price']);
 
 const PAGE = 500;
 const RETRYABLE_DELAY_MS = 1000;

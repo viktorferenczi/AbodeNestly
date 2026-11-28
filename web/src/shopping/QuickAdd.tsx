@@ -7,13 +7,14 @@ import { QuickAddBar } from '../ui/QuickAddBar.tsx';
 import { BarcodeScanner } from './BarcodeScanner.tsx';
 import { addItem, historyOf, suggest } from './QuickAdd.ts';
 import { createItem, unitSuggestions } from './ItemSheet.ts';
-import { ItemSheet } from './ItemSheet.tsx';
+import { ItemSheet, type Pricing } from './ItemSheet.tsx';
+import { saveWithPrice } from './Price.ts';
 import styles from './QuickAdd.module.css';
 
-type Props = { db: HouseholdDb; householdId: string; listId: string; items: ListItem[]; autoFocus: boolean };
+type Props = { db: HouseholdDb; householdId: string; listId: string; items: ListItem[]; autoFocus: boolean; pricing?: Pricing; storeId?: string | null };
 
 /** Wires the QuickAddBar to one list: suggestions from the household's item history, writes through the outbox. */
-export function QuickAdd({ db, householdId, listId, items, autoFocus }: Props) {
+export function QuickAdd({ db, householdId, listId, items, autoFocus, pricing, storeId = null }: Props) {
   const { session } = useAuth();
   const sync = useSync();
   const syncRef = useRef(sync);
@@ -56,9 +57,11 @@ export function QuickAdd({ db, householdId, listId, items, autoFocus }: Props) {
           item={null}
           initialName={details}
           units={unitSuggestions(items)}
+          pricing={pricing}
           onClose={() => setDetails(null)}
-          onSave={async (fields) => {
-            await createItem(db, deps, { householdId, listId, userId: session?.user.id ?? null, fields });
+          onSave={async (fields, price) => {
+            const priced = price != null && storeId ? { householdId, storeId, name: fields.name, price, now: new Date().toISOString() } : null;
+            await saveWithPrice(db, deps, priced, (quiet) => createItem(db, quiet, { householdId, listId, userId: session?.user.id ?? null, fields }));
             setValue('');
             setDetails(null);
           }}

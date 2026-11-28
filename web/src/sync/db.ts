@@ -2,6 +2,7 @@ import type {
   Activity,
   Attachment,
   AttachmentEntity,
+  ItemPrice,
   ListItem,
   NotificationPref,
   ShoppingList,
@@ -54,6 +55,7 @@ export class HouseholdDb extends Dexie {
   asset!: Table<NamedRow, string>;
   maint_task!: Table<MaintTaskRow, string>;
   store!: Table<Store, string>;
+  item_price!: Table<ItemPrice, string>;
   location!: Table<NamedRow, string>;
   contractor!: Table<NamedRow, string>;
   attachment!: Table<Attachment, string>;
@@ -105,6 +107,10 @@ export class HouseholdDb extends Dexie {
         invite: 'id, household_id',
         store_item_order: '[store_id+name_key], household_id',
       })
+      .upgrade((tx) => tx.table('meta').put({ key: 'cursor', value: 0 }));
+    // SHOP-12: price observations per store and name. A pulled table, so the cursor resets like version 6.
+    this.version(7)
+      .stores({ item_price: 'id, household_id, [store_id+name_key], name_key, sync_seq' })
       .upgrade((tx) => tx.table('meta').put({ key: 'cursor', value: 0 }));
   }
 }
