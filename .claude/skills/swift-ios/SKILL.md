@@ -14,7 +14,7 @@ Read `docs/SPEC.md` §3, §4, §6, §9 before starting. Models are **generated**
 ```
 apps/ios/
   AbodeNestly.xcodeproj
-  AbodeNestly/                 app target (SwiftUI App, scenes, DI container)
+  AbodeNestly/                 app target (SwiftUI App, scenes, DI container, Intents/ for Siri)
   Packages/
     Contract/                  generated models + API client protocol
     Core/                      auth, households, members, invites, settings, activity, search
@@ -24,7 +24,6 @@ apps/ios/
     Maintenance/               ← module
     UI/                        shared components, tokens
     Shared/                    UUID, dates, money, NameKey
-  AbodeNestlyIntents/          App Intents extension (Siri)
   AbodeNestlyTests/
 ```
 Rule: `Shopping`, `Pantry`, `Maintenance` packages depend on `Core`, `Sync`, `UI`, `Shared`, `Contract` only. Package manifests enforce it: a module package must not list another module as a dependency.
@@ -67,7 +66,7 @@ await syncEngine.kick()
 ## Platform features
 - **Barcode** (SHOP-10, PANT-09): `AVCaptureSession` + `AVCaptureMetadataOutput` (EAN-13, EAN-8, UPC-A). No third-party scanner. Lookup through `GET /products/{barcode}`; cache in local `product` table.
 - **Voice add** (SHOP-14): `SFSpeechRecognizer` on-device; parse with `Shared/QuantityParser` (tested: "2 litres milk" → qty 2, unit "l", name "milk").
-- **Siri** (SHOP-15): App Intent `AddToShoppingListIntent(item: String, list: ListEntity?)` writes through the outbox in the extension using the shared app group container.
+- **Siri** (SHOP-15): App Intent `AddToShoppingListIntent(item: String)` lives in the app target (`AbodeNestly/Intents/`), not an extension: Siri runs it in the app's process with `openAppWhenRun = false`, so it shares `AppEnvironment.shared` (database, sync) and needs no app group. It adds to the last opened household's Groceries list (else its oldest active list) through `AssistantShortcut.add`, which uses the same outbox write as Quick add, and kicks sync; shopping off, no item, or signed out write nothing and say so. Phrases (`AbodeNestlyShortcuts`) each contain `\(.applicationName)`; the item is asked for after the phrase because a phrase cannot interpolate a free `String`. No `ListEntity` parameter.
 - **Push** (PANT-16, MAINT-08): `UNUserNotificationCenter`; register token with `POST /devices` on launch and on change. Tap routes to the entity via `Route`.
 - **QR** (MAINT-14): generate with `CIFilter.qrCodeGenerator`; scan with the same capture pipeline; deep link `abodenestly://asset/<qr_code>`.
 - **PDF export** (MAINT-13): download from API, present with `ShareLink`.

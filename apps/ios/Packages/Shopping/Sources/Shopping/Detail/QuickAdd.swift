@@ -76,6 +76,20 @@ public enum QuickAdd {
         return ranked.prefix(limit).map { Suggestion(key: $0.key, label: $0.label) }
     }
 
+    /// The one local write behind every item added without a price: the `list_item` row and its outbox entry in one
+    /// transaction (SPEC §6.5). Voice add and the assistant shortcut (SHOP-15) both go through it. The caller kicks sync.
+    public static func write(
+        database: HouseholdDatabase, householdId: UUID, listId: UUID, name: String, userId: UUID?, now: Date, id: UUID,
+        quantity: Double? = nil, unit: String? = nil
+    ) async throws {
+        let stamp = now.formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true, timeZone: .gmt))
+        let item = Self.row(
+            id: id, householdId: householdId, listId: listId, name: name, userId: userId, now: stamp,
+            quantity: quantity, unit: unit
+        )
+        try await database.upsert(table: "list_item", row: item, now: now)
+    }
+
     /// The full `list_item` row for a manual add. `barcode` is set only for a product a lookup found (SHOP-10): the
     /// column has a foreign key to `product`. The server derives `name_key` itself; the local value only serves
     /// matching until the next pull replaces the row, and `upsert` never queues it.
