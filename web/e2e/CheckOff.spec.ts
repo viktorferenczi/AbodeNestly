@@ -53,7 +53,7 @@ test.describe('SHOP-04: check off and clear checked', () => {
 
     await page.getByRole('button', { name: 'Clear checked' }).click();
     await expect(page.getByText('Cleared 2 items')).toBeVisible();
-    await expect(page.getByText('Add your first item')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Try: 2 l milk')).toBeVisible({ timeout: 10_000 });
 
     await expect
       .poll(async () => {
