@@ -28,7 +28,7 @@ func seedPrice(
 ) async throws {
     try await db.upsert(table: "item_price", row: [
         "id": .string(UUID().uuidString.lowercased()), "store_id": .string(store.uuidString.lowercased()),
-        "name_key": .string(key), "price": .decimal(price), "seen_at": .string(seenAt),
+        "name_key": .string(key), "price": Price.wireValue(price), "seen_at": .string(seenAt),
         "deleted_at": deleted ? .string("2026-11-02T10:00:00.000Z") : .null,
         "created_at": .string(created), "updated_at": .string(created), "sync_seq": .int(1),
     ])
@@ -148,7 +148,7 @@ struct PriceLogicTests {
         let row = Price.row(id: id, householdId: household, storeId: priceStoreId, name: "  Whole  Milk", price: dec("1.2"), now: fixedNow)
         #expect(row["name_key"] == .string("whole milk"))
         #expect(row["store_id"] == .string(priceStoreId.uuidString.lowercased()))
-        #expect(row["price"] == .decimal(dec("1.2")))
+        #expect(row["price"] == .double(1.2))
         #expect(row["seen_at"] == .string("2027-01-15T08:00:00.000Z"))
         #expect(row["id"] == .string(id.uuidString.lowercased()))
     }

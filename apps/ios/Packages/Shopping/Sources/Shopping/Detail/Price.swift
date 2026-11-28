@@ -129,6 +129,16 @@ public enum Price {
         return try? Date(text, strategy: Date.ISO8601FormatStyle())
     }
 
+    /// The JSON number for a price. `JSONValue` is generated from the contract and has no decimal case, so the number is
+    /// parsed from the Decimal's canonical digits: a Double read from at most two decimals encodes back as the same
+    /// shortest digits ("1.1"), and the TEXT `price` column stores that text, so no binary rounding reaches the row or
+    /// the wire. The amount itself stays a Decimal everywhere else (AGENTS.md §4).
+    public static func wireValue(_ price: Decimal) -> JSONValue {
+        let text: String = NSDecimalNumber(decimal: price).description(withLocale: Locale(identifier: "en_US_POSIX"))
+        let number: Double = Double(text) ?? 0
+        return .double(number)
+    }
+
     /// One new observation (each price is kept, SPEC §8 ItemPrice): the row stored locally and queued. `name_key` is the
     /// one server-owned-looking column the client sends for this table.
     public static func row(
@@ -138,7 +148,7 @@ public enum Price {
         return [
             "id": .string(id.uuidString.lowercased()), "household_id": .string(householdId.uuidString.lowercased()),
             "store_id": .string(storeId.uuidString.lowercased()), "name_key": .string(NameKey.make(name)),
-            "price": .decimal(price), "seen_at": .string(stamp), "deleted_at": .null,
+            "price": Price.wireValue(price), "seen_at": .string(stamp), "deleted_at": .null,
             "created_at": .string(stamp), "updated_at": .string(stamp), "sync_seq": .int(0),
         ]
     }
