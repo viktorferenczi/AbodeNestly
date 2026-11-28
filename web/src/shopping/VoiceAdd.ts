@@ -27,7 +27,9 @@ const DIGITS = /^(\d+(?:[.,]\d+)?)\s*(.*)$/;
  * these rules. Returns null when no name is left. Forms outside the rules ("one and a half") stay in the name.
  */
 export function parseSpoken(text: string, locale?: string): SpokenItem | null {
-  const spoken = text.trim().toLocaleLowerCase(locale).replace(/\s+/g, ' ');
+  // An empty locale string throws a RangeError; treat it as no locale.
+  const loc = locale || undefined;
+  const spoken = text.trim().toLocaleLowerCase(loc).replace(/\s+/g, ' ');
   let quantity: number | null = null;
   let rest = spoken;
 
@@ -66,5 +68,5 @@ export function parseSpoken(text: string, locale?: string): SpokenItem | null {
   }
 
   if (!rest) return null;
-  return { quantity, unit, name: rest.charAt(0).toLocaleUpperCase(locale) + rest.slice(1) };
+  return { quantity, unit, name: rest.charAt(0).toLocaleUpperCase(loc) + rest.slice(1) };
 }

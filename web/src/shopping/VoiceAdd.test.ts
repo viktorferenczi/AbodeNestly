@@ -32,4 +32,8 @@ describe('SHOP-14: parseSpoken', () => {
   it.each([[''], ['   '], ['2 litres'], ['half a kilo']])('%j is a failure', (text) => {
     expect(parseSpoken(text)).toBeNull();
   });
+
+  it('an empty locale is the same as none', () => {
+    expect(parseSpoken('2 litres milk', '')).toEqual({ quantity: 2, unit: 'l', name: 'Milk' });
+  });
 });
