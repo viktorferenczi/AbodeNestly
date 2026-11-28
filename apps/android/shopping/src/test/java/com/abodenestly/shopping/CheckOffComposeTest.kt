@@ -159,7 +159,7 @@ class CheckOffComposeTest {
     }
 
     @Test
-    fun `an empty list keeps Add your first item and shows neither All done nor List actions`() {
+    fun `an empty list keeps the try 2 l milk hint and shows neither All done nor List actions`() {
         show()
         await("list.empty")
         assertFalse(exists("list.allDone"))

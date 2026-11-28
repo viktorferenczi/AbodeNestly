@@ -6,6 +6,16 @@
     <!-- SHOP-10: the barcode scanner. Asked when the scanner opens; manual entry works without it. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- SHOP-14: voice add. Asked when the sheet opens; typing the item works without it. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Android 11+ package visibility: without this SpeechRecognizer cannot see a recognition service and reports none. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <application
         android:name=".AbodeNestlyApp"
